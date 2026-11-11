@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="飲控記" />
+  <meta name="theme-color" content="#059669" />
+  <meta name="robots" content="noindex" />
+  <title>飲控隨身記</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body class="bg-stone-50 text-stone-800 min-h-screen pb-24 sm:pb-10">
+  <!-- Header -->
+  <header class="no-print sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-stone-200" style="padding-top: env(safe-area-inset-top)">
+    <div class="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <img src="icons/icon-192.png" alt="" class="w-9 h-9 rounded-xl shrink-0 shadow-sm" />
+        <div class="min-w-0">
+          <h1 class="text-base sm:text-lg font-bold text-stone-900 truncate">飲控隨身記</h1>
+          <p class="text-xs text-stone-500 truncate">記錄三餐・和營養師一起討論</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button id="openTargetBtn" type="button" class="px-2.5 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-xs font-medium text-stone-700 transition min-h-[36px]">
+          目標 <span id="headerTargetVal" class="font-semibold text-emerald-700 tabular-nums">1800</span> kcal
+        </button>
+        <button id="openSourceBtn" type="button" class="p-2 rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-700 transition min-h-[36px] min-w-[36px] flex items-center justify-center" title="熱量資料來源" aria-label="熱量資料來源">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4m0-4h.01"></path></svg>
+        </button>
+      </div>
+    </div>
+    <nav class="hidden sm:flex max-w-2xl mx-auto px-4 border-t border-stone-100">
+      <button type="button" data-tab="log" class="nav-tab flex-1 py-2.5 text-sm">今日記錄</button>
+      <button type="button" data-tab="library" class="nav-tab flex-1 py-2.5 text-sm">外食快選</button>
+      <button type="button" data-tab="trends" class="nav-tab flex-1 py-2.5 text-sm">趨勢</button>
+      <button type="button" data-tab="report" class="nav-tab flex-1 py-2.5 text-sm">營養師報告</button>
+    </nav>
+  </header>
+
+  <main class="max-w-2xl mx-auto px-4 py-4 space-y-4">
+    <!-- Banners -->
+    <div id="installBanner" class="no-print hidden bg-sky-50 border border-sky-200 rounded-2xl p-3 text-xs text-sky-900 flex gap-2 items-start">
+      <div class="flex-1 leading-relaxed">
+        <b>建議加入主畫面使用</b>：iPhone 用 Safari 點「分享」→「加入主畫面」；Android 用 Chrome 選單 →「安裝應用程式」。可以離線開啟，資料也比較不會被瀏覽器自動清掉。
+      </div>
+      <button id="dismissInstallBtn" type="button" class="text-sky-500 hover:text-sky-800 font-bold px-1" aria-label="關閉">✕</button>
+    </div>
+    <div id="backupBanner" class="no-print hidden bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-900 flex gap-2 items-center">
+      <div id="backupBannerText" class="flex-1 leading-relaxed"></div>
+      <button id="goBackupBtn" type="button" class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold shrink-0">去備份</button>
+    </div>
+
+    <!-- Date Bar -->
+    <section id="dateBar" class="no-print bg-white rounded-2xl border border-stone-200 p-2.5 flex items-center justify-between gap-2">
+      <button id="prevDayBtn" type="button" class="px-4 py-2 text-lg sm:text-sm rounded-xl hover:bg-stone-100 text-stone-600 font-medium transition min-h-[40px]" aria-label="前一天">‹<span class="hidden sm:inline"> 前一天</span></button>
+      <div class="flex items-center gap-2">
+        <input id="datePicker" type="date" class="text-sm font-semibold text-stone-800 bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+        <button id="todayBtn" type="button" class="px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-semibold transition">今天</button>
+      </div>
+      <button id="nextDayBtn" type="button" class="px-4 py-2 text-lg sm:text-sm rounded-xl hover:bg-stone-100 text-stone-600 font-medium transition min-h-[40px]" aria-label="後一天"><span class="hidden sm:inline">後一天 </span>›</button>
+    </section>
+
+    <!-- TAB 1: LOG -->
+    <div id="tab-log" class="tab-panel space-y-4">
+      <!-- Daily Summary -->
+      <section class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
+        <div class="flex items-center justify-between gap-4">
+          <div class="space-y-1">
+            <span class="text-xs font-medium text-stone-500"><span id="summaryDateLabel">今日</span>攝取總計</span>
+            <div class="flex items-baseline gap-1.5">
+              <span id="totalConsumed" class="text-3xl sm:text-4xl font-bold text-stone-900 tabular-nums">0</span>
+              <span class="text-sm text-stone-500 font-medium">/ <span id="summaryTarget" class="tabular-nums">1800</span> kcal</span>
+            </div>
+            <p id="remainingText" class="text-sm font-medium text-emerald-700">還可以攝取 1,800 kcal</p>
+          </div>
+          <div class="relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 flex items-center justify-center">
+            <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#e7e5e4" stroke-width="10"></circle>
+              <circle id="progressRing" class="ring-transition" cx="50" cy="50" r="42" fill="none" stroke="#059669" stroke-width="10" stroke-linecap="round" stroke-dasharray="263.89" stroke-dashoffset="263.89"></circle>
+            </svg>
+            <span id="progressPctText" class="absolute text-sm sm:text-base font-bold text-stone-800 tabular-nums">0%</span>
+          </div>
+        </div>
+        <div class="grid grid-cols-4 gap-2 pt-3 border-t border-stone-100 text-center">
+          <div class="bg-stone-50 rounded-xl p-2"><div class="text-[11px] text-stone-500">早餐</div><div id="mealSum-breakfast" class="text-sm font-bold text-stone-800 tabular-nums">0</div></div>
+          <div class="bg-stone-50 rounded-xl p-2"><div class="text-[11px] text-stone-500">午餐</div><div id="mealSum-lunch" class="text-sm font-bold text-stone-800 tabular-nums">0</div></div>
+          <div class="bg-stone-50 rounded-xl p-2"><div class="text-[11px] text-stone-500">晚餐</div><div id="mealSum-dinner" class="text-sm font-bold text-stone-800 tabular-nums">0</div></div>
+          <div class="bg-stone-50 rounded-xl p-2"><div class="text-[11px] text-stone-500">點心</div><div id="mealSum-snack" class="text-sm font-bold text-stone-800 tabular-nums">0</div></div>
+        </div>
+        <div id="summaryNutr" class="space-y-2"></div>
+      </section>
+
+      <!-- Quick Entry -->
+      <section class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold text-stone-900">快速記錄食物</h2>
+          <button id="jumpToLibraryBtn" type="button" class="text-xs font-semibold text-emerald-700 hover:text-emerald-800">從外食清單挑選 →</button>
+        </div>
+        <div class="grid grid-cols-4 gap-1.5" id="mealSelectorGroup">
+          <button type="button" data-meal="breakfast" class="meal-btn">早餐</button>
+          <button type="button" data-meal="lunch" class="meal-btn">午餐</button>
+          <button type="button" data-meal="dinner" class="meal-btn">晚餐</button>
+          <button type="button" data-meal="snack" class="meal-btn">點心</button>
+        </div>
+        <div class="space-y-1.5">
+          <span class="text-[11px] font-medium text-stone-500">一鍵快貼（點擊直接加入上方餐別）</span>
+          <div id="homeQuickStrip" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1"></div>
+        </div>
+
+        <form id="addFoodForm" class="space-y-2.5 pt-1 border-t border-stone-100">
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
+            <div class="sm:col-span-6">
+              <label for="foodNameInput" class="sr-only">食物名稱</label>
+              <input id="foodNameInput" type="text" placeholder="食物名稱（不填則以餐別快記）" class="field" />
+            </div>
+            <div class="grid grid-cols-3 sm:col-span-6 gap-2">
+              <div class="col-span-2">
+                <label for="foodKcalInput" class="sr-only">每份熱量 (kcal)</label>
+                <input id="foodKcalInput" type="number" inputmode="numeric" min="0" max="5000" step="1" placeholder="每份熱量 kcal" class="field tabular-nums" />
+              </div>
+              <div>
+                <label for="portionSelect" class="sr-only">份量倍數</label>
+                <select id="portionSelect" class="field px-2.5">
+                  <option value="0.5">0.5份</option>
+                  <option value="1" selected>1份</option>
+                  <option value="1.5">1.5份</option>
+                  <option value="2">2份</option>
+                  <option value="3">3份</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between gap-1.5 flex-wrap" id="kcalStepperGroup">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-[11px] text-stone-400 mr-0.5">快填：</span>
+              <button type="button" data-kcal-add="50" class="kcal-step-btn chip-btn">+50</button>
+              <button type="button" data-kcal-add="100" class="kcal-step-btn chip-btn">+100</button>
+              <button type="button" data-kcal-add="250" class="kcal-step-btn chip-btn">+250</button>
+              <button type="button" data-kcal-add="500" class="kcal-step-btn chip-btn">+500</button>
+              <button type="button" id="kcalResetStepBtn" class="px-1.5 py-1 rounded-lg text-xs text-stone-400 hover:text-stone-700">歸零</button>
+            </div>
+            <button type="button" id="openEstimateModalBtn" class="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-semibold transition">✋ 不知道熱量？份量估算</button>
+          </div>
+
+          <details id="addNutrDetails" class="rounded-xl border border-stone-200 bg-stone-50/60">
+            <summary class="px-3 py-2 text-xs font-semibold text-stone-700 cursor-pointer select-none">營養素／六大類份數（選填，每 1 份）</summary>
+            <div id="addNutrFields" class="px-3 pb-3"></div>
+          </details>
+
+          <div class="p-2.5 rounded-xl bg-stone-50 border border-stone-200/80 space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <input id="foodPhotoInput" type="file" accept="image/*" capture="environment" class="hidden" />
+                <button type="button" id="triggerPhotoBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-stone-200 hover:border-emerald-500 text-xs font-semibold text-stone-700 transition min-h-[36px]">📷 拍照／傳圖</button>
+                <button type="button" id="clearPhotoDraftBtn" class="hidden text-xs text-rose-600 hover:underline font-medium">移除照片</button>
+              </div>
+              <label class="inline-flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50/80 border border-amber-200 px-2.5 py-1 rounded-lg cursor-pointer select-none">
+                <input id="pendingVerifyCheck" type="checkbox" class="rounded border-amber-300 text-amber-600 w-3.5 h-3.5" />
+                <span>標記「暫估待修」</span>
+              </label>
+            </div>
+            <div id="photoDraftPreviewWrap" class="hidden flex items-center gap-2.5 pt-1">
+              <img id="photoDraftPreviewImg" alt="預覽照片" class="w-12 h-12 rounded-lg object-cover border border-stone-200" />
+              <div class="text-[11px] text-stone-500 leading-tight">已附上照片（自動壓縮）<br /><span class="text-emerald-700">不知道熱量可直接加入，先存 0 kcal 待修</span></div>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+            <label class="inline-flex items-center gap-2 text-xs text-stone-600 cursor-pointer select-none py-1">
+              <input id="saveFavCheck" type="checkbox" class="rounded border-stone-300 text-emerald-600 w-4 h-4" />
+              同時存為「常用快選」
+            </label>
+            <button type="submit" class="btn-primary w-full sm:w-auto">+ 加入記錄</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Meal Logs -->
+      <section class="space-y-3">
+        <div class="flex items-center justify-between px-1">
+          <h2 class="text-sm font-bold text-stone-900">飲食明細</h2>
+          <div class="flex items-center gap-2">
+            <button id="copyYesterdayBtn" type="button" class="text-xs font-medium text-stone-600 hover:text-emerald-700 px-2 py-1 rounded-lg hover:bg-stone-100 transition">複製前一天</button>
+            <button id="clearDayBtn" type="button" class="text-xs font-medium text-rose-600 hover:text-rose-700 px-2 py-1 rounded-lg hover:bg-rose-50 transition">清空本日</button>
+          </div>
+        </div>
+        <div id="mealLogContainer" class="space-y-3"></div>
+      </section>
+
+      <!-- Body & Notes -->
+      <section class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold text-stone-900">身體數據與每日備註</h2>
+          <span id="daySavedHint" class="text-[11px] text-stone-400">自動儲存</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block"><span class="lbl">體重 (kg)</span><input id="dayWeight" data-day-num="weight" type="number" inputmode="decimal" step="0.1" min="20" max="300" class="field tabular-nums" placeholder="例：68.5" /></label>
+          <label class="block"><span class="lbl">腰圍 (cm)</span><input id="dayWaist" data-day-num="waist" type="number" inputmode="decimal" step="0.5" min="30" max="200" class="field tabular-nums" placeholder="例：82" /></label>
+        </div>
+        <div>
+          <span class="lbl">喝水 (ml)</span>
+          <div class="flex items-center gap-1.5">
+            <input id="dayWater" data-day-num="water" type="number" inputmode="numeric" step="50" min="0" max="8000" class="field tabular-nums flex-1" placeholder="0" />
+            <button type="button" data-water-add="250" class="water-btn chip-btn">+250</button>
+            <button type="button" data-water-add="500" class="water-btn chip-btn">+500</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <label class="block col-span-2"><span class="lbl">運動</span><input id="dayExercise" data-day-text="exercise" type="text" class="field" placeholder="例：快走、重訓" /></label>
+          <label class="block"><span class="lbl">分鐘</span><input id="dayExMin" data-day-num="exMin" type="number" inputmode="numeric" min="0" max="600" class="field tabular-nums" placeholder="30" /></label>
+        </div>
+        <div>
+          <span class="lbl">整天飢餓感</span>
+          <div id="hungerGroup" class="grid grid-cols-5 gap-1.5"></div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <span class="lbl">心情</span>
+            <div id="moodGroup" class="grid grid-cols-5 gap-1.5"></div>
+          </div>
+          <div>
+            <span class="lbl">排便</span>
+            <div id="bowelGroup" class="grid grid-cols-3 gap-1.5"></div>
+          </div>
+        </div>
+        <label class="block"><span class="lbl">今日備註</span><textarea id="dayNote" data-day-text="note" rows="2" class="field" placeholder="例：聚餐、生理期、睡不好、壓力大…"></textarea></label>
+        <label class="block"><span class="lbl">💬 想問營養師</span><textarea id="dayQuestion" data-day-text="question" rows="2" class="field bg-emerald-50/50" placeholder="例：晚上嘴饞可以吃什麼？"></textarea></label>
+      </section>
+    </div>
+
+    <!-- TAB 2: LIBRARY -->
+    <div id="tab-library" class="tab-panel hidden space-y-4">
+      <section class="bg-white rounded-2xl border border-stone-200 p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-bold text-stone-900">台灣常見外食與飲品快選</h2>
+            <p class="text-xs text-stone-500">點選項目即可加入 <span id="libraryMealLabel" class="font-semibold text-emerald-700">午餐</span></p>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <select id="libraryMealSelect" class="px-2.5 py-1.5 rounded-xl border border-stone-200 bg-stone-50 text-xs font-semibold text-stone-700 min-h-[36px]">
+              <option value="breakfast">加到：早餐</option>
+              <option value="lunch">加到：午餐</option>
+              <option value="dinner">加到：晚餐</option>
+              <option value="snack">加到：點心</option>
+            </select>
+            <button id="addQuickItemBtn" type="button" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition min-h-[36px]">+ 新增快選</button>
+          </div>
+        </div>
+        <input id="librarySearchInput" type="search" placeholder="搜尋（例：水餃、豆漿、便當、珍奶）" class="field" />
+        <div class="flex flex-wrap gap-1.5" id="libraryFilterChips">
+          <button type="button" data-cat="all" class="cat-chip">全部</button>
+          <button type="button" data-cat="fav" class="cat-chip">我的常用</button>
+          <button type="button" data-cat="breakfast" class="cat-chip">早餐超商</button>
+          <button type="button" data-cat="meal" class="cat-chip">便當小吃</button>
+          <button type="button" data-cat="drink" class="cat-chip">飲品點心</button>
+        </div>
+        <div id="libraryGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1"></div>
+        <div class="pt-2 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-400">
+          <span>點右側圖示可修改熱量、營養素或刪除</span>
+          <button id="resetQuickItemsBtn" type="button" class="text-stone-500 hover:text-stone-800 underline">恢復預設快選</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- TAB 3: TRENDS -->
+    <div id="tab-trends" class="tab-panel hidden space-y-4">
+      <section class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-4">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-bold text-stone-900">熱量趨勢</h2>
+            <p class="text-xs text-stone-500"><span id="trendRangeLabel"></span>・虛線為目標</p>
+          </div>
+          <div id="trendRangeGroup" class="flex gap-1">
+            <button type="button" data-range="7" class="range-btn">7天</button>
+            <button type="button" data-range="14" class="range-btn">14天</button>
+            <button type="button" data-range="30" class="range-btn">30天</button>
+          </div>
+        </div>
+        <div class="relative h-60 w-full"><canvas id="trendChart"></canvas></div>
+        <div id="trendStats" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+      </section>
+      <section id="weightCard" class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
+        <h2 class="text-sm font-bold text-stone-900">體重變化</h2>
+        <div id="weightEmpty" class="text-xs text-stone-400">這段期間還沒有記錄體重，可在「今日記錄」最下方填寫。</div>
+        <div id="weightChartWrap" class="relative h-48 w-full"><canvas id="weightChart"></canvas></div>
+      </section>
+      <section class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
+        <h2 class="text-sm font-bold text-stone-900">營養素與六大類（有填的日子平均）</h2>
+        <div id="trendNutr" class="space-y-3"></div>
+      </section>
+    </div>
+
+    <!-- TAB 4: REPORT -->
+    <div id="tab-report" class="tab-panel hidden space-y-4">
+      <section class="no-print bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
+        <div>
+          <h2 class="text-sm font-bold text-stone-900">給營養師的報告</h2>
+          <p class="text-xs text-stone-500">選期間 → 產生報告 → 存成 PDF 或直接分享到 LINE。</p>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block"><span class="lbl">開始</span><input id="rptFrom" type="date" class="field" /></label>
+          <label class="block"><span class="lbl">結束</span><input id="rptTo" type="date" class="field" /></label>
+        </div>
+        <div class="flex flex-wrap gap-1.5" id="rptQuickRange">
+          <button type="button" data-days="7" class="chip-btn">近 7 天</button>
+          <button type="button" data-days="14" class="chip-btn">近 14 天</button>
+          <button type="button" data-days="30" class="chip-btn">近 30 天</button>
+        </div>
+        <div class="flex flex-wrap gap-x-4 gap-y-1">
+          <label class="inline-flex items-center gap-2 text-xs text-stone-700"><input id="rptDetails" type="checkbox" checked class="rounded border-stone-300 text-emerald-600 w-4 h-4" />每日餐點明細</label>
+          <label class="inline-flex items-center gap-2 text-xs text-stone-700"><input id="rptPhotos" type="checkbox" checked class="rounded border-stone-300 text-emerald-600 w-4 h-4" />附上餐點照片</label>
+        </div>
+        <button id="genReportBtn" type="button" class="btn-primary w-full">產生報告</button>
+      </section>
+
+      <section id="reportActions" class="no-print hidden grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <button id="printReportBtn" type="button" class="btn-primary">🖨️ 列印／存成 PDF</button>
+        <button id="shareReportFileBtn" type="button" class="btn-secondary">📎 分享報告檔</button>
+        <button id="shareReportTextBtn" type="button" class="btn-secondary">💬 分享文字摘要</button>
+      </section>
+      <p id="reportPrintHint" class="no-print hidden text-[11px] text-stone-500 px-1 leading-relaxed">
+        存 PDF：iPhone 在列印畫面用兩指放大預覽，再按分享 → 存到檔案或傳 LINE；Android 選「另存為 PDF」。「分享報告檔」會產生一個網頁檔，營養師用任何瀏覽器都能打開。
+      </p>
+
+      <section id="reportArea" class="hidden bg-white rounded-2xl border border-stone-200 p-4 sm:p-6"></section>
+
+      <section id="backupSection" class="no-print bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
+        <div>
+          <h2 class="text-sm font-bold text-stone-900">資料備份與匯出</h2>
+          <p class="text-xs text-stone-500">記錄只存在這支手機的瀏覽器裡（不會上傳到 GitHub）。換手機或清除瀏覽器前，記得先下載備份。</p>
+          <p id="lastBackupText" class="text-xs text-stone-500 mt-1"></p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button id="exportJsonBtn" type="button" class="btn-primary">下載完整備份（含照片）</button>
+          <button id="importJsonBtn" type="button" class="btn-secondary">匯入備份檔</button>
+          <button id="exportCsvBtn" type="button" class="btn-secondary">匯出飲食明細 CSV</button>
+          <button id="exportDaysCsvBtn" type="button" class="btn-secondary">匯出每日身體／備註 CSV</button>
+        </div>
+        <input id="importJsonInput" type="file" accept="application/json,.json" class="hidden" />
+        <p class="text-[11px] text-stone-400">匯入會合併到現有資料（相同的記錄不會重複），舊版「每日飲食熱量隨身記」的 JSON 備份也可以匯入。</p>
+      </section>
+    </div>
+  </main>
+
+  <!-- Mobile Bottom Nav -->
+  <nav class="no-print sm:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-stone-200 grid grid-cols-4 shadow-lg" style="padding-bottom: env(safe-area-inset-bottom)">
+    <button type="button" data-tab="log" class="mobile-nav-tab">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+      <span class="text-[11px]">記錄</span>
+    </button>
+    <button type="button" data-tab="library" class="mobile-nav-tab">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
+      <span class="text-[11px]">快選</span>
+    </button>
+    <button type="button" data-tab="trends" class="mobile-nav-tab">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M14 7h7v7"></path></svg>
+      <span class="text-[11px]">趨勢</span>
+    </button>
+    <button type="button" data-tab="report" class="mobile-nav-tab">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z"></path></svg>
+      <span class="text-[11px]">報告</span>
+    </button>
+  </nav>
+
+  <!-- Edit Logged Item Modal -->
+  <div id="editLogModal" class="modal hidden">
+    <div class="modal-card max-w-sm">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-stone-900">修改記錄</h3>
+        <button type="button" data-close="editLogModal" class="modal-x">✕</button>
+      </div>
+      <form id="editLogForm" class="space-y-3">
+        <div class="p-3 rounded-xl bg-stone-50 border border-stone-200 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-stone-700">📷 餐點／營養標示照片</span>
+            <div class="flex items-center gap-2">
+              <input id="editLogPhotoInput" type="file" accept="image/*" capture="environment" class="hidden" />
+              <button type="button" id="triggerEditPhotoBtn" class="px-2.5 py-1 rounded-lg bg-white border border-stone-200 hover:border-emerald-500 text-xs font-semibold text-stone-700">拍照／換圖</button>
+              <button type="button" id="removeEditPhotoBtn" class="hidden text-xs text-rose-600 hover:underline">移除</button>
+            </div>
+          </div>
+          <img id="editLogPhotoImg" alt="佐證照片" class="hidden w-full max-h-48 object-contain rounded-lg border border-stone-200 bg-white" />
+          <p id="editLogNoPhotoHint" class="text-[11px] text-stone-400">尚未附加照片</p>
+        </div>
+        <label class="block"><span class="lbl">食物名稱</span><input id="editLogNameInput" type="text" required class="field" /></label>
+        <div class="grid grid-cols-3 gap-2">
+          <label class="block"><span class="lbl">總熱量</span><input id="editLogKcalInput" type="number" inputmode="numeric" min="0" max="10000" step="1" required class="field font-semibold tabular-nums" /></label>
+          <label class="block"><span class="lbl">餐別</span>
+            <select id="editLogMealSelect" class="field px-2">
+              <option value="breakfast">早餐</option><option value="lunch">午餐</option><option value="dinner">晚餐</option><option value="snack">點心</option>
+            </select>
+          </label>
+          <label class="block"><span class="lbl">時間</span><input id="editLogTimeInput" type="time" class="field px-2" /></label>
+        </div>
+        <div class="rounded-xl border border-stone-200 bg-stone-50/60 p-3">
+          <div class="text-[11px] text-stone-500 mb-2">以下為這筆的「總量」</div>
+          <div id="editNutrFields"></div>
+        </div>
+        <label class="inline-flex items-center gap-2 text-xs text-amber-800 cursor-pointer select-none">
+          <input id="editLogPendingCheck" type="checkbox" class="rounded border-amber-300 text-amber-600 w-4 h-4" />
+          <span>仍標記為「暫估待修」</span>
+        </label>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" data-close="editLogModal" class="btn-small-secondary">取消</button>
+          <button type="submit" class="btn-small-primary">儲存修改</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Estimator Modal -->
+  <div id="estimateModal" class="modal hidden">
+    <div class="modal-card max-w-md">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-bold text-stone-900">未知熱量速查與份量估算</h3>
+          <p class="text-xs text-stone-500">依國健署食物代換表與手掌法則</p>
+        </div>
+        <button type="button" data-close="estimateModal" class="modal-x">✕</button>
+      </div>
+      <div class="p-3 rounded-xl bg-stone-50 border border-stone-200 space-y-2">
+        <div class="text-xs font-bold text-stone-800">方法一：上網查（連鎖店／超商／包裝食品）</div>
+        <div class="flex gap-1.5">
+          <input id="extSearchInput" type="text" placeholder="例：八方雲集鍋貼" class="field flex-1 py-2 min-h-0" />
+          <button type="button" id="extGoogleSearchBtn" class="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shrink-0">Google ↗</button>
+        </div>
+        <div class="flex items-center justify-between text-[11px] text-stone-500">
+          <span>查到後可勾「存為常用快選」</span>
+          <a href="https://consumer.fda.gov.tw/Food/TFND.aspx?nodeID=178" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline font-medium">食藥署資料庫 ↗</a>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-stone-800">方法二：自助餐／家常菜「目測點選」</span>
+          <button type="button" id="resetEstPartsBtn" class="text-xs text-rose-600 hover:underline font-medium">清空</button>
+        </div>
+        <p class="text-[11px] text-stone-500">每點一下 = 1 份，會同時算出熱量、三大營養素和六大類份數：</p>
+        <div class="grid grid-cols-2 gap-2" id="estButtonsGrid"></div>
+        <div class="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200 space-y-2">
+          <div id="estPicked" class="flex flex-wrap gap-1 text-[11px] text-emerald-800">尚未點選</div>
+          <div class="flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <div class="text-base font-bold text-emerald-900 tabular-nums">合計 <span id="estTotalVal">0</span> kcal</div>
+              <div id="estMacroText" class="text-[11px] text-emerald-800 tabular-nums"></div>
+            </div>
+            <button type="button" id="applyEstimateBtn" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shrink-0">帶入表單</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Target / Settings Modal -->
+  <div id="targetModal" class="modal hidden">
+    <div class="modal-card max-w-sm">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-stone-900">每日目標（可填營養師建議）</h3>
+        <button type="button" data-close="targetModal" class="modal-x">✕</button>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <button type="button" data-preset="1500" class="preset-btn">減脂 1500</button>
+        <button type="button" data-preset="1800" class="preset-btn">維持 1800</button>
+        <button type="button" data-preset="2200" class="preset-btn">增肌 2200</button>
+      </div>
+      <label class="block"><span class="lbl">每日熱量 (kcal)</span><input id="tgt-kcal" type="number" inputmode="numeric" min="800" max="6000" step="50" class="field font-semibold tabular-nums" /></label>
+      <div>
+        <span class="lbl">三大營養素 (g，可留空)</span>
+        <div class="grid grid-cols-3 gap-1.5">
+          <input id="tgt-p" type="number" inputmode="decimal" min="0" step="1" placeholder="蛋白質" class="field text-center tabular-nums" />
+          <input id="tgt-c" type="number" inputmode="decimal" min="0" step="1" placeholder="碳水" class="field text-center tabular-nums" />
+          <input id="tgt-f" type="number" inputmode="decimal" min="0" step="1" placeholder="脂肪" class="field text-center tabular-nums" />
+        </div>
+      </div>
+      <div>
+        <div class="flex items-center justify-between"><span class="lbl">六大類份數 (可留空)</span><button type="button" id="deriveTargetBtn" class="text-[11px] font-semibold text-emerald-700 hover:underline mb-1">依份數試算熱量／營養素</button></div>
+        <div id="tgtExFields" class="grid grid-cols-3 gap-1.5"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <label class="block"><span class="lbl">目標體重 (kg)</span><input id="tgt-weight" type="number" inputmode="decimal" step="0.1" min="20" max="300" class="field tabular-nums" /></label>
+        <label class="block"><span class="lbl">報告上的名字</span><input id="profileName" type="text" class="field" placeholder="選填" /></label>
+      </div>
+      <div class="flex justify-end gap-2">
+        <button type="button" data-close="targetModal" class="btn-small-secondary">取消</button>
+        <button type="button" id="saveTargetBtn" class="btn-small-primary">儲存目標</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div id="confirmModal" class="modal hidden">
+    <div class="modal-card max-w-sm">
+      <h3 id="confirmTitle" class="text-base font-bold text-stone-900">確認操作</h3>
+      <p id="confirmMessage" class="text-sm text-stone-600"></p>
+      <div class="flex justify-end gap-2">
+        <button type="button" id="confirmCancelBtn" class="btn-small-secondary">取消</button>
+        <button type="button" id="confirmOkBtn" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-xs font-semibold text-white">確定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sources Modal -->
+  <div id="sourceModal" class="modal hidden">
+    <div class="modal-card max-w-md">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-stone-900">熱量與份數參考來源</h3>
+        <button type="button" data-close="sourceModal" class="modal-x">✕</button>
+      </div>
+      <p class="text-xs text-stone-600 leading-relaxed">外食快選為一般常見份量的參考值，實際熱量依店家做法與份量而異。份量估算與「依份數推算」使用國民健康署食物代換表的每份營養素（豆魚蛋肉以中脂、乳品以低脂計）。</p>
+      <ul class="text-xs text-stone-700 space-y-1.5 list-disc pl-4">
+        <li><a href="https://www.hpa.gov.tw/Pages/Detail.aspx?nodeid=544&pid=9605" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">衛生福利部國民健康署 — 健康食譜舉例</a>（炸雞腿便當、豬肉漢堡、奶茶）</li>
+        <li><a href="https://health.ettoday.net/news/1960565" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">ETtoday 健康雲 / 營養師程涵宇</a>（滷肉飯、水餃、蚵仔麵線、蔥油餅）</li>
+        <li><a href="https://health.businessweekly.com.tw/article/ARTL003004758" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">良醫健康網 / 營養師程涵宇</a>（蚵仔煎等國民小吃）</li>
+        <li><a href="https://dep.hcchb.gov.tw/ch/home.jsp?id=50159&parentpath=&mcustomize=onemessages_view.jsp&toolsflag=Y&dataserno=201805070004&t=HcchbOnes&mserno=201805020003" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">新竹市衛生局</a> 與 <a href="https://www.commonhealth.com.tw/article/78167" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">康健雜誌</a>（全糖／無糖珍珠奶茶）</li>
+        <li><a href="https://www.yohopower.tw/blogs/health-note/food_calorie_quick_reference_guide" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">悠活原力食物熱量速查指南</a>（白飯、地瓜）</li>
+        <li><a href="https://nuli.app/blog/six-food-groups-eating-out-fat-loss/" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">Nuli 外食減脂指南</a> 與 <a href="https://www.jinhetcm.com.tw/project/%E4%BE%BF%E5%88%A9%E5%95%86%E5%BA%97%E6%B8%9B%E8%84%82%E8%8F%9C%E5%96%AE%E8%BE%A6%E5%85%AC%E5%AE%A4%E7%99%BD%E9%A0%98%E6%B8%9B%E8%84%82%E5%8D%88%E6%99%9A%E9%A4%90%E9%80%99%E6%A8%A3%E5%90%83.html" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">錦禾中醫診所</a>（茶葉蛋、雞胸肉、無糖豆漿、堅果）</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Quick Item Modal -->
+  <div id="quickItemModal" class="modal hidden">
+    <div class="modal-card max-w-sm">
+      <div class="flex items-center justify-between">
+        <h3 id="quickItemModalTitle" class="text-base font-bold text-stone-900">新增快選食物</h3>
+        <button type="button" data-close="quickItemModal" class="modal-x">✕</button>
+      </div>
+      <form id="quickItemForm" class="space-y-3">
+        <input id="quickItemEditId" type="hidden" value="" />
+        <label class="block"><span class="lbl">食物名稱</span><input id="quickItemNameInput" type="text" required placeholder="例：全家烤地瓜 (150g)" class="field" /></label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block"><span class="lbl">熱量 (kcal)</span><input id="quickItemKcalInput" type="number" inputmode="numeric" min="1" max="5000" step="1" required placeholder="185" class="field font-semibold tabular-nums" /></label>
+          <label class="block"><span class="lbl">分類</span>
+            <select id="quickItemCatSelect" class="field px-2">
+              <option value="fav">我的常用</option><option value="breakfast">早餐超商</option><option value="meal">便當小吃</option><option value="drink">飲品點心</option>
+            </select>
+          </label>
+        </div>
+        <details class="rounded-xl border border-stone-200 bg-stone-50/60">
+          <summary class="px-3 py-2 text-xs font-semibold text-stone-700 cursor-pointer select-none">營養素／六大類份數（選填）</summary>
+          <div id="qiNutrFields" class="px-3 pb-3"></div>
+        </details>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" data-close="quickItemModal" class="btn-small-secondary">取消</button>
+          <button type="submit" class="btn-small-primary">儲存快選</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Photo Lightbox -->
+  <div id="photoLightboxModal" class="modal hidden bg-stone-950/80">
+    <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl">
+      <div class="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
+        <div class="min-w-0">
+          <h3 id="lightboxFoodTitle" class="text-sm font-bold text-stone-900 truncate">餐點照片</h3>
+          <p id="lightboxFoodSub" class="text-xs text-stone-500"></p>
+        </div>
+        <button type="button" data-close="photoLightboxModal" class="modal-x">✕</button>
+      </div>
+      <div class="bg-stone-900 flex items-center justify-center max-h-[60vh] overflow-hidden">
+        <img id="lightboxImg" alt="照片大圖" class="max-h-[60vh] w-auto object-contain" />
+      </div>
+      <div class="p-3.5 bg-stone-50 flex items-center justify-between gap-2">
+        <span class="text-xs text-stone-500">對照照片修正份量或數值</span>
+        <button type="button" id="lightboxEditEntryBtn" class="btn-small-primary">✏️ 修正這筆</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="no-print fixed bottom-24 sm:bottom-6 left-1/2 -translate-x-1/2 z-[60] hidden items-center gap-3 px-4 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-medium shadow-lg max-w-[90vw]">
+    <span id="toastMsg"></span>
+    <button id="toastAction" type="button" class="hidden font-bold text-emerald-300 hover:text-emerald-200 shrink-0"></button>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

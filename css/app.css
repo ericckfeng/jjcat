@@ -228,3 +228,7 @@ textarea.field { min-height: 0; resize: vertical; }
 @media (prefers-reduced-motion: reduce) {
   .mascot-body, .mascot-wave, .mascot-twinkle, .confetti span { animation: none !important; }
 }
+
+/* 寬版按鈕（睡眠） */
+.tile.tile-wide { flex-direction: row; align-items: center; gap: .75rem; min-height: 4.75rem; }
+.tile.tile-wide .tile-ic { font-size: 2rem; }

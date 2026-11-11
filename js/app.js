@@ -6,7 +6,7 @@ import { photoDB } from './db.js';
 import { REPORT_CSS, buildReportHTML, buildReportText } from './report.js';
 import * as cloud from './cloud.js';
 import { mergeData, stableStringify, SYNC_VERSION } from './sync.js';
-import { MEASURES, MEASURE_META, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct } from './body.js';
+import { MEASURES, MEASURE_META, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
 import { mascotSVG, buildMascotMessages } from './mascot.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
@@ -592,6 +592,7 @@ function openScreen(id) {
   if (id === 'scr-est') renderEst();
   if (id === 'scr-weight') renderWeightHint();
   if (id === 'scr-water') renderWaterBig();
+  if (id === 'scr-sleep') renderSleepScreen();
   if (id === 'scr-photo') resetPhotoQuick();
 }
 function hideTopScreen() {
@@ -614,6 +615,13 @@ document.addEventListener('click', (e) => {
 
 function renderTiles() {
   const d = getDay(ui.date, false);
+  const night = getDay(addDays(ui.date, -1), false);
+  const ns = daySleep(night);
+  const ts = daySleep(d);
+  const parts = [];
+  if (ns.night) parts.push('昨晚 ' + fmtDuration(ns.night) + (ns.quality ? '・' + sleepQualityLabel(ns.quality) : ''));
+  if (ts.nap) parts.push('今天補眠 ' + fmtDuration(ts.nap));
+  $('tileSleep').textContent = parts.length ? parts.join('　') : '記一下昨晚睡多久';
   const b = calcBmi(d.weight, state.profile.height);
   $('tileWeight').textContent = d.weight != null ? d.weight + ' 公斤' + (b ? '・BMI ' + b : '') : '還沒量';
   $('tileWater').textContent = (d.water || 0) + ' ml' + (d.water ? '（約 ' + r1(d.water / 250) + ' 杯）' : '');
@@ -839,7 +847,7 @@ function renderDayPanel() {
   });
 }
 function setDayField(field, value, date = ui.date) {
-  setTimeout(renderTiles, 0);
+  setTimeout(() => { renderTiles(); renderMascot(); }, 0);
   const d = getDay(date, true);
   if (value === null || value === '' || value === undefined) delete d[field]; else d[field] = value;
   (d._t || (d._t = {}))[field] = now();
@@ -981,6 +989,7 @@ function renderTrends() {
     });
 
     renderBodyChart(dates, labels);
+    renderSleepChart(dates, labels);
   }
 
   const tg = state.targets;
@@ -997,6 +1006,64 @@ function renderTrends() {
   if (!nh) nh = '<p class="text-xs text-stone-400">這段期間還沒有填營養素或六大類份數。用「份量估算」或在記錄時展開「營養素／六大類份數」就會出現在這裡。</p>';
   if (s.pending) nh += `<p class="text-[0.6875rem] font-semibold text-amber-700">⚠ 這段期間有 ${s.pending} 筆暫估待修</p>`;
   $('trendNutr').innerHTML = nh;
+}
+
+let sleepChart = null;
+function renderSleepChart(dates, labels) {
+  const rows = dates.map(d => daySleep(state.days[d] || {}));
+  const has = rows.some(r => r.total > 0);
+  $('sleepEmpty').classList.toggle('hidden', has);
+  $('sleepChartWrap').classList.toggle('hidden', !has);
+  if (sleepChart) { sleepChart.destroy(); sleepChart = null; }
+  const withSleep = rows.filter(r => r.total > 0);
+  const qs = rows.filter(r => r.quality != null);
+  const avg = withSleep.length ? withSleep.reduce((a, r) => a + r.total, 0) / withSleep.length : null;
+  const short = withSleep.filter(r => r.total < 360).length;
+  const napTotal = rows.reduce((a, r) => a + r.nap, 0);
+  $('sleepStats').innerHTML = has ? [
+    statTile('平均睡眠', avg != null ? r1(avg / 60) + ' 小時' : '–', withSleep.length + ' 天有記錄'),
+    statTile('平均品質', qs.length ? sleepQualityLabel(Math.round(qs.reduce((a, r) => a + r.quality, 0) / qs.length)) : '–', qs.length ? '1–5 分：' + r1(qs.reduce((a, r) => a + r.quality, 0) / qs.length) : ''),
+    statTile('睡不到 6 小時', short + ' 天', ''),
+    statTile('補眠合計', napTotal ? fmtDuration(napTotal) : '–', '')
+  ].join('') : '';
+  // 睡眠和隔天飲食的關係（各組至少 2 天才顯示）
+  const good = [];
+  const bad = [];
+  dates.forEach((d, i) => {
+    const r = rows[i];
+    if (!r.night) return;
+    const next = dayTotals(addDays(d, 1));
+    if (!next.count) return;
+    if (r.total >= 420) good.push(next.kcal); else if (r.total < 360) bad.push(next.kcal);
+  });
+  const mean = (a) => Math.round(a.reduce((x, y) => x + y, 0) / a.length);
+  let insight = '';
+  if (good.length >= 2 && bad.length >= 2) {
+    const g = mean(good);
+    const b = mean(bad);
+    insight = `💡 睡滿 7 小時的隔天平均吃 <b>${g.toLocaleString()}</b> kcal，睡不到 6 小時的隔天平均吃 <b>${b.toLocaleString()}</b> kcal` +
+      (b - g >= 100 ? `，多了 ${(b - g).toLocaleString()} kcal。睡飽真的有幫助！` : '。');
+  } else if (has) {
+    insight = '💡 多記幾天，這裡會比較「睡飽」和「沒睡飽」的隔天吃了多少。';
+  }
+  $('sleepInsight').innerHTML = insight;
+  if (!has || typeof Chart === 'undefined') return;
+  sleepChart = new Chart($('sleepChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: '夜間睡眠', data: rows.map(r => r.night ? r1(r.night / 60) : null), backgroundColor: '#6366f1', borderRadius: 4, stack: 's', barPercentage: 0.6 },
+        { label: '補眠', data: rows.map(r => r.nap ? r1(r.nap / 60) : null), backgroundColor: '#c4b5fd', borderRadius: 4, stack: 's', barPercentage: 0.6 },
+        { label: '7 小時', data: Array(dates.length).fill(7), type: 'line', borderColor: '#a8a29e', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: { y: { stacked: true, beginAtZero: true, suggestedMax: 10, title: { display: true, text: '小時' }, grid: { color: '#f5f5f4' } }, x: { stacked: true, grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } } }
+    }
+  });
 }
 
 function metricSeries(dates, key) {
@@ -1045,6 +1112,106 @@ $('bodyMetricGroup').addEventListener('click', (e) => {
   renderTrends();
 });
 
+/* ---------------- 睡眠 ---------------- */
+$('sleepQGroup').innerHTML = Object.entries(SLEEP_QUALITY).map(([v, t]) => {
+  const [emo, label] = t.split('|');
+  return `<button type="button" data-sleepq="${v}" class="toggle-btn flex flex-col items-center gap-0.5 py-2"><span class="text-2xl leading-none">${emo}</span><span class="text-xs">${label}</span></button>`;
+}).join('');
+function nightDate() { return addDays(ui.date, -1); }
+function lastSleepPattern(before) {
+  const k = Object.keys(state.days).filter(x => x < before && state.days[x].sleepBed && state.days[x].sleepWake).sort().pop();
+  return k ? { bed: state.days[k].sleepBed, wake: state.days[k].sleepWake } : null;
+}
+function renderSleepScreen() {
+  const nd = nightDate();
+  const night = getDay(nd, false);
+  const wd = (s) => fmtMD(s) + '（' + '日一二三四五六'[parseDate(s).getDay()] + '）';
+  $('sleepNightLabel').textContent = wd(nd) + ' 晚上 → ' + wd(ui.date) + ' 早上・不管幾點睡，都記在 ' + fmtMD(nd);
+  if ($('sleepBed') !== document.activeElement) $('sleepBed').value = night.sleepBed || '';
+  if ($('sleepWake') !== document.activeElement) $('sleepWake').value = night.sleepWake || '';
+  const min = num(night.sleepMin);
+  $('sleepDur').textContent = min ? fmtDuration(min) : '–';
+  const hint = $('sleepHint');
+  if (!min) { hint.textContent = '填上床和起床時間，會自動算出時數'; hint.className = 'text-sm mt-1 text-stone-500'; }
+  else if (min > 16 * 60) { hint.textContent = '時間好像不太對，確認一下上床／起床時間'; hint.className = 'text-sm mt-1 font-semibold text-rose-600'; }
+  else if (min >= 420 && min <= 540) { hint.textContent = '✓ 睡眠充足（建議 7–9 小時）'; hint.className = 'text-sm mt-1 font-semibold text-emerald-700'; }
+  else if (min < 360) { hint.textContent = '睡得比較少，今晚早點休息喔'; hint.className = 'text-sm mt-1 font-semibold text-amber-700'; }
+  else { hint.textContent = '建議每晚睡 7–9 小時'; hint.className = 'text-sm mt-1 text-stone-500'; }
+  document.querySelectorAll('#sleepQGroup [data-sleepq]').forEach(b => b.classList.toggle('is-active', String(night.sleepQ) === b.getAttribute('data-sleepq')));
+  $('sleepClearBtn').classList.toggle('hidden', !(night.sleepBed || night.sleepWake || night.sleepQ != null));
+  const pat = lastSleepPattern(nd);
+  const same = $('sleepSameBtn');
+  same.classList.toggle('hidden', !pat || Boolean(night.sleepBed || night.sleepWake));
+  if (pat) same.textContent = '跟上次一樣：' + pat.bed + ' 睡、' + pat.wake + ' 起床';
+  // 補眠
+  const d = getDay(ui.date, false);
+  const naps = d.naps || [];
+  $('napDateLabel').textContent = '記在 ' + wd(ui.date) + '，可以加好幾次';
+  $('napList').innerHTML = naps.length
+    ? naps.map(n => `<div class="flex items-center justify-between rounded-xl bg-white border border-stone-200 px-3 py-2">
+        <span class="text-base font-semibold text-stone-800">💤 ${fmtDuration(n.min)}</span>
+        <button type="button" data-nap-del="${esc(n.id)}" class="px-3 py-1.5 rounded-lg text-sm text-rose-600 hover:bg-rose-50">刪除</button></div>`).join('')
+    : '<div class="text-sm text-stone-400">今天還沒有補眠記錄</div>';
+  const ts = daySleep(d);
+  const ns = daySleep(night);
+  const lines = [];
+  if (ns.total) lines.push(fmtMD(nd) + ' 共睡 <b>' + fmtDuration(ns.total) + '</b>' + (ns.nap ? '（含補眠 ' + fmtDuration(ns.nap) + '）' : ''));
+  if (ts.nap) lines.push(fmtMD(ui.date) + ' 目前補眠 <b>' + fmtDuration(ts.nap) + '</b>' + (ts.night ? '，加上今晚的睡眠一起算' : '，會和今晚的睡眠一起算'));
+  $('sleepTotalLine').innerHTML = lines.length ? lines.join('<br>') : '晚上的睡眠記在起床的前一天（凌晨才睡也一樣），補眠記在當天，兩個加起來就是那天的總睡眠。';
+  $('sleepTotalLine').classList.toggle('hidden', false);
+}
+function saveNightTimes() {
+  const nd = nightDate();
+  const bed = $('sleepBed').value;
+  const wake = $('sleepWake').value;
+  setDayField('sleepBed', bed || null, nd);
+  setDayField('sleepWake', wake || null, nd);
+  setDayField('sleepMin', sleepMinutes(bed, wake), nd);
+  renderSleepScreen();
+}
+['sleepBed', 'sleepWake'].forEach(id => {
+  $(id).addEventListener('change', saveNightTimes);
+  $(id).addEventListener('blur', saveNightTimes);
+});
+$('sleepSameBtn').addEventListener('click', () => {
+  const pat = lastSleepPattern(nightDate());
+  if (!pat) return;
+  $('sleepBed').value = pat.bed;
+  $('sleepWake').value = pat.wake;
+  saveNightTimes();
+});
+$('sleepQGroup').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sleepq]');
+  if (!b) return;
+  const v = Number(b.getAttribute('data-sleepq'));
+  const cur = getDay(nightDate(), false).sleepQ;
+  setDayField('sleepQ', cur === v ? null : v, nightDate());
+  renderSleepScreen();
+});
+$('sleepClearBtn').addEventListener('click', () => {
+  const nd = nightDate();
+  ['sleepBed', 'sleepWake', 'sleepMin', 'sleepQ'].forEach(f => setDayField(f, null, nd));
+  $('sleepBed').value = '';
+  $('sleepWake').value = '';
+  renderSleepScreen();
+});
+function addNap(min) {
+  if (!min || min <= 0 || min > 600) { showToast('請輸入 1–600 分鐘'); return; }
+  const naps = [...(getDay(ui.date, false).naps || []), { id: uid('nap'), min: Math.round(min) }];
+  setDayField('naps', naps);
+  renderSleepScreen();
+  showToast('已加入補眠 ' + fmtDuration(min));
+}
+document.querySelectorAll('[data-nap]').forEach(b => b.addEventListener('click', () => addNap(Number(b.getAttribute('data-nap')))));
+$('napAddBtn').addEventListener('click', () => { addNap(num($('napCustom').value)); $('napCustom').value = ''; });
+$('napList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-nap-del]');
+  if (!b) return;
+  const naps = (getDay(ui.date, false).naps || []).filter(n => n.id !== b.getAttribute('data-nap-del'));
+  setDayField('naps', naps.length ? naps : null);
+  renderSleepScreen();
+});
+
 /* ---------------- 小芽 ---------------- */
 let mascotIdx = 0;
 let mascotMsgs = [];
@@ -1083,6 +1250,7 @@ function renderMascot() {
     isToday, hour: new Date().getHours(), count: t.count, kcal: t.kcal, targetKcal: state.targets.kcal,
     meals: MEAL_KEYS.filter(k => t.meals[k] > 0).length, streak, weight: w,
     targetWeight: num(state.targets.weight), bmi, water: num(d.water) || 0,
+    lastNight: daySleep(getDay(addDays(ui.date, -1), false)),
     exercise: d.exercise || (d.exMin ? d.exMin + ' 分鐘' : '')
   });
   mascotIdx = 0;
@@ -1559,7 +1727,7 @@ $('rptQuickRange').addEventListener('click', (e) => {
   if (b) setReportRange(Number(b.getAttribute('data-days')));
 });
 function reportContext() {
-  return { state, dayTotals, rangeStats, datesBetween, esc, fmt, r1, num, fmtMD, parseDate, getPhoto, calcBmi };
+  return { state, dayTotals, rangeStats, datesBetween, esc, fmt, r1, num, fmtMD, parseDate, getPhoto, calcBmi, addDays };
 }
 $('genReportBtn').addEventListener('click', async () => {
   let from = $('rptFrom').value;
@@ -1709,12 +1877,12 @@ $('exportCsvBtn').addEventListener('click', () => {
 });
 $('exportDaysCsvBtn').addEventListener('click', () => {
   const dates = Array.from(new Set([...Object.keys(state.logs), ...Object.keys(state.days)])).sort();
-  const rows = [['日期', '總熱量', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '體重(kg)', 'BMI', '腰圍(cm)', '臀圍(cm)', '上臂圍(cm)', '大腿圍(cm)', '胸圍(cm)', '體脂率(%)', '喝水(ml)', '運動', '運動分鐘', '飢餓感(1-5)', '心情(1-5)', '排便', '備註', '想問營養師']];
+  const rows = [['日期', '總熱量', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '體重(kg)', 'BMI', '腰圍(cm)', '臀圍(cm)', '上臂圍(cm)', '大腿圍(cm)', '胸圍(cm)', '體脂率(%)', '喝水(ml)', '運動', '運動分鐘', '上床', '起床', '夜間睡眠(分)', '補眠(分)', '總睡眠(小時)', '睡眠品質(1-5)', '飢餓感(1-5)', '心情(1-5)', '排便', '備註', '想問營養師']];
   dates.forEach(date => {
     const t = dayTotals(date);
     const d = state.days[date] || {};
     rows.push([date, t.kcal, t.macroItems ? t.p : '', t.macroItems ? t.c : '', t.macroItems ? t.f : '', ...EX_KEYS.map(k => (t.exItems ? t.ex[k] : '')),
-      d.weight, calcBmi(d.weight, state.profile.height), d.waist, d.hip, d.arm, d.thigh, d.chest, d.bodyFat, d.water, d.exercise, d.exMin, d.hunger, d.mood, d.bowel != null ? BOWEL_LABELS[d.bowel] : '', d.note, d.question]);
+      d.weight, calcBmi(d.weight, state.profile.height), d.waist, d.hip, d.arm, d.thigh, d.chest, d.bodyFat, d.water, d.exercise, d.exMin, d.sleepBed, d.sleepWake, d.sleepMin, daySleep(d).nap || '', daySleep(d).total ? r1(daySleep(d).total / 60) : '', d.sleepQ, d.hunger, d.mood, d.bowel != null ? BOWEL_LABELS[d.bowel] : '', d.note, d.question]);
   });
   downloadBlob('每日身體與備註_' + todayStr() + '.csv', toCSV(rows), 'text/csv;charset=utf-8');
   showToast('已匯出每日 CSV');

@@ -79,7 +79,7 @@ export function mascotSVG(mood = 'happy') {
     streak: { n, todayLogged },
     weight: { now, week, first, measuredToday } | null,
     targetWeight, bmi, bmiLabel,
-    water, exercise
+    water, exercise, lastNight
   }
 */
 export function buildMascotMessages(ctx) {
@@ -125,6 +125,14 @@ export function buildMascotMessages(ctx) {
     }
   }
   if (ctx.exercise) add(45, 'happy', `有運動（${ctx.exercise}），給你一個讚 👍`);
+  const sl = ctx.lastNight;
+  if (ctx.isToday && sl && sl.night) {
+    const h = Math.round(sl.night / 6) / 10;
+    if (sl.night >= 420) add(42, 'happy', `昨晚睡了 ${h} 小時，睡飽了食慾比較好控制 😴`);
+    else if (sl.night < 360) add(44, 'calm', `昨晚只睡 ${h} 小時，今天容易嘴饞，記得多喝水、晚上早點睡喔`);
+  } else if (ctx.isToday && ctx.hour >= 5 && ctx.hour < 12) {
+    add(37, 'hello', '早安！昨晚睡得好嗎？點「睡眠」記一下 😴');
+  }
   if (ctx.isToday && ctx.water >= 1500) add(35, 'happy', '水喝得很夠，身體會謝謝你 💧');
   else if (ctx.isToday && ctx.hour >= 15 && (ctx.water || 0) < 1000) add(30, 'calm', '記得多喝水喔，按「喝水」記一下 💧');
   if (ctx.bmi != null && ctx.bmi >= 18.5 && ctx.bmi < 24) add(33, 'happy', `BMI ${ctx.bmi}，在健康範圍內，維持得很好`);

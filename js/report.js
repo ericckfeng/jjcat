@@ -1,6 +1,6 @@
 // 給營養師的報告：HTML（畫面／列印／分享檔共用）與 LINE 文字摘要
 import { MEAL_KEYS, MEAL_META, MACRO_KEYS, MACRO_META, EX_KEYS, EX_META, HUNGER_LABELS, MOOD_OPTIONS, BOWEL_LABELS } from './nutrition.js';
-import { MEASURES, bmiCategory } from './body.js';
+import { MEASURES, bmiCategory, daySleep, fmtDuration, sleepQualityLabel } from './body.js';
 const EXTRA_MEASURES = MEASURES.filter(m => m.key !== 'weight' && m.key !== 'waist');
 
 const WEEK = '日一二三四五六';
@@ -71,6 +71,11 @@ export async function buildReportHTML(ctx, opts) {
   const anyEx = s.exDays > 0 || EX_KEYS.some(k => tg.ex && tg.ex[k]);
   const cols = { weight: has('weight'), waist: has('waist'), water: has('water'), exercise: has('exercise') || has('exMin') };
   cols.bmi = cols.weight && Boolean(height);
+  cols.sleep = dates.some(d => daySleep(days[d]).total > 0);
+  cols.sleepQ = has('sleepQ');
+  const sleepRows = dates.map(d => daySleep(days[d]));
+  const sleepDays = sleepRows.filter(r => r.total > 0);
+  const avgSleep = sleepDays.length ? sleepDays.reduce((a, r) => a + r.total, 0) / sleepDays.length : null;
   const extraCols = EXTRA_MEASURES.filter(m => has(m.key));
 
   let h = '<div class="rpt">';
@@ -89,6 +94,11 @@ export async function buildReportHTML(ctx, opts) {
   const lastBmi = w.length ? calcBmi(w[w.length - 1].w, height) : null;
   h += stat('體重', w.length ? w[w.length - 1].w + ' kg' : '–', (wDelta != null ? '期間 ' + (wDelta > 0 ? '+' : '') + wDelta + ' kg（' + w[0].w + '→' + w[w.length - 1].w + '）' : (tg.weight ? '目標 ' + tg.weight + ' kg' : '')) + (lastBmi ? '・BMI ' + lastBmi + ' ' + bmiCategory(lastBmi).label : ''));
   h += stat('喝水／運動', s.avgWater != null ? fmt(s.avgWater) + ' ml' : '–', '運動共 ' + s.exMinTotal + ' 分鐘');
+  if (avgSleep != null) {
+    const qs = sleepRows.filter(r => r.quality != null);
+    const aq = qs.length ? qs.reduce((a, r) => a + r.quality, 0) / qs.length : null;
+    h += stat('平均睡眠', r1(avgSleep / 60) + ' 小時', sleepDays.length + ' 天有記錄・不到 6 小時 ' + sleepDays.filter(r => r.total < 360).length + ' 天' + (aq ? '・品質 ' + sleepQualityLabel(Math.round(aq)) : ''));
+  }
   h += '</div>';
   if (s.macroDays) {
     h += '<div class="stats" style="margin-top:6px">';
@@ -110,6 +120,8 @@ export async function buildReportHTML(ctx, opts) {
   extraCols.forEach(m => { h += `<th>${m.label}</th>`; });
   if (cols.water) h += '<th>喝水</th>';
   if (cols.exercise) h += '<th>運動</th>';
+  if (cols.sleep) h += '<th>睡眠(時)</th>';
+  if (cols.sleepQ) h += '<th>睡眠品質</th>';
   h += '</tr></thead><tbody>';
   // 目標列
   h += `<tr class="tgt"><td class="l">目標</td><td>${fmt(tg.kcal)}</td>`;
@@ -121,6 +133,8 @@ export async function buildReportHTML(ctx, opts) {
   extraCols.forEach(() => { h += '<td></td>'; });
   if (cols.water) h += '<td></td>';
   if (cols.exercise) h += '<td></td>';
+  if (cols.sleep) h += '<td>7–9</td>';
+  if (cols.sleepQ) h += '<td></td>';
   h += '</tr>';
   dates.forEach((d, i) => {
     const t = s.totals[i];
@@ -136,6 +150,8 @@ export async function buildReportHTML(ctx, opts) {
     extraCols.forEach(m => { h += `<td>${dd[m.key] ?? ''}</td>`; });
     if (cols.water) h += `<td>${dd.water != null ? fmt(dd.water) : ''}</td>`;
     if (cols.exercise) h += `<td class="l">${esc(dd.exercise || '')}${dd.exMin ? ' ' + dd.exMin + '分' : ''}</td>`;
+    if (cols.sleep) { const sr = sleepRows[i]; h += `<td class="${sr.total && sr.total < 360 ? 'under' : ''}">${sr.total ? r1(sr.total / 60) + (sr.nap ? '*' : '') : ''}</td>`; }
+    if (cols.sleepQ) h += `<td>${dd.sleepQ != null ? sleepQualityLabel(dd.sleepQ) : ''}</td>`;
     h += '</tr>';
   });
   // 平均列
@@ -148,8 +164,10 @@ export async function buildReportHTML(ctx, opts) {
   extraCols.forEach(() => { h += '<td></td>'; });
   if (cols.water) h += `<td>${s.avgWater != null ? fmt(s.avgWater) : ''}</td>`;
   if (cols.exercise) h += `<td>${s.exMinTotal ? s.exMinTotal + '分' : ''}</td>`;
+  if (cols.sleep) h += `<td>${avgSleep != null ? r1(avgSleep / 60) : ''}</td>`;
+  if (cols.sleepQ) h += '<td></td>';
   h += '</tr></tbody></table></div>';
-  h += '<div class="muted" style="margin-top:4px">紅字＝超過目標 10% 以上；橘字＝蔬菜／水果／乳品低於目標；* ＝當天有暫估待修的記錄。營養素與份數只計入有填的記錄。</div>';
+  h += '<div class="muted" style="margin-top:4px">紅字＝超過目標 10% 以上；橘字＝蔬菜／水果／乳品低於目標；* ＝當天有暫估待修的記錄（熱量欄）或含補眠（睡眠欄）。睡眠記在起床的前一天（凌晨才睡也一樣），橘字＝不到 6 小時。營養素與份數只計入有填的記錄。</div>';
 
   // 想問營養師
   const qs = dates.filter(d => days[d] && days[d].question);
@@ -195,6 +213,9 @@ export async function buildReportHTML(ctx, opts) {
       EXTRA_MEASURES.forEach(m => { if (dd[m.key] != null) chips.push(m.label + ' ' + dd[m.key] + ' ' + m.short); });
       if (dd.water != null) chips.push('喝水 ' + fmt(dd.water) + ' ml');
       if (dd.exercise || dd.exMin) chips.push('運動 ' + esc(dd.exercise || '') + (dd.exMin ? ' ' + dd.exMin + ' 分' : ''));
+      const sr = daySleep(dd);
+      if (sr.night) chips.push('😴 睡眠 ' + fmtDuration(sr.night) + (dd.sleepBed && dd.sleepWake ? '（' + dd.sleepBed + '–' + dd.sleepWake + '）' : '') + (sr.quality ? '・' + sleepQualityLabel(sr.quality) : ''));
+      if (sr.nap) chips.push('💤 補眠 ' + fmtDuration(sr.nap));
       if (dd.hunger != null) chips.push('飢餓感 ' + dd.hunger + '/5 ' + (HUNGER_LABELS[dd.hunger] || ''));
       if (dd.mood != null) chips.push('心情 ' + (MOOD_OPTIONS[dd.mood] || dd.mood));
       if (dd.bowel != null) chips.push('排便 ' + (BOWEL_LABELS[dd.bowel] || ''));
@@ -254,6 +275,8 @@ export function buildReportText(ctx, opts) {
   const extra = [];
   if (s.avgWater != null) extra.push('平均喝水 ' + fmt(s.avgWater) + ' ml');
   if (s.exMinTotal) extra.push('運動共 ' + s.exMinTotal + ' 分鐘');
+  const sl = dates.map(d => daySleep(state.days[d])).filter(r => r.total > 0);
+  if (sl.length) extra.push('平均睡眠 ' + r1(sl.reduce((a, r) => a + r.total, 0) / sl.length / 60) + ' 小時（不到 6 小時 ' + sl.filter(r => r.total < 360).length + ' 天）');
   if (extra.length) lines.push(extra.join('｜'));
   if (s.pending) lines.push('⚠ 有 ' + s.pending + ' 筆是暫估、還沒修正');
   const qs = dates.filter(d => state.days[d] && state.days[d].question);

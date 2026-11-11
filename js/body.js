@@ -57,3 +57,30 @@ export function bmiScalePct(b) {
   if (b == null) return 0;
   return Math.max(0, Math.min(100, (b - 15) / 20 * 100));
 }
+
+/* ---------- 睡眠 ---------- */
+export const SLEEP_QUALITY = { 1: '😫|很差', 2: '😕|不太好', 3: '😐|普通', 4: '🙂|不錯', 5: '😊|很好' };
+export function sleepQualityLabel(q) { const v = SLEEP_QUALITY[q]; return v ? v.split('|')[1] : ''; }
+
+// 上床到起床的分鐘數（跨午夜自動加一天）
+export function sleepMinutes(bed, wake) {
+  if (!/^\d{1,2}:\d{2}$/.test(bed || '') || !/^\d{1,2}:\d{2}$/.test(wake || '')) return null;
+  const [bh, bm] = bed.split(':').map(Number);
+  const [wh, wm] = wake.split(':').map(Number);
+  let m = (wh * 60 + wm) - (bh * 60 + bm);
+  if (m <= 0) m += 1440;
+  return m;
+}
+export function fmtDuration(min) {
+  if (min == null || !Number.isFinite(min)) return '–';
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  if (!h) return m + ' 分';
+  return h + ' 小時' + (m ? ' ' + m + ' 分' : '');
+}
+// 某一天的睡眠：當晚（記在起床的前一天，凌晨才睡也一樣）＋當天補眠
+export function daySleep(day) {
+  const night = Number(day && day.sleepMin) || 0;
+  const nap = ((day && day.naps) || []).reduce((s, n) => s + (Number(n.min) || 0), 0);
+  return { night, nap, total: night + nap, quality: day && day.sleepQ != null ? Number(day.sleepQ) : null };
+}

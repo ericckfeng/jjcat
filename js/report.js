@@ -167,7 +167,7 @@ export async function buildReportHTML(ctx, opts) {
   if (cols.sleep) h += `<td>${avgSleep != null ? r1(avgSleep / 60) : ''}</td>`;
   if (cols.sleepQ) h += '<td></td>';
   h += '</tr></tbody></table></div>';
-  h += '<div class="muted" style="margin-top:4px">紅字＝超過目標 10% 以上；橘字＝蔬菜／水果／乳品低於目標；* ＝當天有暫估待修的記錄（熱量欄）或含補眠（睡眠欄）。睡眠記在起床的前一天（凌晨才睡也一樣），橘字＝不到 6 小時。營養素與份數只計入有填的記錄。</div>';
+  h += '<div class="muted" style="margin-top:4px">紅字＝超過目標 10% 以上；橘字＝蔬菜／水果／乳品低於目標；* ＝當天有暫估待修的記錄（熱量欄）或含補眠（睡眠欄）。昨晚的睡眠記在起床那天（含當天補眠），橘字＝不到 6 小時。營養素與份數只計入有填的記錄。</div>';
 
   // 想問營養師
   const qs = dates.filter(d => days[d] && days[d].question);

@@ -78,7 +78,7 @@ export function fmtDuration(min) {
   if (!h) return m + ' 分';
   return h + ' 小時' + (m ? ' ' + m + ' 分' : '');
 }
-// 某一天的睡眠：當晚（記在起床的前一天，凌晨才睡也一樣）＋當天補眠
+// 某一天的睡眠：前一晚的睡眠（記在起床那天）＋當天補眠
 export function daySleep(day) {
   const night = Number(day && day.sleepMin) || 0;
   const nap = ((day && day.naps) || []).reduce((s, n) => s + (Number(n.min) || 0), 0);

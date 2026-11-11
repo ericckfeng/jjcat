@@ -615,12 +615,10 @@ document.addEventListener('click', (e) => {
 
 function renderTiles() {
   const d = getDay(ui.date, false);
-  const night = getDay(addDays(ui.date, -1), false);
-  const ns = daySleep(night);
   const ts = daySleep(d);
   const parts = [];
-  if (ns.night) parts.push('昨晚 ' + fmtDuration(ns.night) + (ns.quality ? '・' + sleepQualityLabel(ns.quality) : ''));
-  if (ts.nap) parts.push('今天補眠 ' + fmtDuration(ts.nap));
+  if (ts.night) parts.push('昨晚 ' + fmtDuration(ts.night) + (ts.quality ? '・' + sleepQualityLabel(ts.quality) : ''));
+  if (ts.nap) parts.push('補眠 ' + fmtDuration(ts.nap));
   $('tileSleep').textContent = parts.length ? parts.join('　') : '記一下昨晚睡多久';
   const b = calcBmi(d.weight, state.profile.height);
   $('tileWeight').textContent = d.weight != null ? d.weight + ' 公斤' + (b ? '・BMI ' + b : '') : '還沒量';
@@ -1026,25 +1024,25 @@ function renderSleepChart(dates, labels) {
     statTile('睡不到 6 小時', short + ' 天', ''),
     statTile('補眠合計', napTotal ? fmtDuration(napTotal) : '–', '')
   ].join('') : '';
-  // 睡眠和隔天飲食的關係（各組至少 2 天才顯示）
+  // 睡眠和當天飲食的關係（今天還沒吃完不算；各組至少 2 天才顯示）
   const good = [];
   const bad = [];
   dates.forEach((d, i) => {
     const r = rows[i];
-    if (!r.night) return;
-    const next = dayTotals(addDays(d, 1));
-    if (!next.count) return;
-    if (r.total >= 420) good.push(next.kcal); else if (r.total < 360) bad.push(next.kcal);
+    if (!r.night || d >= todayStr()) return;
+    const t = dayTotals(d);
+    if (!t.count) return;
+    if (r.night >= 420) good.push(t.kcal); else if (r.night < 360) bad.push(t.kcal);
   });
   const mean = (a) => Math.round(a.reduce((x, y) => x + y, 0) / a.length);
   let insight = '';
   if (good.length >= 2 && bad.length >= 2) {
     const g = mean(good);
     const b = mean(bad);
-    insight = `💡 睡滿 7 小時的隔天平均吃 <b>${g.toLocaleString()}</b> kcal，睡不到 6 小時的隔天平均吃 <b>${b.toLocaleString()}</b> kcal` +
+    insight = `💡 前一晚睡滿 7 小時的日子，平均吃 <b>${g.toLocaleString()}</b> kcal；睡不到 6 小時的日子，平均吃 <b>${b.toLocaleString()}</b> kcal` +
       (b - g >= 100 ? `，多了 ${(b - g).toLocaleString()} kcal。睡飽真的有幫助！` : '。');
   } else if (has) {
-    insight = '💡 多記幾天，這裡會比較「睡飽」和「沒睡飽」的隔天吃了多少。';
+    insight = '💡 多記幾天，這裡會比較「睡飽」和「沒睡飽」的那天各吃了多少。';
   }
   $('sleepInsight').innerHTML = insight;
   if (!has || typeof Chart === 'undefined') return;
@@ -1117,7 +1115,8 @@ $('sleepQGroup').innerHTML = Object.entries(SLEEP_QUALITY).map(([v, t]) => {
   const [emo, label] = t.split('|');
   return `<button type="button" data-sleepq="${v}" class="toggle-btn flex flex-col items-center gap-0.5 py-2"><span class="text-2xl leading-none">${emo}</span><span class="text-xs">${label}</span></button>`;
 }).join('');
-function nightDate() { return addDays(ui.date, -1); }
+// 昨晚的睡眠記在起床那天（就是目前選的日期），才能和這天吃多少直接比較
+function nightDate() { return ui.date; }
 function lastSleepPattern(before) {
   const k = Object.keys(state.days).filter(x => x < before && state.days[x].sleepBed && state.days[x].sleepWake).sort().pop();
   return k ? { bed: state.days[k].sleepBed, wake: state.days[k].sleepWake } : null;
@@ -1126,7 +1125,7 @@ function renderSleepScreen() {
   const nd = nightDate();
   const night = getDay(nd, false);
   const wd = (s) => fmtMD(s) + '（' + '日一二三四五六'[parseDate(s).getDay()] + '）';
-  $('sleepNightLabel').textContent = wd(nd) + ' 晚上 → ' + wd(ui.date) + ' 早上・不管幾點睡，都記在 ' + fmtMD(nd);
+  $('sleepNightLabel').textContent = wd(addDays(nd, -1)) + ' 晚上 → ' + wd(nd) + ' 早上・記在起床這天 ' + fmtMD(nd);
   if ($('sleepBed') !== document.activeElement) $('sleepBed').value = night.sleepBed || '';
   if ($('sleepWake') !== document.activeElement) $('sleepWake').value = night.sleepWake || '';
   const min = num(night.sleepMin);
@@ -1153,11 +1152,9 @@ function renderSleepScreen() {
         <button type="button" data-nap-del="${esc(n.id)}" class="px-3 py-1.5 rounded-lg text-sm text-rose-600 hover:bg-rose-50">刪除</button></div>`).join('')
     : '<div class="text-sm text-stone-400">今天還沒有補眠記錄</div>';
   const ts = daySleep(d);
-  const ns = daySleep(night);
-  const lines = [];
-  if (ns.total) lines.push(fmtMD(nd) + ' 共睡 <b>' + fmtDuration(ns.total) + '</b>' + (ns.nap ? '（含補眠 ' + fmtDuration(ns.nap) + '）' : ''));
-  if (ts.nap) lines.push(fmtMD(ui.date) + ' 目前補眠 <b>' + fmtDuration(ts.nap) + '</b>' + (ts.night ? '，加上今晚的睡眠一起算' : '，會和今晚的睡眠一起算'));
-  $('sleepTotalLine').innerHTML = lines.length ? lines.join('<br>') : '晚上的睡眠記在起床的前一天（凌晨才睡也一樣），補眠記在當天，兩個加起來就是那天的總睡眠。';
+  $('sleepTotalLine').innerHTML = ts.total
+    ? fmtMD(ui.date) + ' 共睡 <b>' + fmtDuration(ts.total) + '</b>' + (ts.night && ts.nap ? '（昨晚 ' + fmtDuration(ts.night) + '＋補眠 ' + fmtDuration(ts.nap) + '）' : '')
+    : '昨晚的睡眠記在起床這天，補眠也記在當天，兩個加起來就是這天的總睡眠。';
   $('sleepTotalLine').classList.toggle('hidden', false);
 }
 function saveNightTimes() {
@@ -1250,7 +1247,7 @@ function renderMascot() {
     isToday, hour: new Date().getHours(), count: t.count, kcal: t.kcal, targetKcal: state.targets.kcal,
     meals: MEAL_KEYS.filter(k => t.meals[k] > 0).length, streak, weight: w,
     targetWeight: num(state.targets.weight), bmi, water: num(d.water) || 0,
-    lastNight: daySleep(getDay(addDays(ui.date, -1), false)),
+    lastNight: daySleep(getDay(ui.date, false)),
     exercise: d.exercise || (d.exMin ? d.exMin + ' 分鐘' : '')
   });
   mascotIdx = 0;

@@ -127,9 +127,7 @@ function persistSoon() {
   clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     persist();
-    const hint = $('daySavedHint');
-    hint.textContent = '已儲存 ✓';
-    setTimeout(() => { hint.textContent = '自動儲存'; }, 1200);
+    renderTiles();
   }, 400);
 }
 
@@ -340,14 +338,14 @@ function nutrFieldsHTML(prefix) {
   return `
     <div class="space-y-2 pt-1">
       <div class="grid grid-cols-3 gap-1.5">
-        ${MACRO_KEYS.map(k => `<label class="block"><span class="block text-[10px] text-stone-500 mb-0.5">${MACRO_META[k].label} (g)</span>${inp(prefix + '-' + k, 'g', '0.1')}</label>`).join('')}
+        ${MACRO_KEYS.map(k => `<label class="block"><span class="block text-[0.625rem] text-stone-500 mb-0.5">${MACRO_META[k].label} (g)</span>${inp(prefix + '-' + k, 'g', '0.1')}</label>`).join('')}
       </div>
       <div class="flex items-center justify-between pt-1">
-        <span class="text-[11px] font-semibold text-stone-600">六大類份數</span>
-        <button type="button" data-derive="${prefix}" class="derive-btn text-[11px] font-semibold text-emerald-700 hover:underline">依份數推算熱量／營養素</button>
+        <span class="text-[0.6875rem] font-semibold text-stone-600">六大類份數</span>
+        <button type="button" data-derive="${prefix}" class="derive-btn text-[0.6875rem] font-semibold text-emerald-700 hover:underline">依份數推算熱量／營養素</button>
       </div>
       <div class="grid grid-cols-3 gap-1.5">
-        ${EX_KEYS.map(k => `<label class="block"><span class="block text-[10px] text-stone-500 mb-0.5">${EX_META[k].emoji} ${EX_META[k].short}</span>${inp(prefix + '-ex-' + k, '份', '0.5')}</label>`).join('')}
+        ${EX_KEYS.map(k => `<label class="block"><span class="block text-[0.625rem] text-stone-500 mb-0.5">${EX_META[k].emoji} ${EX_META[k].short}</span>${inp(prefix + '-ex-' + k, '份', '0.5')}</label>`).join('')}
       </div>
     </div>`;
 }
@@ -367,7 +365,7 @@ $('addNutrFields').innerHTML = nutrFieldsHTML('add');
 $('editNutrFields').innerHTML = nutrFieldsHTML('edit');
 $('qiNutrFields').innerHTML = nutrFieldsHTML('qi');
 $('tgtExFields').innerHTML = EX_KEYS.map(k =>
-  `<label class="block"><span class="block text-[10px] text-stone-500 mb-0.5">${EX_META[k].emoji} ${EX_META[k].short}</span><input id="tgt-ex-${k}" type="number" inputmode="decimal" min="0" step="0.5" placeholder="份" class="field px-2 py-1.5 min-h-[38px] text-center tabular-nums" /></label>`
+  `<label class="block"><span class="block text-[0.625rem] text-stone-500 mb-0.5">${EX_META[k].emoji} ${EX_META[k].short}</span><input id="tgt-ex-${k}" type="number" inputmode="decimal" min="0" step="0.5" placeholder="份" class="field px-2 py-1.5 min-h-[38px] text-center tabular-nums" /></label>`
 ).join('');
 
 document.addEventListener('click', (e) => {
@@ -440,6 +438,8 @@ function renderSummary() {
   $('summaryTarget').textContent = target.toLocaleString();
   $('headerTargetVal').textContent = target.toLocaleString();
   $('datePicker').value = ui.date;
+  const dd = parseDate(ui.date);
+  $('dateLabel').textContent = (dd.getMonth() + 1) + '月' + dd.getDate() + '日（' + '日一二三四五六'[dd.getDay()] + '）';
 
   const remEl = $('remainingText');
   const ring = $('progressRing');
@@ -471,13 +471,13 @@ function renderSummary() {
       EX_KEYS.map(k => meterHTML(EX_META[k].emoji + ' ' + EX_META[k].short, t.ex[k], tg.ex && tg.ex[k], '份', 'bg-emerald-500')).join('') + '</div>';
   }
   if (!html) {
-    html = '<p class="text-[11px] text-stone-400">提示：在右上「目標」填入營養師給的三大營養素／六大類份數，這裡會顯示每日進度。</p>';
+    html = '<p class="text-[0.6875rem] text-stone-400">提示：在右上「目標」填入營養師給的三大營養素／六大類份數，這裡會顯示每日進度。</p>';
   }
   if (t.macroItems && t.macroItems < t.count) {
-    html += `<p class="text-[11px] text-stone-400">營養素只計入有填的 ${t.macroItems}/${t.count} 筆</p>`;
+    html += `<p class="text-[0.6875rem] text-stone-400">營養素只計入有填的 ${t.macroItems}/${t.count} 筆</p>`;
   }
   if (t.pending) {
-    html += `<p class="text-[11px] font-semibold text-amber-700">⚠ 有 ${t.pending} 筆「暫估待修」，記得對照照片修正</p>`;
+    html += `<p class="text-[0.6875rem] font-semibold text-amber-700">⚠ 有 ${t.pending} 筆「暫估待修」，記得對照照片修正</p>`;
   }
   $('summaryNutr').innerHTML = html;
 }
@@ -486,8 +486,8 @@ function meterHTML(label, val, target, unit, bar) {
   const pct = target ? Math.min(100, v / target * 100) : 0;
   const over = target && v > target * 1.1;
   return `<div class="bg-stone-50 rounded-xl p-2">
-    <div class="text-[11px] text-stone-500 truncate">${label}</div>
-    <div class="text-xs font-bold tabular-nums ${over ? 'text-rose-600' : 'text-stone-800'}">${fmt(v, 1)}${target ? `<span class="font-normal text-stone-400"> / ${fmt(target, 1)}</span>` : ''}<span class="font-normal text-stone-400 text-[10px]"> ${unit}</span></div>
+    <div class="text-[0.6875rem] text-stone-500 leading-tight">${label}</div>
+    <div class="text-xs font-bold tabular-nums ${over ? 'text-rose-600' : 'text-stone-800'}">${fmt(v, 1)}${target ? `<span class="font-normal text-stone-400"> / ${fmt(target, 1)}</span>` : ''}<span class="font-normal text-stone-400 text-[0.625rem]"> ${unit}</span></div>
     ${target ? `<div class="mt-1 h-1.5 rounded-full bg-stone-200 overflow-hidden"><div class="h-full rounded-full ${over ? 'bg-rose-500' : bar}" style="width:${pct}%"></div></div>` : ''}
   </div>`;
 }
@@ -500,16 +500,162 @@ function renderMealSelector() {
   $('libraryMealLabel').textContent = MEAL_META[ui.meal].label;
 }
 
+let pickCat = 'all';
 function renderQuickStrip() {
-  const favs = state.quickItems.filter(i => i.isFav || i.cat === 'fav');
-  const others = state.quickItems.filter(i => !(i.isFav || i.cat === 'fav'));
-  const top = [...favs, ...others].slice(0, 10);
-  $('homeQuickStrip').innerHTML = top.map(item =>
-    `<button type="button" data-qid="${esc(item.id)}" class="strip-add-btn shrink-0 px-3 py-1.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-emerald-50 hover:border-emerald-300 active:scale-95 transition flex items-center gap-1.5">
-      <span class="text-xs font-semibold text-stone-800">${esc(item.name)}</span>
-      <span class="text-[11px] font-bold text-emerald-700 tabular-nums">${item.kcal}</span>
+  if (!$('scr-quick').classList.contains('hidden')) renderQuickPick();
+}
+function renderQuickPick() {
+  document.querySelectorAll('#quickPickCats .cat-chip').forEach(btn => btn.classList.toggle('is-active', btn.getAttribute('data-cat') === pickCat));
+  const q = $('quickPickSearch').value.trim().toLowerCase();
+  const isFav = (i) => i.isFav || i.cat === 'fav';
+  const list = [...state.quickItems.filter(isFav), ...state.quickItems.filter(i => !isFav(i))].filter(item => {
+    const matchCat = pickCat === 'all' || (pickCat === 'fav' && isFav(item)) || item.cat === pickCat;
+    return matchCat && (!q || item.name.toLowerCase().includes(q));
+  });
+  if (!list.length) {
+    $('quickPickList').innerHTML = `<div class="rounded-2xl border border-dashed border-stone-300 p-6 text-center text-base text-stone-500">找不到「${esc(q)}」<br><span class="text-sm">可以改用「自己輸入」記錄</span></div>`;
+    return;
+  }
+  $('quickPickList').innerHTML = list.map(item =>
+    `<button type="button" data-qid="${esc(item.id)}" class="pick-row">
+      <span class="min-w-0 flex-1 text-left"><span class="block text-lg font-semibold text-stone-900 leading-snug">${esc(item.name)}</span>
+      <span class="block text-base text-emerald-700 font-bold tabular-nums">${item.kcal} kcal${isFav(item) ? ' <span class="text-sm font-semibold text-amber-700">・常用</span>' : ''}</span></span>
+      <span class="pick-add">＋ 加入</span>
     </button>`).join('');
 }
+$('quickPickSearch').addEventListener('input', renderQuickPick);
+$('quickPickCats').addEventListener('click', (e) => {
+  const b = e.target.closest('.cat-chip');
+  if (!b) return;
+  pickCat = b.getAttribute('data-cat');
+  renderQuickPick();
+});
+$('quickPickList').addEventListener('click', (e) => {
+  const row = e.target.closest('[data-qid]');
+  if (!row) return;
+  const q = state.quickItems.find(x => x.id === row.getAttribute('data-qid'));
+  if (!q) return;
+  addFromQuick(q);
+  row.classList.add('pick-done');
+  row.querySelector('.pick-add').textContent = '✓ 已加入';
+  setTimeout(() => { row.classList.remove('pick-done'); row.querySelector('.pick-add').textContent = '＋ 加入'; }, 1500);
+});
+$('quickPickManage').addEventListener('click', () => { closeAllScreens(); switchTab('library'); });
+
+/* ---------------- 全螢幕輸入頁 ---------------- */
+const screenStack = [];
+function openScreen(id) {
+  const el = $(id);
+  if (!el) return;
+  if (screenStack.includes(id)) return;
+  el.classList.remove('hidden');
+  screenStack.push(id);
+  history.pushState({ screen: id }, '');
+  document.body.style.overflow = 'hidden';
+  el.querySelector('.scr-body').scrollTop = 0;
+  renderMealSelector();
+  renderDayPanel();
+  if (id === 'scr-quick') { $('quickPickSearch').value = ''; renderQuickPick(); }
+  if (id === 'scr-est') renderEst();
+  if (id === 'scr-weight') renderWeightHint();
+  if (id === 'scr-water') renderWaterBig();
+  if (id === 'scr-photo') resetPhotoQuick();
+}
+function hideTopScreen() {
+  const id = screenStack.pop();
+  if (id) $(id).classList.add('hidden');
+  if (!screenStack.length) document.body.style.overflow = '';
+}
+function closeScreen() { if (screenStack.length) history.back(); }
+function closeAllScreens() { while (screenStack.length) { hideTopScreen(); history.back(); } }
+window.addEventListener('popstate', () => { if (screenStack.length) hideTopScreen(); });
+document.addEventListener('click', (e) => {
+  const opener = e.target.closest('[data-screen]');
+  if (opener) { openScreen(opener.getAttribute('data-screen')); return; }
+  const back = e.target.closest('[data-back]');
+  if (back) {
+    if (back.hasAttribute('data-saved')) { persist(); showToast('已儲存 ✓'); }
+    closeScreen();
+  }
+});
+
+function renderTiles() {
+  const d = getDay(ui.date, false);
+  $('tileWeight').textContent = d.weight != null ? d.weight + ' 公斤' : '還沒量';
+  $('tileWater').textContent = (d.water || 0) + ' ml' + (d.water ? '（約 ' + r1(d.water / 250) + ' 杯）' : '');
+  $('tileExercise').textContent = d.exercise || d.exMin ? (d.exercise || '運動') + (d.exMin ? ' ' + d.exMin + ' 分' : '') : '還沒記';
+  const bits = [];
+  if (d.mood != null) bits.push(MOOD_OPTIONS[d.mood]);
+  if (d.question) bits.push('有問題要問');
+  else if (d.note) bits.push('有備註');
+  $('tileNote').textContent = bits.length ? bits.join(' ') : '想問營養師也寫這';
+}
+function renderWeightHint() {
+  let last = null;
+  Object.keys(state.days).filter(k => k < ui.date && state.days[k].weight != null).sort().forEach(k => { last = k; });
+  $('lastWeightHint').textContent = last ? '上次：' + state.days[last].weight + ' 公斤（' + fmtMD(last) + '）' : '';
+}
+function renderWaterBig() {
+  const w = num(getDay(ui.date, false).water) || 0;
+  $('waterBig').textContent = w.toLocaleString();
+  $('waterCups').textContent = w ? '約 ' + r1(w / 250) + ' 杯' : '還沒喝';
+}
+$('dayWater').addEventListener('input', renderWaterBig);
+$('exercisePresets').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ex-preset]');
+  if (!b) return;
+  $('dayExercise').value = b.getAttribute('data-ex-preset');
+  setDayField('exercise', $('dayExercise').value);
+  renderExercisePresets();
+});
+$('exMinPresets').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-exmin]');
+  if (!b) return;
+  $('dayExMin').value = b.getAttribute('data-exmin');
+  setDayField('exMin', Number(b.getAttribute('data-exmin')));
+  renderExercisePresets();
+});
+function renderExercisePresets() {
+  const d = getDay(ui.date, false);
+  document.querySelectorAll('[data-ex-preset]').forEach(b => b.classList.toggle('is-active', d.exercise === b.getAttribute('data-ex-preset')));
+  document.querySelectorAll('[data-exmin]').forEach(b => b.classList.toggle('is-active', String(d.exMin) === b.getAttribute('data-exmin')));
+}
+$('dayExercise').addEventListener('input', () => setTimeout(renderExercisePresets, 0));
+$('dayExMin').addEventListener('input', () => setTimeout(renderExercisePresets, 0));
+
+/* 拍照記 */
+let photoQuickDraft = null;
+function resetPhotoQuick() {
+  photoQuickDraft = null;
+  $('photoQuickName').value = '';
+  $('photoQuickKcal').value = '';
+  $('photoQuickPreviewWrap').classList.add('hidden');
+  $('photoQuickShoot').classList.remove('hidden');
+}
+$('photoQuickShoot').addEventListener('click', () => $('photoQuickInput').click());
+$('photoQuickRetake').addEventListener('click', () => $('photoQuickInput').click());
+$('photoQuickInput').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    photoQuickDraft = await compressImage(file);
+    $('photoQuickPreview').src = photoQuickDraft;
+    $('photoQuickPreviewWrap').classList.remove('hidden');
+    $('photoQuickShoot').classList.add('hidden');
+  } catch (err) { showToast('照片讀取失敗'); }
+});
+$('photoQuickSave').addEventListener('click', async () => {
+  const name = $('photoQuickName').value.trim();
+  const kcal = num($('photoQuickKcal').value);
+  if (!photoQuickDraft && !name && kcal == null) { showToast('請先拍照，或寫下吃了什麼'); return; }
+  await addEntry({
+    name: name || MEAL_META[ui.meal].label + '拍照待查', nutr: { kcal: kcal || 0 }, meal: ui.meal,
+    photo: photoQuickDraft, pending: kcal == null
+  });
+  resetPhotoQuick();
+  closeScreen();
+});
 
 function nutrLine(it) {
   const parts = [];
@@ -525,8 +671,8 @@ function renderLogs() {
   const list = state.logs[ui.date] || [];
   if (!list.length) {
     container.innerHTML = `<div class="bg-white rounded-2xl border border-dashed border-stone-300 p-8 text-center space-y-2">
-      <p class="text-sm font-medium text-stone-600">這天還沒有任何飲食記錄</p>
-      <p class="text-xs text-stone-400">在上方輸入食物，或到「快選」一鍵加入</p></div>`;
+      <p class="text-base font-medium text-stone-600">這天還沒有記錄</p>
+      <p class="text-sm text-stone-400">點上面的「常吃的」「拍照記」開始</p></div>`;
     return;
   }
   let html = '';
@@ -537,33 +683,33 @@ function renderLogs() {
     const meta = MEAL_META[mealKey];
     html += `<div class="bg-white rounded-2xl border border-stone-200 overflow-hidden">
       <div class="px-4 py-2.5 bg-stone-50/80 border-b border-stone-100 flex items-center justify-between">
-        <span class="px-2 py-0.5 rounded-md text-xs font-bold ${meta.badge}">${meta.label}</span>
-        <span class="text-xs font-bold text-stone-700 tabular-nums">${sub.toLocaleString()} kcal</span>
+        <span class="px-2.5 py-0.5 rounded-md text-sm font-bold ${meta.badge}">${meta.label}</span>
+        <span class="text-sm font-bold text-stone-700 tabular-nums">${sub.toLocaleString()} kcal</span>
       </div><ul class="divide-y divide-stone-100">`;
     items.forEach(item => {
       const mult = item.multiplier && item.multiplier !== 1 ? ' × ' + item.multiplier + '份' : '';
-      const pending = item.pending ? '<span class="ml-1.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">暫估待修</span>' : '';
+      const pending = item.pending ? '<span class="ml-1.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[0.625rem] font-bold">暫估待修</span>' : '';
       const thumb = item.hasPhoto
         ? `<button type="button" data-view-photo="${esc(item.id)}" class="view-photo-btn relative shrink-0" title="放大照片">
-             <img data-photo-id="${esc(item.id)}" alt="餐點照片" class="w-11 h-11 rounded-xl object-cover border border-stone-200 bg-stone-100" />
+             <img data-photo-id="${esc(item.id)}" alt="餐點照片" class="w-14 h-14 rounded-xl object-cover border border-stone-200 bg-stone-100" />
            </button>`
         : '';
       const nl = nutrLine(item);
-      html += `<li class="px-4 py-3 flex items-center justify-between gap-2.5">
-        <div class="flex items-center gap-2.5 min-w-0">${thumb}
-          <div class="min-w-0">
-            <div class="text-sm font-medium text-stone-800 truncate">${esc(item.name)}${pending}</div>
-            <div class="text-[11px] text-stone-400 truncate">${esc(item.time || '')}${esc(mult)}${nl ? '・' + esc(nl) : ''}</div>
-          </div>
+      html += `<li class="px-4 py-3 flex items-start gap-3">${thumb}
+        <div class="min-w-0 flex-1">
+          <div class="text-base font-semibold text-stone-900 leading-snug break-words">${esc(item.name)}${pending}</div>
+          <div class="text-sm text-stone-500 leading-snug">${esc(item.time || '')}${esc(mult)}${nl ? '・' + esc(nl) : ''}</div>
         </div>
-        <div class="flex items-center gap-0.5 shrink-0">
-          <span class="text-sm font-bold text-stone-800 tabular-nums mr-1">${item.kcal.toLocaleString()} <span class="text-xs font-normal text-stone-500">kcal</span></span>
-          <button type="button" data-edit-id="${esc(item.id)}" class="edit-entry-btn p-2 rounded-lg text-stone-400 hover:text-emerald-700 hover:bg-emerald-50" aria-label="修改">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-          </button>
-          <button type="button" data-del-id="${esc(item.id)}" class="del-entry-btn p-2 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50" aria-label="刪除">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-          </button>
+        <div class="shrink-0 flex flex-col items-end gap-1">
+          <span class="text-lg font-bold text-stone-900 tabular-nums leading-none mt-0.5">${item.kcal.toLocaleString()} <span class="text-xs font-normal text-stone-500">kcal</span></span>
+          <div class="flex items-center gap-1">
+            <button type="button" data-edit-id="${esc(item.id)}" class="edit-entry-btn p-2.5 rounded-xl text-stone-500 bg-stone-50 hover:text-emerald-700 hover:bg-emerald-50" aria-label="修改">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            </button>
+            <button type="button" data-del-id="${esc(item.id)}" class="del-entry-btn p-2.5 rounded-xl text-stone-500 bg-stone-50 hover:text-rose-600 hover:bg-rose-50" aria-label="刪除">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </button>
+          </div>
         </div></li>`;
     });
     html += '</ul></div>';
@@ -600,6 +746,7 @@ function renderDayPanel() {
   });
 }
 function setDayField(field, value) {
+  setTimeout(renderTiles, 0);
   const d = getDay(ui.date, true);
   if (value === null || value === '' || value === undefined) delete d[field]; else d[field] = value;
   if (!Object.keys(d).length) delete state.days[ui.date];
@@ -625,9 +772,10 @@ document.querySelectorAll('[data-day-text]').forEach(el => {
 document.querySelectorAll('.water-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const cur = num($('dayWater').value) || 0;
-    const v = Math.min(8000, cur + Number(btn.getAttribute('data-water-add')));
-    $('dayWater').value = v;
-    setDayField('water', v);
+    const v = Math.max(0, Math.min(8000, cur + Number(btn.getAttribute('data-water-add'))));
+    $('dayWater').value = v || '';
+    setDayField('water', v || null);
+    renderWaterBig();
   });
 });
 
@@ -651,7 +799,7 @@ function renderLibrary() {
     return;
   }
   grid.innerHTML = filtered.map(item => {
-    const fav = (item.isFav || item.cat === 'fav') ? '<span class="ml-1.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold">常用</span>' : '';
+    const fav = (item.isFav || item.cat === 'fav') ? '<span class="ml-1.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[0.625rem] font-semibold">常用</span>' : '';
     const nl = nutrLine(item);
     return `<div class="flex items-center justify-between gap-1.5 p-3 rounded-xl border border-stone-200 hover:border-emerald-400 bg-stone-50/50 transition">
       <button type="button" data-qid="${esc(item.id)}" class="quick-add-btn flex-1 text-left min-w-0">
@@ -698,7 +846,7 @@ function rangeStats(dates) {
   };
 }
 function statTile(label, value, sub = '') {
-  return `<div class="bg-stone-50 rounded-xl p-2.5"><div class="text-[11px] text-stone-500">${label}</div><div class="text-base font-bold text-stone-900 tabular-nums">${value}</div>${sub ? `<div class="text-[10px] text-stone-400">${sub}</div>` : ''}</div>`;
+  return `<div class="bg-stone-50 rounded-xl p-2.5"><div class="text-[0.6875rem] text-stone-500">${label}</div><div class="text-base font-bold text-stone-900 tabular-nums">${value}</div>${sub ? `<div class="text-[0.625rem] text-stone-400">${sub}</div>` : ''}</div>`;
 }
 function renderTrends() {
   document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('is-active', Number(b.getAttribute('data-range')) === ui.trendRange));
@@ -763,15 +911,15 @@ function renderTrends() {
   let nh = '';
   if (s.macroDays) {
     const kc = MACRO_KEYS.reduce((sum, k) => sum + (s.avgMacro[k] || 0) * MACRO_META[k].kcalPerG, 0);
-    nh += `<div><div class="text-[11px] text-stone-500 mb-1.5">三大營養素（${s.macroDays} 天有填）</div><div class="grid grid-cols-3 gap-2">` +
+    nh += `<div><div class="text-[0.6875rem] text-stone-500 mb-1.5">三大營養素（${s.macroDays} 天有填）</div><div class="grid grid-cols-3 gap-2">` +
       MACRO_KEYS.map(k => meterHTML(MACRO_META[k].label + (kc ? ' ' + Math.round((s.avgMacro[k] || 0) * MACRO_META[k].kcalPerG / kc * 100) + '%' : ''), s.avgMacro[k], tg[k], 'g', MACRO_META[k].bar)).join('') + '</div></div>';
   }
   if (s.exDays) {
-    nh += `<div><div class="text-[11px] text-stone-500 mb-1.5">六大類份數（${s.exDays} 天有填）</div><div class="grid grid-cols-3 sm:grid-cols-6 gap-2">` +
+    nh += `<div><div class="text-[0.6875rem] text-stone-500 mb-1.5">六大類份數（${s.exDays} 天有填）</div><div class="grid grid-cols-3 sm:grid-cols-6 gap-2">` +
       EX_KEYS.map(k => meterHTML(EX_META[k].emoji + ' ' + EX_META[k].short, s.avgEx[k], tg.ex && tg.ex[k], '份', 'bg-emerald-500')).join('') + '</div></div>';
   }
   if (!nh) nh = '<p class="text-xs text-stone-400">這段期間還沒有填營養素或六大類份數。用「份量估算」或在記錄時展開「營養素／六大類份數」就會出現在這裡。</p>';
-  if (s.pending) nh += `<p class="text-[11px] font-semibold text-amber-700">⚠ 這段期間有 ${s.pending} 筆暫估待修</p>`;
+  if (s.pending) nh += `<p class="text-[0.6875rem] font-semibold text-amber-700">⚠ 這段期間有 ${s.pending} 筆暫估待修</p>`;
   $('trendNutr').innerHTML = nh;
 }
 
@@ -822,6 +970,8 @@ function renderAll() {
   renderQuickStrip();
   renderLogs();
   renderDayPanel();
+  renderTiles();
+  renderExercisePresets();
   renderLibrary();
   renderBanners();
   if (ui.tab === 'trends') renderTrends();
@@ -829,16 +979,25 @@ function renderAll() {
 
 /* ---------------- 事件：導覽／日期 ---------------- */
 document.querySelectorAll('.nav-tab, .mobile-nav-tab').forEach(btn => btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab'))));
-$('jumpToLibraryBtn').addEventListener('click', () => switchTab('library'));
 $('prevDayBtn').addEventListener('click', () => { ui.date = addDays(ui.date, -1); renderAll(); });
 $('nextDayBtn').addEventListener('click', () => { ui.date = addDays(ui.date, 1); renderAll(); });
 $('todayBtn').addEventListener('click', () => { ui.date = todayStr(); renderAll(); });
+$('datePicker').addEventListener('click', (e) => { try { e.target.showPicker(); } catch (err) { /* 不支援時用原生行為 */ } });
 $('datePicker').addEventListener('change', (e) => { if (e.target.value) { ui.date = e.target.value; renderAll(); } });
-$('mealSelectorGroup').addEventListener('click', (e) => {
+document.querySelectorAll('.meal-picker').forEach(el => {
+  el.innerHTML = MEAL_KEYS.map(k => `<button type="button" data-meal="${k}" class="meal-btn">${MEAL_META[k].label}</button>`).join('');
+});
+document.addEventListener('click', (e) => {
   const btn = e.target.closest('.meal-btn');
   if (!btn) return;
   ui.meal = btn.getAttribute('data-meal');
   renderMealSelector();
+});
+$('portionGroup').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-portion]');
+  if (!b) return;
+  $('portionSelect').value = b.getAttribute('data-portion');
+  document.querySelectorAll('#portionGroup [data-portion]').forEach(x => x.classList.toggle('is-active', x === b));
 });
 $('libraryMealSelect').addEventListener('change', (e) => { ui.meal = e.target.value; renderMealSelector(); });
 $('dismissInstallBtn').addEventListener('click', () => { state.meta.installHintDismissed = true; persist(); renderBanners(); });
@@ -853,12 +1012,6 @@ function goToCloudSection() {
 }
 
 /* ---------------- 事件：新增表單 ---------------- */
-$('homeQuickStrip').addEventListener('click', (e) => {
-  const btn = e.target.closest('.strip-add-btn');
-  if (!btn) return;
-  const q = state.quickItems.find(x => x.id === btn.getAttribute('data-qid'));
-  if (q) addFromQuick(q);
-});
 $('kcalStepperGroup').addEventListener('click', (e) => {
   const btn = e.target.closest('.kcal-step-btn');
   if (!btn) return;
@@ -906,10 +1059,13 @@ $('addFoodForm').addEventListener('submit', async (e) => {
     photo: draftPhoto, pending: pendingChecked || (!hasKcal && Boolean(draftPhoto)), saveFav: $('saveFavCheck').checked
   });
   $('addFoodForm').reset();
+  $('portionSelect').value = '1';
+  document.querySelectorAll('#portionGroup [data-portion]').forEach(x => x.classList.toggle('is-active', x.getAttribute('data-portion') === '1'));
   writeNutrFields('add', null);
   $('addNutrDetails').open = false;
   draftPhoto = null;
   updateDraftPhotoUI();
+  closeScreen();
 });
 
 /* ---------------- 事件：明細（看照片／修改／刪除） ---------------- */
@@ -1120,9 +1276,10 @@ $('openSourceBtn').addEventListener('click', () => openModal('sourceModal'));
 /* ---------------- 份量估算器 ---------------- */
 let estCounts = {};
 $('estButtonsGrid').innerHTML = EST_PARTS.map(p =>
-  `<button type="button" data-est="${p.id}" class="est-part-btn p-2.5 rounded-xl border border-stone-200 hover:border-emerald-500 active:bg-emerald-50 bg-stone-50/70 text-left transition">
-    <div class="text-xs font-bold text-stone-800">${p.title}</div>
-    <div class="text-[11px] text-stone-500">${p.sub}・<span class="text-emerald-700 font-bold">+${p.kcal}</span></div>
+  `<button type="button" data-est="${p.id}" class="est-part-btn p-3 rounded-2xl border border-stone-200 hover:border-emerald-500 active:bg-emerald-100 bg-white text-left transition min-h-[76px]">
+    <div class="text-base font-bold text-stone-900">${p.title}</div>
+    <div class="text-sm text-stone-500 leading-snug">${p.sub}</div>
+    <div class="text-sm text-emerald-700 font-bold">+${p.kcal} kcal</div>
   </button>`).join('');
 function estTotals() {
   const t = { kcal: 0, p: 0, c: 0, f: 0, ex: {} };
@@ -1138,7 +1295,7 @@ function estTotals() {
 function renderEst() {
   const picked = EST_PARTS.filter(p => estCounts[p.id]);
   $('estPicked').innerHTML = picked.length
-    ? picked.map(p => `<button type="button" data-est-remove="${p.id}" class="px-2 py-0.5 rounded-full bg-white border border-emerald-200 hover:border-rose-300">${p.title.replace(/^\S+\s/, '')} ×${estCounts[p.id]} <span class="text-rose-500">−</span></button>`).join('')
+    ? picked.map(p => `<button type="button" data-est-remove="${p.id}" class="px-3 py-1.5 rounded-full bg-white border border-emerald-200 hover:border-rose-300">${p.title.replace(/^\S+\s/, '')} ×${estCounts[p.id]} <span class="text-rose-500">−</span></button>`).join('')
     : '尚未點選';
   const t = estTotals();
   $('estTotalVal').textContent = t.kcal;
@@ -1160,30 +1317,23 @@ $('estPicked').addEventListener('click', (e) => {
   renderEst();
 });
 $('resetEstPartsBtn').addEventListener('click', () => { estCounts = {}; renderEst(); });
-$('openEstimateModalBtn').addEventListener('click', () => {
-  $('extSearchInput').value = $('foodNameInput').value.trim();
-  renderEst();
-  openModal('estimateModal');
-});
 $('extGoogleSearchBtn').addEventListener('click', () => {
   const q = $('extSearchInput').value.trim() || '台灣外食';
   window.open('https://www.google.com/search?q=' + encodeURIComponent(q + ' 熱量 大卡'), '_blank', 'noopener,noreferrer');
 });
-$('applyEstimateBtn').addEventListener('click', () => {
+$('applyEstimateBtn').addEventListener('click', async () => {
   const t = estTotals();
-  if (!t.kcal) { showToast('請先點選食材份量'); return; }
-  $('foodKcalInput').value = t.kcal;
-  $('portionSelect').value = '1';
-  writeNutrFields('add', t);
-  $('addNutrDetails').open = true;
-  if (!$('foodNameInput').value.trim()) {
+  if (!t.kcal) { showToast('請先按上面的份量按鈕'); return; }
+  let name = $('estName').value.trim();
+  if (!name) {
     const names = EST_PARTS.filter(p => estCounts[p.id]).map(p => p.title.replace(/^\S+\s/, '') + (estCounts[p.id] > 1 ? '×' + estCounts[p.id] : ''));
-    $('foodNameInput').value = '自選組合（' + names.slice(0, 3).join('、') + (names.length > 3 ? '…' : '') + '）';
+    name = '自選組合（' + names.slice(0, 3).join('、') + (names.length > 3 ? '…' : '') + '）';
   }
+  await addEntry({ name, nutr: t, meal: ui.meal });
   estCounts = {};
+  $('estName').value = '';
   renderEst();
-  closeModal('estimateModal');
-  showToast('已帶入，確認後按「+ 加入記錄」');
+  closeScreen();
 });
 
 /* ---------------- 報告 ---------------- */
@@ -1526,12 +1676,30 @@ $('cloudDisconnectBtn').addEventListener('click', () => {
   }, '中斷連結');
 });
 
+/* ---------------- 字體大小 ---------------- */
+const FONT_SIZES = { m: { px: 16, label: '標準' }, l: { px: 18, label: '大' }, xl: { px: 20, label: '特大' } };
+function applyFontSize() {
+  const key = FONT_SIZES[state.meta.fontSize] ? state.meta.fontSize : 'l';
+  document.documentElement.style.fontSize = FONT_SIZES[key].px + 'px';
+  $('fontSizeLabel').textContent = FONT_SIZES[key].label;
+  if (kcalChart || weightChart) { if (ui.tab === 'trends') renderTrends(); }
+}
+$('fontSizeBtn').addEventListener('click', () => {
+  const order = ['m', 'l', 'xl'];
+  const cur = FONT_SIZES[state.meta.fontSize] ? state.meta.fontSize : 'l';
+  state.meta.fontSize = order[(order.indexOf(cur) + 1) % order.length];
+  persist();
+  applyFontSize();
+  showToast('字體：' + FONT_SIZES[state.meta.fontSize].label);
+});
+
 /* ---------------- 啟動 ---------------- */
 document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click', () => { ui.trendRange = Number(b.getAttribute('data-range')); renderTrends(); }));
 
 (async function init() {
   await loadState();
   if (!state.meta.deviceId) { state.meta.deviceId = uid('dev'); persist(); }
+  applyFontSize();
   renderAll();
   switchTab('log');
   const redirect = cloud.isConfigured() ? cloud.consumeRedirect() : null;

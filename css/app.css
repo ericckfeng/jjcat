@@ -21,28 +21,28 @@ body {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-.lbl { display: block; font-size: 11px; font-weight: 500; color: var(--stone-600); margin-bottom: 4px; }
+.lbl { display: block; font-size: .75rem; font-weight: 500; color: var(--stone-600); margin-bottom: .25rem; }
 
 .field {
   width: 100%;
-  padding: 10px 14px;
-  min-height: 44px;
-  border-radius: 12px;
+  padding: .625rem .875rem;
+  min-height: 2.875rem;
+  border-radius: .75rem;
   border: 1px solid var(--stone-200);
   background: var(--stone-50);
-  font-size: 16px; /* 避免 iOS 自動放大 */
+  font-size: max(16px, 1rem); /* 至少 16px，避免 iOS 自動放大 */
   outline: none;
   transition: box-shadow .15s, background .15s;
 }
 .field:focus { background: #fff; box-shadow: 0 0 0 2px var(--emerald); border-color: transparent; }
 textarea.field { min-height: 0; resize: vertical; }
-@media (min-width: 640px) { .field { font-size: 14px; } }
+
 
 .chip-btn {
-  padding: 4px 10px;
-  border-radius: 8px;
+  padding: .3rem .7rem;
+  border-radius: .5rem;
   background: var(--stone-100);
-  font-size: 12px;
+  font-size: .8125rem;
   font-weight: 600;
   color: var(--stone-700);
   font-variant-numeric: tabular-nums;
@@ -52,10 +52,10 @@ textarea.field { min-height: 0; resize: vertical; }
 .chip-btn:active { background: #d6d3d1; }
 
 .btn-primary, .btn-secondary {
-  padding: 10px 20px;
-  min-height: 44px;
-  border-radius: 12px;
-  font-size: 14px;
+  padding: .625rem 1.25rem;
+  min-height: 2.875rem;
+  border-radius: .75rem;
+  font-size: .9375rem;
   font-weight: 600;
   transition: background .15s;
 }
@@ -65,7 +65,7 @@ textarea.field { min-height: 0; resize: vertical; }
 .btn-secondary { background: var(--stone-100); color: var(--stone-800); }
 .btn-secondary:hover { background: var(--stone-200); }
 
-.btn-small-primary, .btn-small-secondary { padding: 8px 16px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.btn-small-primary, .btn-small-secondary { padding: .55rem 1rem; border-radius: .75rem; font-size: .875rem; font-weight: 600; min-height: 2.5rem; }
 .btn-small-primary { background: var(--emerald); color: #fff; }
 .btn-small-primary:hover { background: var(--emerald-dark); }
 .btn-small-secondary { background: var(--stone-100); color: var(--stone-700); }
@@ -73,24 +73,24 @@ textarea.field { min-height: 0; resize: vertical; }
 
 /* 切換型按鈕（餐別、心情、分類、區間…） */
 .meal-btn, .toggle-btn, .preset-btn, .range-btn {
-  padding: 8px 4px;
-  min-height: 40px;
-  border-radius: 12px;
-  font-size: 12px;
+  padding: .5rem .25rem;
+  min-height: 2.75rem;
+  border-radius: .75rem;
+  font-size: .875rem;
   font-weight: 600;
   border: 1px solid var(--stone-200);
   background: var(--stone-50);
   color: var(--stone-600);
   transition: all .15s;
 }
-.range-btn { min-height: 32px; padding: 4px 10px; border-radius: 8px; }
+.range-btn { min-height: 2.25rem; padding: .25rem .7rem; border-radius: .5rem; }
 .meal-btn:hover, .toggle-btn:hover, .preset-btn:hover, .range-btn:hover { background: var(--stone-100); }
 .meal-btn.is-active, .toggle-btn.is-active, .range-btn.is-active, .preset-btn.is-active {
   background: var(--emerald); border-color: var(--emerald); color: #fff;
 }
-.toggle-btn.mood { font-size: 20px; padding: 4px; }
+.toggle-btn.mood { font-size: 1.6rem; padding: .25rem; min-height: 3.25rem; }
 
-.cat-chip { padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--stone-100); color: var(--stone-600); }
+.cat-chip { padding: .45rem .9rem; border-radius: 999px; font-size: .875rem; font-weight: 600; background: var(--stone-100); color: var(--stone-600); }
 .cat-chip:hover { background: var(--stone-200); }
 .cat-chip.is-active { background: var(--emerald); color: #fff; }
 
@@ -98,7 +98,7 @@ textarea.field { min-height: 0; resize: vertical; }
 .nav-tab:hover { color: var(--stone-800); }
 .nav-tab.is-active { border-color: var(--emerald); color: var(--emerald-dark); font-weight: 600; }
 
-.mobile-nav-tab { padding: 10px 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--stone-400); font-weight: 500; }
+.mobile-nav-tab { padding: .55rem 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--stone-400); font-weight: 500; }
 .mobile-nav-tab.is-active { color: var(--emerald-dark); font-weight: 600; }
 
 /* Modal */
@@ -110,15 +110,73 @@ textarea.field { min-height: 0; resize: vertical; }
 }
 .modal.hidden { display: none; }
 .modal-card {
-  background: #fff; border-radius: 16px; width: 100%; padding: 20px;
+  background: #fff; border-radius: 1rem; width: 100%; padding: 1.25rem;
   box-shadow: 0 20px 25px -5px rgba(0,0,0,.15);
   max-height: 88vh; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 16px;
+  display: flex; flex-direction: column; gap: 1rem;
 }
-.modal-x { color: var(--stone-400); font-size: 18px; font-weight: 700; padding: 0 8px; }
+.modal-x { color: var(--stone-400); font-size: 1.25rem; font-weight: 700; padding: .25rem .6rem; min-height: 2.5rem; }
 .modal-x:hover { color: var(--stone-700); }
 
 #toast:not(.hidden) { display: flex; }
+
+/* 首頁大按鈕 */
+.sec-title { font-size: 1.0625rem; font-weight: 700; color: #1c1917; padding: 0 .25rem; }
+.tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: .15rem;
+  padding: .85rem .9rem; min-height: 6rem; border-radius: 1.1rem;
+  background: #fff; border: 1px solid var(--stone-200); text-align: left;
+  transition: background .15s, border-color .15s, transform .1s;
+}
+.tile:hover { border-color: #6ee7b7; }
+.tile:active { background: #ecfdf5; transform: scale(.98); }
+.tile-ic { font-size: 1.75rem; line-height: 1.1; }
+.tile-t { font-size: 1.125rem; font-weight: 700; color: #1c1917; }
+.tile-s { font-size: .8125rem; color: var(--stone-500); line-height: 1.3; }
+
+/* 全螢幕輸入頁 */
+.screen { position: fixed; inset: 0; z-index: 45; background: var(--stone-50); display: flex; flex-direction: column; }
+.screen.hidden { display: none; }
+.scr-head {
+  flex: none; display: flex; align-items: center; gap: .5rem;
+  padding: calc(env(safe-area-inset-top) + .4rem) .75rem .4rem;
+  background: #fff; border-bottom: 1px solid var(--stone-200);
+}
+.scr-head h2 { font-size: 1.25rem; font-weight: 700; color: #1c1917; }
+.scr-back { font-size: 1.0625rem; font-weight: 600; color: var(--emerald-dark); padding: .5rem .75rem; border-radius: .75rem; min-height: 3rem; }
+.scr-back:active { background: #ecfdf5; }
+.scr-body {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  width: 100%; max-width: 42rem; margin: 0 auto; padding: 1rem;
+  display: flex; flex-direction: column; gap: 1.1rem;
+}
+.scr-foot { flex: none; padding: .75rem 1rem calc(env(safe-area-inset-bottom) + .75rem); background: #fff; border-top: 1px solid var(--stone-200); }
+.scr-foot > * { max-width: 40rem; margin: 0 auto; display: block; }
+.scr-label { display: block; font-size: 1rem; font-weight: 600; color: var(--stone-700); margin-bottom: .4rem; }
+.meal-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; }
+.meal-picker .meal-btn { min-height: 3.25rem; font-size: 1.0625rem; }
+.btn-xl { min-height: 3.5rem; font-size: 1.1875rem; border-radius: 1rem; }
+.field-xl { font-size: 1.75rem !important; font-weight: 700; min-height: 3.75rem; text-align: center; }
+.chip-lg { padding: .55rem 1rem; font-size: 1rem; }
+.big-check { width: 1.5rem; height: 1.5rem; border-radius: .35rem; accent-color: var(--emerald); flex-shrink: 0; }
+.big-camera {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .35rem;
+  min-height: 11rem; border: 2px dashed #a8a29e; border-radius: 1.25rem; background: #fff;
+  font-size: 1.25rem; font-weight: 700; color: var(--stone-700);
+}
+.big-camera:active { background: #ecfdf5; border-color: var(--emerald); }
+.pick-row {
+  width: 100%; display: flex; align-items: center; gap: .75rem;
+  padding: .8rem .9rem; border-radius: 1rem; background: #fff; border: 1px solid var(--stone-200);
+  transition: background .2s, border-color .2s;
+}
+.pick-row:active { background: #ecfdf5; }
+.pick-add {
+  flex-shrink: 0; padding: .6rem .9rem; border-radius: .75rem; min-height: 2.75rem;
+  background: var(--emerald); color: #fff; font-weight: 700; font-size: 1rem; display: flex; align-items: center;
+}
+.pick-row.pick-done { background: #d1fae5; border-color: #34d399; }
+.pick-row.pick-done .pick-add { background: #047857; }
 
 /* 列印：只印報告 */
 @media print {

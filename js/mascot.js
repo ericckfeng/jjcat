@@ -140,9 +140,9 @@ export function buildMascotMessages(ctx) {
     add(32, 'happy', ctx.streak.todayLogged ? `已經連續記錄 ${ctx.streak.n} 天了 🔥` : `已經連續記錄 ${ctx.streak.n} 天，今天也記一下吧 🔥`);
   }
   if (ctx.isToday && ctx.count === 0) {
-    add(36, 'hello', ctx.hour < 10 ? '早安！吃了早餐記得記一下 ☀️' : '今天還沒記錄喔，點下面的「常吃的」一下就好 😊');
+    add(36, 'hello', ctx.hour >= 5 && ctx.hour < 10 ? '早安！吃了早餐記得記一下 ☀️' : ctx.hour < 5 ? '夜深了，早點休息，睡飽了明天比較不會嘴饞 🌙' : '今天還沒記錄喔，點下面的「常吃的」一下就好 😊');
   }
-  if (ctx.isToday && w && !w.measuredToday && ctx.hour < 11) add(15, 'hello', '早上起床、上完廁所後量體重最準喔 ⚖️');
+  if (ctx.isToday && w && !w.measuredToday && ctx.hour >= 5 && ctx.hour < 11) add(15, 'hello', '早上起床、上完廁所後量體重最準喔 ⚖️');
   add(1, 'calm', '我是小芽，陪你一起記錄、一起變健康 🌱', 'intro');
   return out.sort((a, b) => b.pri - a.pri);
 }

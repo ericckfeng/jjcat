@@ -1,6 +1,6 @@
 // Service Worker：讓 App 可以離線開啟
 // 自己的檔案「先上網抓最新版，失敗才用快取」；CDN 檔案「有快取就用快取」
-const CACHE = 'diet-tracker-v4';
+const CACHE = 'diet-tracker-v5';
 const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 const CORE = [
   './',
@@ -12,6 +12,9 @@ const CORE = [
   './js/report.js',
   './js/cloud.js',
   './js/config.js',
+  './js/sync.js',
+  './js/body.js',
+  './js/mascot.js',
   './privacy.html',
   './manifest.webmanifest',
   './icons/icon-192.png',

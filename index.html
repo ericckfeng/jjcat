@@ -35,8 +35,9 @@
         <button id="openTargetBtn" type="button" class="px-2.5 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-xs font-medium text-stone-700 transition min-h-[36px]">
           目標 <span id="headerTargetVal" class="font-semibold text-emerald-700 tabular-nums">1800</span><span class="hidden sm:inline"> kcal</span>
         </button>
+        <button id="syncChip" type="button" class="sync-chip hidden" data-tone="ok"><span id="syncChipIcon">☁️</span><span id="syncChipLabel" class="hidden min-[420px]:inline">已同步</span></button>
         <button id="fontSizeBtn" type="button" class="px-2.5 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-sm font-bold text-stone-700 transition min-h-[36px]" aria-label="調整字體大小"><span aria-hidden="true">A<span class="text-base">A</span></span><span id="fontSizeLabel" class="hidden sm:inline text-xs font-semibold text-emerald-700 ml-1">大</span></button>
-        <button id="openSourceBtn" type="button" class="p-2 rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-700 transition min-h-[36px] min-w-[36px] flex items-center justify-center" title="熱量資料來源" aria-label="熱量資料來源">
+        <button id="openSourceBtn" type="button" class="hidden sm:flex p-2 rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-700 transition min-h-[36px] min-w-[36px] flex items-center justify-center" title="熱量資料來源" aria-label="熱量資料來源">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4m0-4h.01"></path></svg>
         </button>
       </div>
@@ -68,7 +69,7 @@
       <div class="flex-1 min-w-0 flex items-center justify-center gap-2">
         <label class="relative min-w-0 flex-1 max-w-[13rem] flex items-center justify-center gap-1.5 bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-2 cursor-pointer">
           <span id="dateLabel" class="text-base font-bold text-stone-800 whitespace-nowrap">11月11日</span>
-          <span aria-hidden="true">📅</span>
+          <span aria-hidden="true" class="hidden min-[400px]:inline">📅</span>
           <input id="datePicker" type="date" aria-label="選擇日期" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
         </label>
         <button id="todayBtn" type="button" class="shrink-0 whitespace-nowrap px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-sm font-semibold transition">今天</button>
@@ -78,6 +79,16 @@
 
     <!-- TAB 1: LOG -->
     <div id="tab-log" class="tab-panel space-y-5">
+      <!-- 小芽 -->
+      <section id="mascotCard" class="mascot-card">
+        <button id="mascotBtn" type="button" class="mascot-btn" aria-label="小芽，點我看下一句"></button>
+        <div class="flex-1 min-w-0">
+          <div class="mascot-bubble"><span id="mascotMsg"></span></div>
+          <div id="mascotChips" class="flex flex-wrap gap-1.5 mt-2"></div>
+        </div>
+        <div id="confetti" class="confetti" aria-hidden="true"></div>
+      </section>
+
       <!-- Daily Summary -->
       <section class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
         <div class="flex items-center justify-between gap-4">
@@ -121,7 +132,7 @@
       <section class="space-y-2">
         <h2 class="sec-title">記錄身體</h2>
         <div class="grid grid-cols-2 gap-3">
-          <button type="button" data-screen="scr-weight" class="tile"><span class="tile-ic">⚖️</span><span class="tile-t">體重</span><span id="tileWeight" class="tile-s">還沒量</span></button>
+          <button type="button" data-screen="scr-weight" class="tile"><span class="tile-ic">⚖️</span><span class="tile-t">體重・尺寸</span><span id="tileWeight" class="tile-s">還沒量</span></button>
           <button type="button" data-screen="scr-water" class="tile"><span class="tile-ic">💧</span><span class="tile-t">喝水</span><span id="tileWater" class="tile-s">0 ml</span></button>
           <button type="button" data-screen="scr-exercise" class="tile"><span class="tile-ic">🏃</span><span class="tile-t">運動</span><span id="tileExercise" class="tile-s">還沒記</span></button>
           <button type="button" data-screen="scr-note" class="tile"><span class="tile-ic">📝</span><span class="tile-t">心情・備註</span><span id="tileNote" class="tile-s">想問營養師也寫這</span></button>
@@ -170,7 +181,7 @@
         <div id="libraryGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1"></div>
         <div class="pt-2 border-t border-stone-100 flex items-center justify-between text-[0.6875rem] text-stone-400">
           <span>點右側圖示可修改熱量、營養素或刪除</span>
-          <button id="resetQuickItemsBtn" type="button" class="text-stone-500 hover:text-stone-800 underline">恢復預設快選</button>
+          <span class="flex gap-3"><button type="button" data-open-sources class="text-stone-500 hover:text-stone-800 underline">熱量資料來源</button><button id="resetQuickItemsBtn" type="button" class="text-stone-500 hover:text-stone-800 underline">恢復預設快選</button></span>
         </div>
       </section>
     </div>
@@ -193,8 +204,12 @@
         <div id="trendStats" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
       </section>
       <section id="weightCard" class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
-        <h2 class="text-sm font-bold text-stone-900">體重變化</h2>
-        <div id="weightEmpty" class="text-xs text-stone-400">這段期間還沒有記錄體重，可在「今日記錄」最下方填寫。</div>
+        <div class="flex items-baseline justify-between gap-2 flex-wrap">
+          <h2 class="text-base font-bold text-stone-900">身體數據</h2>
+          <span id="bodyMetricSummary" class="text-sm text-stone-500"></span>
+        </div>
+        <div id="bodyMetricGroup" class="flex flex-wrap gap-1.5"></div>
+        <div id="weightEmpty" class="text-sm text-stone-400">這段期間還沒有這項記錄，可在首頁「體重・尺寸」填寫。</div>
         <div id="weightChartWrap" class="relative h-48 w-full"><canvas id="weightChart"></canvas></div>
       </section>
       <section class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
@@ -239,30 +254,27 @@
 
       <section id="cloudSection" class="no-print hidden bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
         <div>
-          <h2 class="text-sm font-bold text-stone-900">☁️ Google 雲端備份</h2>
-          <p class="text-xs text-stone-500 leading-relaxed">備份到你自己的 Google 雲端硬碟「飲控隨身記」資料夾，換手機時登入同一個帳號就能還原。App 只能存取它自己建立的檔案，看不到你雲端硬碟裡的其他東西。</p>
+          <h2 class="text-base font-bold text-stone-900">☁️ Google 雲端同步</h2>
+          <p class="text-sm text-stone-600 leading-relaxed">手機、電腦登入同一個 Google 帳號，記錄就會自動同步；換新手機時登入也能把資料找回來。資料存在你自己的 Google 雲端硬碟「飲控隨身記」資料夾，App 看不到你雲端硬碟裡的其他東西。</p>
         </div>
-        <div id="cloudInAppWarn" class="hidden text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-xl p-2.5 leading-relaxed">
+        <div id="cloudInAppWarn" class="hidden text-sm text-rose-800 bg-rose-50 border border-rose-200 rounded-xl p-2.5 leading-relaxed">
           你現在是用 LINE／Facebook 等 App 裡的瀏覽器開啟，Google 不允許在這裡登入。請點右上角選單，選「用 Safari／Chrome 開啟」。
         </div>
         <div id="cloudSignedOut" class="space-y-2">
-          <button id="cloudConnectBtn" type="button" class="btn-primary w-full">用 Google 帳號連結</button>
-          <button id="cloudRestoreNewBtn" type="button" class="btn-secondary w-full">換了新手機？登入並從雲端還原</button>
+          <button id="cloudConnectBtn" type="button" class="btn-primary btn-xl w-full">用 Google 帳號連結</button>
+          <p class="text-sm text-stone-500">換了新手機？一樣按上面的按鈕，用原本的 Google 帳號登入，資料就會自動回來。</p>
         </div>
         <div id="cloudSignedIn" class="hidden space-y-2.5">
-          <div class="text-xs text-stone-600">已連結：<b id="cloudEmail" class="text-stone-800"></b></div>
-          <div id="cloudLastText" class="text-xs text-stone-500"></div>
-          <div class="grid grid-cols-2 gap-2">
-            <button id="cloudBackupBtn" type="button" class="btn-primary">立即備份</button>
-            <button id="cloudRestoreBtn" type="button" class="btn-secondary">從雲端還原</button>
-          </div>
+          <div class="text-sm text-stone-600">已連結：<b id="cloudEmail" class="text-stone-800"></b></div>
+          <div id="cloudLastText" class="text-sm text-stone-500"></div>
+          <button id="cloudSyncBtn" type="button" class="btn-primary w-full">立即同步</button>
           <div class="flex items-center justify-between gap-2">
-            <label class="inline-flex items-center gap-2 text-xs text-stone-700"><input id="cloudAutoCheck" type="checkbox" class="rounded border-stone-300 text-emerald-600 w-4 h-4" />每天開 App 時自動備份</label>
-            <button id="cloudDisconnectBtn" type="button" class="text-xs text-stone-400 hover:text-rose-600 underline">中斷連結</button>
+            <label class="inline-flex items-center gap-2 text-sm text-stone-700"><input id="cloudAutoCheck" type="checkbox" class="big-check" />自動同步</label>
+            <button id="cloudDisconnectBtn" type="button" class="text-sm text-stone-400 hover:text-rose-600 underline">中斷連結</button>
           </div>
         </div>
-        <p id="cloudStatus" class="hidden text-xs font-medium rounded-xl px-3 py-2"></p>
-        <p class="text-[0.6875rem] text-stone-400"><a href="privacy.html" class="underline hover:text-stone-600">隱私權政策</a></p>
+        <p id="cloudStatus" class="hidden text-sm font-medium rounded-xl px-3 py-2"></p>
+        <p class="text-xs text-stone-400"><a href="privacy.html" class="underline hover:text-stone-600">隱私權政策</a></p>
       </section>
 
       <section id="backupSection" class="no-print bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
@@ -424,13 +436,44 @@
     <div class="scr-foot"><button type="submit" form="addFoodForm" class="btn-primary btn-xl w-full">儲存</button></div>
   </div>
 
-  <!-- 體重 -->
-  <div id="scr-weight" class="screen hidden" role="dialog" aria-label="體重">
-    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>⚖️ 體重</h2></div>
+  <!-- 體重・尺寸 -->
+  <div id="scr-weight" class="screen hidden" role="dialog" aria-label="體重與身體尺寸">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>⚖️ 體重・尺寸</h2></div>
     <div class="scr-body">
+      <div class="rounded-2xl bg-white border border-stone-200 p-3 space-y-2">
+        <div class="flex items-end gap-2">
+          <label class="block flex-1"><span class="scr-label">身高（公分）</span><input id="profHeight" type="number" inputmode="decimal" step="0.5" min="100" max="230" class="field tabular-nums" placeholder="例如：165" /></label>
+          <div class="shrink-0">
+            <span class="scr-label">性別</span>
+            <div id="sexGroup" class="grid grid-cols-2 gap-1.5 w-32">
+              <button type="button" data-sex="m" class="toggle-btn">男</button>
+              <button type="button" data-sex="f" class="toggle-btn">女</button>
+            </div>
+          </div>
+        </div>
+        <p class="text-sm text-stone-500">算 BMI、判斷腰圍用，只要填一次。</p>
+      </div>
       <label class="block"><span class="scr-label">體重（公斤）</span><input id="dayWeight" data-day-num="weight" type="number" inputmode="decimal" step="0.1" min="20" max="300" class="field field-xl tabular-nums" placeholder="例如：68.5" /></label>
       <p id="lastWeightHint" class="text-sm text-stone-500 -mt-2"></p>
-      <label class="block"><span class="scr-label">腰圍（公分，可以不填）</span><input id="dayWaist" data-day-num="waist" type="number" inputmode="decimal" step="0.5" min="30" max="200" class="field field-xl tabular-nums" placeholder="例如：82" /></label>
+      <div id="bmiCard"></div>
+      <div>
+        <label class="block"><span class="scr-label">腰圍（公分，可以不填）</span><input id="dayWaist" data-day-num="waist" type="number" inputmode="decimal" step="0.5" min="30" max="200" class="field field-xl tabular-nums" placeholder="例如：82" /></label>
+        <p id="waistRiskText" class="text-sm mt-1.5"></p>
+      </div>
+      <details id="moreMeasures" class="rounded-2xl border border-stone-200 bg-white">
+        <summary class="px-4 py-3 text-base font-semibold text-stone-700 cursor-pointer select-none">更多尺寸（臀圍、手臂、大腿、胸圍、體脂）</summary>
+        <div class="px-4 pb-4 space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block"><span class="scr-label">臀圍（公分）</span><input data-day-num="hip" type="number" inputmode="decimal" step="0.5" class="field tabular-nums" /></label>
+            <label class="block"><span class="scr-label">上臂圍（公分）</span><input data-day-num="arm" type="number" inputmode="decimal" step="0.5" class="field tabular-nums" /></label>
+            <label class="block"><span class="scr-label">大腿圍（公分）</span><input data-day-num="thigh" type="number" inputmode="decimal" step="0.5" class="field tabular-nums" /></label>
+            <label class="block"><span class="scr-label">胸圍（公分）</span><input data-day-num="chest" type="number" inputmode="decimal" step="0.5" class="field tabular-nums" /></label>
+            <label class="block"><span class="scr-label">體脂率（%）</span><input data-day-num="bodyFat" type="number" inputmode="decimal" step="0.1" class="field tabular-nums" /></label>
+          </div>
+          <p id="whrText" class="text-sm text-stone-600"></p>
+          <p class="text-sm text-stone-500">量的方法：手臂量上臂最粗處、大腿量臀下最粗處，每次同一邊、同一個時間量，比較準。</p>
+        </div>
+      </details>
     </div>
     <div class="scr-foot"><button type="button" data-back data-saved class="btn-primary btn-xl w-full">完成</button></div>
   </div>
@@ -572,6 +615,7 @@
         <label class="block"><span class="lbl">目標體重 (kg)</span><input id="tgt-weight" type="number" inputmode="decimal" step="0.1" min="20" max="300" class="field tabular-nums" /></label>
         <label class="block"><span class="lbl">報告上的名字</span><input id="profileName" type="text" class="field" placeholder="選填" /></label>
       </div>
+      <label class="flex items-center gap-2.5 text-sm text-stone-700"><input id="mascotToggle" type="checkbox" class="big-check" checked />首頁顯示「小芽」鼓勵</label>
       <div class="flex justify-end gap-2">
         <button type="button" data-close="targetModal" class="btn-small-secondary">取消</button>
         <button type="button" id="saveTargetBtn" class="btn-small-primary">儲存目標</button>

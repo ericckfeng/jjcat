@@ -186,3 +186,45 @@ textarea.field { min-height: 0; resize: vertical; }
   main { max-width: none !important; padding: 0 !important; }
   #reportArea { border: none !important; padding: 0 !important; border-radius: 0 !important; }
 }
+
+/* 同步狀態 */
+.sync-chip { display: inline-flex; align-items: center; gap: .25rem; padding: .3rem .55rem; min-height: 2.25rem; border-radius: .6rem; font-size: .8125rem; font-weight: 600; background: #ecfdf5; color: #047857; }
+.sync-chip.hidden { display: none; }
+.sync-chip[data-tone="busy"] #syncChipIcon { animation: syncpulse 1s ease-in-out infinite; }
+.sync-chip[data-tone="warn"] { background: #fef3c7; color: #92400e; }
+.sync-chip[data-tone="idle"] { background: #f5f5f4; color: #57534e; }
+@keyframes syncpulse { 50% { opacity: .35; } }
+
+/* BMI 量尺：15–35，18.5 / 24 / 27 為分界 */
+.bmi-scale {
+  position: relative; height: .75rem; border-radius: 999px;
+  background: linear-gradient(90deg, #7dd3fc 0%, #7dd3fc 17.5%, #34d399 17.5%, #34d399 45%, #fbbf24 45%, #fbbf24 60%, #fb923c 60%, #fb923c 75%, #f43f5e 75%, #f43f5e 100%);
+}
+.bmi-marker {
+  position: absolute; top: 50%; width: 1.25rem; height: 1.25rem; border-radius: 999px;
+  background: #fff; border: 3px solid #1c1917; transform: translate(-50%, -50%); box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+
+/* 小芽 */
+.mascot-card { position: relative; overflow: hidden; display: flex; align-items: center; gap: .75rem; padding: .75rem .9rem; border-radius: 1.1rem; background: linear-gradient(135deg, #f0fdf4, #ecfeff); border: 1px solid #bbf7d0; }
+.mascot-card.hidden { display: none; }
+.mascot-btn { flex-shrink: 0; width: 5.5rem; height: 5.5rem; border-radius: 1rem; }
+.mascot-btn:active { transform: scale(.95); }
+.mascot-svg { width: 100%; height: 100%; overflow: visible; }
+.mascot-body { transform-origin: 60px 110px; animation: mascot-bob 2.6s ease-in-out infinite; }
+.mascot-cheer .mascot-body { animation: mascot-jump .9s ease-in-out infinite; }
+.mascot-wave { transform-origin: 96px 58px; animation: mascot-wave 1.2s ease-in-out infinite; }
+.mascot-twinkle { transform-box: fill-box; transform-origin: center; animation: mascot-twinkle 1.4s ease-in-out infinite; }
+@keyframes mascot-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes mascot-jump { 0%, 100% { transform: translateY(0) scaleY(1); } 40% { transform: translateY(-9px) scaleY(1.03); } 70% { transform: translateY(0) scaleY(.96); } }
+@keyframes mascot-wave { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-22deg); } }
+@keyframes mascot-twinkle { 0%, 100% { transform: scale(.6); opacity: .5; } 50% { transform: scale(1.15); opacity: 1; } }
+.mascot-bubble { position: relative; background: #fff; border-radius: 1rem; padding: .6rem .8rem; font-size: 1.0625rem; font-weight: 600; line-height: 1.45; color: #1c1917; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.mascot-bubble::before { content: ''; position: absolute; left: -.45rem; top: 1.1rem; border: .5rem solid transparent; border-right-color: #fff; border-left: 0; }
+.mascot-chip { font-size: .8125rem; font-weight: 600; padding: .2rem .6rem; border-radius: 999px; background: rgba(255,255,255,.85); color: #166534; }
+.confetti { position: absolute; inset: 0; pointer-events: none; }
+.confetti span { position: absolute; top: -10px; width: 8px; height: 12px; border-radius: 2px; animation: confetti-fall 1.8s ease-in forwards; }
+@keyframes confetti-fall { to { transform: translateY(170px) rotate(540deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .mascot-body, .mascot-wave, .mascot-twinkle, .confetti span { animation: none !important; }
+}

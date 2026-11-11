@@ -5,6 +5,9 @@ import {
 import { photoDB } from './db.js';
 import { REPORT_CSS, buildReportHTML, buildReportText } from './report.js';
 import * as cloud from './cloud.js';
+import { mergeData, stableStringify, SYNC_VERSION } from './sync.js';
+import { MEASURES, MEASURE_META, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct } from './body.js';
+import { mascotSVG, buildMascotMessages } from './mascot.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
 const LEGACY_KEY = 'daily_calorie_tracker_v1';
@@ -104,7 +107,10 @@ const state = {
   days: {},
   quickItems: PRESET_FOODS.map(f => ({ ...f, isFav: false })),
   profile: { name: '' },
-  meta: { lastBackup: null, installHintDismissed: false, deviceId: null, cloud: { linked: false, email: '', auto: true, lastBackup: null, knownModified: null, conflict: false } }
+  targetsAt: 0,
+  profileAt: 0,
+  tomb: {},
+  meta: { lastBackup: null, installHintDismissed: false, deviceId: null, cloud: { linked: false, email: '', auto: true, lastBackup: null, knownModified: null, dirty: false, needAuth: false } }
 };
 const ui = {
   date: todayStr(),
@@ -112,22 +118,34 @@ const ui = {
   tab: 'log',
   libCat: 'all',
   libQ: '',
-  trendRange: 7
+  trendRange: 7,
+  bodyMetric: 'weight'
 };
 
-function persist() {
+// 只存在這支手機（設定、狀態），不需要同步
+function persistLocal() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
     showToast('⚠ 無法儲存，請先下載備份');
   }
 }
+// 資料有變：存起來並安排同步
+function persist() {
+  state.meta.cloud.dirty = true;
+  persistLocal();
+  scheduleSync();
+}
+const now = () => Date.now();
+function touch(obj) { obj.updatedAt = now(); return obj; }
+function tombstone(key) { state.tomb[key] = now(); }
 let persistTimer = null;
 function persistSoon() {
   clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     persist();
     renderTiles();
+    renderMascot();
   }, 400);
 }
 
@@ -161,6 +179,9 @@ function applyLoaded(p) {
   if (Array.isArray(p.quickItems)) state.quickItems = p.quickItems;
   if (p.profile) state.profile = { ...state.profile, ...p.profile };
   if (p.meta) state.meta = { ...state.meta, ...p.meta, cloud: { ...state.meta.cloud, ...(p.meta.cloud || {}) } };
+  if (p.tomb && typeof p.tomb === 'object') state.tomb = p.tomb;
+  state.targetsAt = Number(p.targetsAt) || 0;
+  state.profileAt = Number(p.profileAt) || 0;
 }
 
 // 合併匯入（相容舊版 v1：targetKcal + 照片直接放在記錄裡）
@@ -172,10 +193,12 @@ async function mergeImport(data) {
   let photos = 0;
   if (data.targets && typeof data.targets === 'object') {
     state.targets = { ...DEFAULT_TARGETS, ...data.targets, ex: { ...(data.targets.ex || {}) } };
+    state.targetsAt = now();
   } else if (typeof data.targetKcal === 'number' && data.targetKcal >= 800) {
     state.targets.kcal = data.targetKcal;
+    state.targetsAt = now();
   }
-  if (data.profile && typeof data.profile === 'object') state.profile = { ...state.profile, ...data.profile };
+  if (data.profile && typeof data.profile === 'object') { state.profile = { ...state.profile, ...data.profile }; state.profileAt = now(); }
   const photoMap = data.photos && typeof data.photos === 'object' ? data.photos : {};
 
   if (data.logs && typeof data.logs === 'object') {
@@ -186,9 +209,13 @@ async function mergeImport(data) {
         if (!raw || typeof raw !== 'object') continue;
         const it = normalizeEntry(raw);
         if (cur.some(x => x.id === it.id)) continue;
+        it.updatedAt = num(raw.updatedAt) || now();
+        if (raw.photoKey) it.photoKey = String(raw.photoKey);
+        delete state.tomb['e:' + it.id];
         const dataUrl = raw.photo || photoMap[it.id];
         if (typeof dataUrl === 'string' && dataUrl.startsWith('data:image')) {
           await savePhoto(it.id, dataUrl);
+          setLocalPhotoKey(it.id, it.photoKey || it.id);
           it.hasPhoto = true;
           photos++;
         }
@@ -200,7 +227,10 @@ async function mergeImport(data) {
   if (data.days && typeof data.days === 'object') {
     for (const [date, val] of Object.entries(data.days)) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !val || typeof val !== 'object') continue;
-      state.days[date] = { ...(state.days[date] || {}), ...val };
+      const merged = { ...(state.days[date] || {}), ...val };
+      merged._t = { ...((state.days[date] || {})._t || {}) };
+      Object.keys(val).forEach(k => { if (k !== '_t') merged._t[k] = now(); });
+      state.days[date] = merged;
     }
   }
   if (Array.isArray(data.quickItems)) {
@@ -390,14 +420,14 @@ async function addEntry({ name, nutr, mult = 1, meal, photo = null, pending = fa
   const s = scaleNutr(nutr, mult);
   const it = {
     id: uid('item'), name: name.trim(), kcal: s.kcal, multiplier: mult, meal, time: nowTime(),
-    pending: Boolean(pending), hasPhoto: Boolean(photo), p: s.p, c: s.c, f: s.f, ex: s.ex
+    pending: Boolean(pending), hasPhoto: Boolean(photo), p: s.p, c: s.c, f: s.f, ex: s.ex, updatedAt: now()
   };
   if (photo) await savePhoto(it.id, photo);
   (state.logs[ui.date] || (state.logs[ui.date] = [])).push(it);
   if (saveFav && (num(nutr.kcal) || 0) > 0 && !state.quickItems.some(q => q.name === it.name)) {
     state.quickItems.unshift({
       id: uid('qi'), name: it.name, kcal: Math.round(nutr.kcal), cat: 'fav', isFav: true,
-      p: num(nutr.p), c: num(nutr.c), f: num(nutr.f), ex: cleanEx(nutr.ex)
+      p: num(nutr.p), c: num(nutr.c), f: num(nutr.f), ex: cleanEx(nutr.ex), updatedAt: now()
     });
   }
   persist();
@@ -416,10 +446,13 @@ async function deleteEntry(id) {
   const date = ui.date;
   const photo = item.hasPhoto ? await getPhoto(item.id) : null;
   if (item.hasPhoto) await deletePhoto(item.id);
+  tombstone('e:' + item.id);
   persist();
   renderAll();
   showToast('已刪除「' + item.name + '」', '復原', async () => {
     if (photo) await savePhoto(item.id, photo);
+    delete state.tomb['e:' + item.id];
+    touch(item);
     (state.logs[date] || (state.logs[date] = [])).splice(idx, 0, item);
     persist();
     renderAll();
@@ -574,14 +607,15 @@ document.addEventListener('click', (e) => {
   if (opener) { openScreen(opener.getAttribute('data-screen')); return; }
   const back = e.target.closest('[data-back]');
   if (back) {
-    if (back.hasAttribute('data-saved')) { persist(); showToast('已儲存 ✓'); }
+    if (back.hasAttribute('data-saved')) { clearTimeout(persistTimer); persist(); showToast('已儲存 ✓'); }
     closeScreen();
   }
 });
 
 function renderTiles() {
   const d = getDay(ui.date, false);
-  $('tileWeight').textContent = d.weight != null ? d.weight + ' 公斤' : '還沒量';
+  const b = calcBmi(d.weight, state.profile.height);
+  $('tileWeight').textContent = d.weight != null ? d.weight + ' 公斤' + (b ? '・BMI ' + b : '') : '還沒量';
   $('tileWater').textContent = (d.water || 0) + ' ml' + (d.water ? '（約 ' + r1(d.water / 250) + ' 杯）' : '');
   $('tileExercise').textContent = d.exercise || d.exMin ? (d.exercise || '運動') + (d.exMin ? ' ' + d.exMin + ' 分' : '') : '還沒記';
   const bits = [];
@@ -594,7 +628,64 @@ function renderWeightHint() {
   let last = null;
   Object.keys(state.days).filter(k => k < ui.date && state.days[k].weight != null).sort().forEach(k => { last = k; });
   $('lastWeightHint').textContent = last ? '上次：' + state.days[last].weight + ' 公斤（' + fmtMD(last) + '）' : '';
+  if ($('profHeight') !== document.activeElement) $('profHeight').value = state.profile.height || '';
+  document.querySelectorAll('#sexGroup [data-sex]').forEach(b => b.classList.toggle('is-active', state.profile.sex === b.getAttribute('data-sex')));
+  renderBmiCard();
 }
+function renderBmiCard() {
+  const d = getDay(ui.date, false);
+  const h = state.profile.height;
+  const b = calcBmi(d.weight, h);
+  const card = $('bmiCard');
+  if (!h) {
+    card.innerHTML = '<div class="rounded-2xl bg-sky-50 border border-sky-200 p-3 text-base text-sky-900">填上身高，就會幫你算 BMI 👆</div>';
+  } else if (b == null) {
+    const r = healthyWeightRange(h);
+    card.innerHTML = `<div class="rounded-2xl bg-white border border-stone-200 p-3 text-base text-stone-600">輸入體重後會顯示 BMI。<br><span class="text-sm">身高 ${h} 公分的健康體重：${r.min}–${r.max} 公斤</span></div>`;
+  } else {
+    const cat = bmiCategory(b);
+    const r = healthyWeightRange(h);
+    card.innerHTML = `<div class="rounded-2xl bg-white border border-stone-200 p-4 space-y-2">
+      <div class="flex items-baseline justify-between gap-2">
+        <span class="text-base text-stone-600">BMI</span>
+        <span><span class="text-4xl font-bold tabular-nums" style="color:${cat.color}">${b}</span>
+        <span class="ml-1.5 px-2.5 py-1 rounded-full text-base font-bold text-white" style="background:${cat.color}">${cat.label}</span></span>
+      </div>
+      <div class="bmi-scale"><span class="bmi-marker" style="left:${bmiScalePct(b)}%"></span></div>
+      <div class="relative h-4 text-xs text-stone-500 tabular-nums">${[[17.5, '18.5'], [45, '24'], [60, '27']].map(([p, t]) => `<span class="absolute -translate-x-1/2" style="left:${p}%">${t}</span>`).join('')}</div>
+      <p class="text-sm text-stone-600">健康體重：<b>${r.min}–${r.max} 公斤</b>（BMI 18.5–24）</p>
+    </div>`;
+  }
+  const wr = waistRisk(num(d.waist), state.profile.sex);
+  const wt = $('waistRiskText');
+  if (wr) {
+    wt.textContent = wr.high ? `⚠ 腰圍 ≥ ${wr.limit} 公分，屬於腹部肥胖，要多留意` : `✓ 腰圍在標準內（小於 ${wr.limit} 公分）`;
+    wt.className = 'text-sm mt-1.5 font-semibold ' + (wr.high ? 'text-amber-700' : 'text-emerald-700');
+  } else {
+    wt.textContent = d.waist && !state.profile.sex ? '選了性別，就能判斷腰圍是否超標' : '';
+    wt.className = 'text-sm mt-1.5 text-stone-500';
+  }
+  const whr = waistHipRatio(num(d.waist), num(d.hip), state.profile.sex);
+  $('whrText').textContent = whr ? `腰臀比 ${whr.ratio}` + (whr.limit ? (whr.high ? `（偏高，標準 ≤ ${whr.limit}）` : `（標準內，≤ ${whr.limit}）`) : '') : '';
+}
+$('profHeight').addEventListener('input', () => {
+  const h = num($('profHeight').value);
+  state.profile.height = h && h >= 100 && h <= 230 ? h : null;
+  state.profileAt = now();
+  persistSoon();
+  renderBmiCard();
+});
+$('sexGroup').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sex]');
+  if (!b) return;
+  const v = b.getAttribute('data-sex');
+  state.profile.sex = state.profile.sex === v ? null : v;
+  state.profileAt = now();
+  persistSoon();
+  renderWeightHint();
+});
+['dayWeight', 'dayWaist'].forEach(id => $(id).addEventListener('input', () => setTimeout(renderBmiCard, 0)));
+document.querySelectorAll('#moreMeasures [data-day-num]').forEach(el => el.addEventListener('input', () => setTimeout(renderBmiCard, 0)));
 function renderWaterBig() {
   const w = num(getDay(ui.date, false).water) || 0;
   $('waterBig').textContent = w.toLocaleString();
@@ -734,10 +825,12 @@ $('bowelGroup').innerHTML = toggleGroupHTML(BOWEL_LABELS, 'bowel');
 function renderDayPanel() {
   const d = getDay(ui.date, false);
   document.querySelectorAll('[data-day-num]').forEach(el => {
+    if (el === document.activeElement) return;
     const v = d[el.getAttribute('data-day-num')];
     el.value = v == null ? '' : v;
   });
   document.querySelectorAll('[data-day-text]').forEach(el => {
+    if (el === document.activeElement) return;
     el.value = d[el.getAttribute('data-day-text')] || '';
   });
   document.querySelectorAll('.toggle-btn[data-field]').forEach(btn => {
@@ -745,11 +838,11 @@ function renderDayPanel() {
     btn.classList.toggle('is-active', d[f] != null && String(d[f]) === btn.getAttribute('data-val'));
   });
 }
-function setDayField(field, value) {
+function setDayField(field, value, date = ui.date) {
   setTimeout(renderTiles, 0);
-  const d = getDay(ui.date, true);
+  const d = getDay(date, true);
   if (value === null || value === '' || value === undefined) delete d[field]; else d[field] = value;
-  if (!Object.keys(d).length) delete state.days[ui.date];
+  (d._t || (d._t = {}))[field] = now();
   persistSoon();
 }
 document.querySelectorAll('[data-day-num]').forEach(el => {
@@ -887,24 +980,7 @@ function renderTrends() {
       }
     });
 
-    const hasW = s.weights.length > 0;
-    $('weightEmpty').classList.toggle('hidden', hasW);
-    $('weightChartWrap').classList.toggle('hidden', !hasW);
-    if (weightChart) { weightChart.destroy(); weightChart = null; }
-    if (hasW) {
-      const wData = dates.map(d => num((state.days[d] || {}).weight));
-      const ds = [{ label: '體重 (kg)', data: wData, borderColor: '#0ea5e9', backgroundColor: '#0ea5e9', spanGaps: true, tension: 0.25, pointRadius: 3 }];
-      if (state.targets.weight) ds.push({ label: '目標體重', data: Array(dates.length).fill(state.targets.weight), borderColor: '#a8a29e', borderDash: [5, 5], pointRadius: 0, borderWidth: 1.5 });
-      weightChart = new Chart($('weightChart').getContext('2d'), {
-        type: 'line',
-        data: { labels, datasets: ds },
-        options: {
-          responsive: true, maintainAspectRatio: false, animation: false,
-          plugins: { legend: { display: ds.length > 1, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
-          scales: { y: { grace: '5%', grid: { color: '#f5f5f4' } }, x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } } }
-        }
-      });
-    }
+    renderBodyChart(dates, labels);
   }
 
   const tg = state.targets;
@@ -922,6 +998,126 @@ function renderTrends() {
   if (s.pending) nh += `<p class="text-[0.6875rem] font-semibold text-amber-700">⚠ 這段期間有 ${s.pending} 筆暫估待修</p>`;
   $('trendNutr').innerHTML = nh;
 }
+
+function metricSeries(dates, key) {
+  if (key === 'bmi') return dates.map(d => calcBmi(num((state.days[d] || {}).weight), state.profile.height));
+  return dates.map(d => num((state.days[d] || {})[key]));
+}
+function renderBodyChart(dates, labels) {
+  const options = [{ key: 'weight', label: '體重' }];
+  if (state.profile.height) options.push({ key: 'bmi', label: 'BMI' });
+  MEASURES.slice(1).forEach(m => { if (metricSeries(dates, m.key).some(v => v != null)) options.push({ key: m.key, label: m.label }); });
+  if (!options.some(o => o.key === ui.bodyMetric)) ui.bodyMetric = 'weight';
+  $('bodyMetricGroup').innerHTML = options.length > 1
+    ? options.map(o => `<button type="button" data-metric="${o.key}" class="range-btn ${o.key === ui.bodyMetric ? 'is-active' : ''}">${o.label}</button>`).join('')
+    : '';
+  const key = ui.bodyMetric;
+  const meta = key === 'bmi' ? { label: 'BMI', unit: '' } : MEASURE_META[key];
+  const data = metricSeries(dates, key);
+  const pts = data.filter(v => v != null);
+  const has = pts.length > 0;
+  $('weightEmpty').classList.toggle('hidden', has);
+  $('weightChartWrap').classList.toggle('hidden', !has);
+  $('bodyMetricSummary').textContent = has
+    ? '最新 ' + pts[pts.length - 1] + (meta.unit ? ' ' + meta.unit : '') + (pts.length > 1 ? '・期間 ' + (pts[pts.length - 1] - pts[0] > 0 ? '+' : '') + r1(pts[pts.length - 1] - pts[0]) : '')
+    : '';
+  if (weightChart) { weightChart.destroy(); weightChart = null; }
+  if (!has || typeof Chart === 'undefined') return;
+  const ds = [{ label: meta.label + (meta.unit ? '（' + meta.unit + '）' : ''), data, borderColor: '#0ea5e9', backgroundColor: '#0ea5e9', spanGaps: true, tension: 0.25, pointRadius: 3 }];
+  const line = (label, v, color) => ds.push({ label, data: Array(dates.length).fill(v), borderColor: color, borderDash: [5, 5], pointRadius: 0, borderWidth: 1.5 });
+  if (key === 'weight' && state.targets.weight) line('目標體重', state.targets.weight, '#a8a29e');
+  if (key === 'bmi') { line('健康上限 24', 24, '#f59e0b'); line('過輕 18.5', 18.5, '#7dd3fc'); }
+  if (key === 'waist' && waistRisk(1, state.profile.sex)) line('腹部肥胖標準', waistRisk(1, state.profile.sex).limit, '#f59e0b');
+  weightChart = new Chart($('weightChart').getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets: ds },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: ds.length > 1, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: { y: { grace: '8%', grid: { color: '#f5f5f4' } }, x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } } }
+    }
+  });
+}
+$('bodyMetricGroup').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-metric]');
+  if (!b) return;
+  ui.bodyMetric = b.getAttribute('data-metric');
+  renderTrends();
+});
+
+/* ---------------- 小芽 ---------------- */
+let mascotIdx = 0;
+let mascotMsgs = [];
+function computeStreak(date) {
+  const has = (d) => (state.logs[d] || []).length > 0;
+  const todayLogged = has(date);
+  let d = todayLogged ? date : addDays(date, -1);
+  let n = 0;
+  while (has(d) && n < 2000) { n++; d = addDays(d, -1); }
+  return { n, todayLogged };
+}
+function weightInfo(date) {
+  const keys = Object.keys(state.days).filter(k => k <= date && num(state.days[k].weight) != null).sort();
+  if (!keys.length) return null;
+  const last = keys[keys.length - 1];
+  if (last < addDays(date, -45)) return null;
+  const weekRef = keys.filter(k => k <= addDays(date, -7)).pop() || (keys.length > 1 && keys[0] >= addDays(date, -7) ? keys[0] : null);
+  return {
+    now: num(state.days[last].weight),
+    week: weekRef && weekRef !== last ? num(state.days[weekRef].weight) : null,
+    first: num(state.days[keys[0]].weight),
+    measuredToday: last === date
+  };
+}
+function renderMascot() {
+  const card = $('mascotCard');
+  if (state.meta.mascot === false) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  const isToday = ui.date === todayStr();
+  const t = dayTotals(ui.date);
+  const d = getDay(ui.date, false);
+  const w = weightInfo(ui.date);
+  const bmi = w ? calcBmi(w.now, state.profile.height) : null;
+  const streak = computeStreak(ui.date);
+  mascotMsgs = buildMascotMessages({
+    isToday, hour: new Date().getHours(), count: t.count, kcal: t.kcal, targetKcal: state.targets.kcal,
+    meals: MEAL_KEYS.filter(k => t.meals[k] > 0).length, streak, weight: w,
+    targetWeight: num(state.targets.weight), bmi, water: num(d.water) || 0,
+    exercise: d.exercise || (d.exMin ? d.exMin + ' 分鐘' : '')
+  });
+  mascotIdx = 0;
+  showMascotMsg();
+  const chips = [];
+  if (streak.n >= 1) chips.push('🔥 連續 ' + streak.n + ' 天');
+  if (w && w.week != null) { const dl = r1(w.now - w.week); chips.push('⚖️ 這週 ' + (dl > 0 ? '+' : dl < 0 ? '−' : '±') + Math.abs(dl) + ' kg'); }
+  if (bmi) chips.push('BMI ' + bmi);
+  $('mascotChips').innerHTML = chips.map(c => `<span class="mascot-chip">${c}</span>`).join('');
+  const top = mascotMsgs[0];
+  if (top && top.mood === 'cheer' && state.meta.lastCheer !== top.key) {
+    state.meta.lastCheer = top.key;
+    persistLocal();
+    burstConfetti();
+  }
+}
+function showMascotMsg() {
+  const m = mascotMsgs[mascotIdx % mascotMsgs.length];
+  if (!m) return;
+  $('mascotBtn').innerHTML = mascotSVG(m.mood);
+  $('mascotMsg').textContent = m.text;
+}
+function burstConfetti() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const box = $('confetti');
+  const colors = ['#facc15', '#34d399', '#60a5fa', '#f472b6', '#fb923c'];
+  box.innerHTML = Array.from({ length: 26 }, (_, i) =>
+    `<span style="left:${Math.random() * 100}%;background:${colors[i % colors.length]};animation-delay:${Math.random() * 0.5}s"></span>`).join('');
+  setTimeout(() => { box.innerHTML = ''; }, 2600);
+}
+$('mascotBtn').addEventListener('click', () => {
+  if (mascotMsgs.length < 2) return;
+  mascotIdx = (mascotIdx + 1) % mascotMsgs.length;
+  showMascotMsg();
+});
 
 /* ---------------- 分頁與總渲染 ---------------- */
 function switchTab(tab) {
@@ -941,14 +1137,11 @@ function renderBanners() {
   const c = state.meta.cloud;
   const banner = $('backupBanner');
   if (cloud.isConfigured() && c.linked) {
-    const stale = !c.lastBackup || Date.now() - c.lastBackup > 24 * 3600000;
-    const show = hasData && !cloudBusy && (c.conflict || (stale && !(c.auto && cloud.getToken())));
+    const show = hasData && c.needAuth && !cloudBusy;
     banner.classList.toggle('hidden', !show);
-    banner.dataset.mode = c.conflict ? 'goto' : 'cloud';
-    $('goBackupBtn').textContent = c.conflict ? '去確認' : '☁️ 備份';
-    $('backupBannerText').textContent = c.conflict
-      ? '雲端有另一台裝置的備份，為了不覆蓋它，這支手機暫停自動備份。'
-      : (c.lastBackup ? '超過一天沒有備份到雲端了。' : '還沒有備份到 Google 雲端。');
+    banner.dataset.mode = 'reauth';
+    $('goBackupBtn').textContent = '重新連結';
+    $('backupBannerText').textContent = 'Google 登入過期了，點一下重新連結，就能繼續自動同步。';
     return;
   }
   const last = state.meta.lastBackup;
@@ -958,7 +1151,7 @@ function renderBanners() {
   banner.dataset.mode = 'goto';
   $('goBackupBtn').textContent = '去備份';
   if (needBackup) {
-    const tip = cloud.isConfigured() ? '可以連結 Google 雲端自動備份。' : '建議定期下載備份。';
+    const tip = cloud.isConfigured() ? '可以連結 Google 雲端自動同步。' : '建議定期下載備份。';
     $('backupBannerText').textContent = daysSince === null
       ? '資料只存在這支手機，' + tip
       : '已經 ' + daysSince + ' 天沒備份了，' + tip;
@@ -971,6 +1164,8 @@ function renderAll() {
   renderLogs();
   renderDayPanel();
   renderTiles();
+  renderMascot();
+  renderSyncChip();
   renderExercisePresets();
   renderLibrary();
   renderBanners();
@@ -1000,9 +1195,9 @@ $('portionGroup').addEventListener('click', (e) => {
   document.querySelectorAll('#portionGroup [data-portion]').forEach(x => x.classList.toggle('is-active', x === b));
 });
 $('libraryMealSelect').addEventListener('change', (e) => { ui.meal = e.target.value; renderMealSelector(); });
-$('dismissInstallBtn').addEventListener('click', () => { state.meta.installHintDismissed = true; persist(); renderBanners(); });
+$('dismissInstallBtn').addEventListener('click', () => { state.meta.installHintDismissed = true; persistLocal(); renderBanners(); });
 $('goBackupBtn').addEventListener('click', () => {
-  if ($('backupBanner').dataset.mode === 'cloud') { cloudRun('backup'); return; }
+  if ($('backupBanner').dataset.mode === 'reauth') { startSignIn('sync'); return; }
   goToCloudSection();
 });
 function goToCloudSection() {
@@ -1110,13 +1305,17 @@ $('editLogForm').addEventListener('submit', async (e) => {
   if (idx === -1 || !name || !Number.isFinite(kcal) || kcal < 0) return;
   const n = readNutrFields('edit');
   const item = list[idx];
+  const newPhotoKey = editPhoto.changed && editPhoto.src ? item.id + '-' + now() : item.photoKey;
   if (editPhoto.changed) {
     if (editPhoto.src) await savePhoto(item.id, editPhoto.src); else await deletePhoto(item.id);
+    setLocalPhotoKey(item.id, editPhoto.src ? newPhotoKey : null);
   }
   list[idx] = {
     ...item, name, kcal, meal: $('editLogMealSelect').value, time: $('editLogTimeInput').value || item.time,
     pending: $('editLogPendingCheck').checked, p: n.p, c: n.c, f: n.f, ex: n.ex,
-    hasPhoto: editPhoto.changed ? Boolean(editPhoto.src) : item.hasPhoto
+    hasPhoto: editPhoto.changed ? Boolean(editPhoto.src) : item.hasPhoto,
+    photoKey: newPhotoKey,
+    updatedAt: now()
   };
   persist();
   renderAll();
@@ -1150,7 +1349,7 @@ $('copyYesterdayBtn').addEventListener('click', () => {
   const prev = state.logs[addDays(ui.date, -1)] || [];
   if (!prev.length) { showToast('前一天沒有記錄'); return; }
   const cur = state.logs[ui.date] || (state.logs[ui.date] = []);
-  prev.forEach(item => cur.push({ ...item, id: uid('item'), hasPhoto: false }));
+  prev.forEach(item => cur.push({ ...item, id: uid('item'), hasPhoto: false, photoKey: undefined, updatedAt: now() }));
   persist();
   renderAll();
   showToast('已複製前一天 ' + prev.length + ' 筆（不含照片）');
@@ -1159,7 +1358,7 @@ $('clearDayBtn').addEventListener('click', () => {
   const list = state.logs[ui.date] || [];
   if (!list.length) { showToast('本日沒有記錄'); return; }
   openConfirm('清空本日記錄', '確定要刪除 ' + ui.date + ' 的 ' + list.length + ' 筆飲食記錄嗎？（身體數據與備註會保留）', async () => {
-    for (const it of list) if (it.hasPhoto) await deletePhoto(it.id);
+    for (const it of list) { if (it.hasPhoto) await deletePhoto(it.id); tombstone('e:' + it.id); }
     delete state.logs[ui.date];
     persist();
     renderAll();
@@ -1193,7 +1392,7 @@ $('quickItemForm').addEventListener('submit', (e) => {
   const cat = $('quickItemCatSelect').value;
   if (!name || !Number.isFinite(kcal) || kcal <= 0) return;
   const n = readNutrFields('qi');
-  const data = { name, kcal, cat, p: n.p, c: n.c, f: n.f, ex: n.ex };
+  const data = { name, kcal, cat, p: n.p, c: n.c, f: n.f, ex: n.ex, updatedAt: now() };
   if (id) {
     const idx = state.quickItems.findIndex(q => q.id === id);
     if (idx !== -1) state.quickItems[idx] = { ...state.quickItems[idx], ...data, isFav: cat === 'fav' || state.quickItems[idx].isFav };
@@ -1208,7 +1407,10 @@ $('quickItemForm').addEventListener('submit', (e) => {
 });
 $('resetQuickItemsBtn').addEventListener('click', () => {
   openConfirm('恢復預設快選', '會把快選清單恢復成預設的 ' + PRESET_FOODS.length + ' 項，你自己新增的快選會被移除（不影響已記錄的飲食）。', () => {
-    state.quickItems = PRESET_FOODS.map(f => ({ ...f, isFav: false }));
+    const presetIds = new Set(PRESET_FOODS.map(f => f.id));
+    state.quickItems.forEach(q => { if (!presetIds.has(q.id)) tombstone('q:' + q.id); });
+    PRESET_FOODS.forEach(f => { delete state.tomb['q:' + f.id]; });
+    state.quickItems = PRESET_FOODS.map(f => ({ ...f, isFav: false, updatedAt: now() }));
     persist();
     renderLibrary();
     renderQuickStrip();
@@ -1224,8 +1426,11 @@ $('libraryGrid').addEventListener('click', (e) => {
     const idx = state.quickItems.findIndex(q => q.id === id);
     if (idx === -1) return;
     const [removed] = state.quickItems.splice(idx, 1);
+    tombstone('q:' + removed.id);
     persist(); renderLibrary(); renderQuickStrip();
     showToast('已刪除「' + removed.name + '」', '復原', () => {
+      delete state.tomb['q:' + removed.id];
+      touch(removed);
       state.quickItems.splice(idx, 0, removed);
       persist(); renderLibrary(); renderQuickStrip();
     });
@@ -1243,6 +1448,7 @@ $('openTargetBtn').addEventListener('click', () => {
   EX_KEYS.forEach(k => { $('tgt-ex-' + k).value = (t.ex && t.ex[k]) ?? ''; });
   $('tgt-weight').value = t.weight ?? '';
   $('profileName').value = state.profile.name || '';
+  $('mascotToggle').checked = state.meta.mascot !== false;
   openModal('targetModal');
 });
 document.querySelectorAll('.preset-btn').forEach(btn => btn.addEventListener('click', () => { $('tgt-kcal').value = btn.getAttribute('data-preset'); }));
@@ -1265,13 +1471,19 @@ $('saveTargetBtn').addEventListener('click', () => {
     p: num($('tgt-p').value), c: num($('tgt-c').value), f: num($('tgt-f').value),
     ex, weight: num($('tgt-weight').value)
   };
-  state.profile.name = $('profileName').value.trim();
+  state.targetsAt = now();
+  if (state.profile.name !== $('profileName').value.trim()) {
+    state.profile.name = $('profileName').value.trim();
+    state.profileAt = now();
+  }
+  state.meta.mascot = $('mascotToggle').checked;
   persist();
   renderAll();
   closeModal('targetModal');
   showToast('已更新目標');
 });
 $('openSourceBtn').addEventListener('click', () => openModal('sourceModal'));
+document.addEventListener('click', (e) => { if (e.target.closest('[data-open-sources]')) openModal('sourceModal'); });
 
 /* ---------------- 份量估算器 ---------------- */
 let estCounts = {};
@@ -1347,7 +1559,7 @@ $('rptQuickRange').addEventListener('click', (e) => {
   if (b) setReportRange(Number(b.getAttribute('data-days')));
 });
 function reportContext() {
-  return { state, dayTotals, rangeStats, datesBetween, esc, fmt, r1, num, fmtMD, parseDate, getPhoto };
+  return { state, dayTotals, rangeStats, datesBetween, esc, fmt, r1, num, fmtMD, parseDate, getPhoto, calcBmi };
 }
 $('genReportBtn').addEventListener('click', async () => {
   let from = $('rptFrom').value;
@@ -1428,7 +1640,13 @@ function photoIdList() {
   return ids;
 }
 function buildPayload() {
-  return { app: 'diet-tracker', version: 2, exportedAt: new Date().toISOString(), targets: state.targets, profile: state.profile, logs: state.logs, days: state.days, quickItems: state.quickItems };
+  return { app: 'diet-tracker', version: SYNC_VERSION, exportedAt: new Date().toISOString(), ...syncData() };
+}
+function syncData() {
+  return {
+    targets: state.targets, targetsAt: state.targetsAt, profile: state.profile, profileAt: state.profileAt,
+    logs: state.logs, days: state.days, quickItems: state.quickItems, tomb: state.tomb
+  };
 }
 function hasLocalData() {
   return Object.values(state.logs).some(l => l && l.length) || Object.keys(state.days).length > 0;
@@ -1450,7 +1668,7 @@ $('exportJsonBtn').addEventListener('click', async () => {
   }
   if (!done) downloadBlob(fileName, blob);
   state.meta.lastBackup = Date.now();
-  persist();
+  persistLocal();
   renderBackupInfo();
   renderBanners();
   showToast('已產生備份（' + Object.keys(photos).length + ' 張照片）');
@@ -1491,30 +1709,40 @@ $('exportCsvBtn').addEventListener('click', () => {
 });
 $('exportDaysCsvBtn').addEventListener('click', () => {
   const dates = Array.from(new Set([...Object.keys(state.logs), ...Object.keys(state.days)])).sort();
-  const rows = [['日期', '總熱量', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '體重(kg)', '腰圍(cm)', '喝水(ml)', '運動', '運動分鐘', '飢餓感(1-5)', '心情(1-5)', '排便', '備註', '想問營養師']];
+  const rows = [['日期', '總熱量', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '體重(kg)', 'BMI', '腰圍(cm)', '臀圍(cm)', '上臂圍(cm)', '大腿圍(cm)', '胸圍(cm)', '體脂率(%)', '喝水(ml)', '運動', '運動分鐘', '飢餓感(1-5)', '心情(1-5)', '排便', '備註', '想問營養師']];
   dates.forEach(date => {
     const t = dayTotals(date);
     const d = state.days[date] || {};
     rows.push([date, t.kcal, t.macroItems ? t.p : '', t.macroItems ? t.c : '', t.macroItems ? t.f : '', ...EX_KEYS.map(k => (t.exItems ? t.ex[k] : '')),
-      d.weight, d.waist, d.water, d.exercise, d.exMin, d.hunger, d.mood, d.bowel != null ? BOWEL_LABELS[d.bowel] : '', d.note, d.question]);
+      d.weight, calcBmi(d.weight, state.profile.height), d.waist, d.hip, d.arm, d.thigh, d.chest, d.bodyFat, d.water, d.exercise, d.exMin, d.hunger, d.mood, d.bowel != null ? BOWEL_LABELS[d.bowel] : '', d.note, d.question]);
   });
   downloadBlob('每日身體與備註_' + todayStr() + '.csv', toCSV(rows), 'text/csv;charset=utf-8');
   showToast('已匯出每日 CSV');
 });
 
 
-/* ---------------- Google 雲端備份 ---------------- */
+/* ---------------- Google 雲端同步 ---------------- */
 let cloudBusy = false;
+let syncTimer = null;
+let syncAgain = false;
+// 本機每張照片是哪個版本（編輯換照片時版本會變）
+function localPhotoKey(id) { return (state.meta.photoVer || {})[id] || id; }
+function setLocalPhotoKey(id, key) {
+  const m = state.meta.photoVer || (state.meta.photoVer = {});
+  if (!key || key === id) delete m[id]; else m[id] = key;
+}
 function fmtTime(ms) { return new Date(ms).toLocaleString('zh-TW', { hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+function fmtClock(ms) { const d = new Date(ms); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
 function setCloudStatus(msg, tone = 'ok') {
   const el = $('cloudStatus');
   if (!msg) { el.classList.add('hidden'); return; }
   const tones = { ok: 'bg-emerald-50 text-emerald-800', busy: 'bg-stone-100 text-stone-700', warn: 'bg-amber-50 text-amber-800', err: 'bg-rose-50 text-rose-700' };
-  el.className = 'text-xs font-medium rounded-xl px-3 py-2 ' + (tones[tone] || tones.ok);
+  el.className = 'text-sm font-medium rounded-xl px-3 py-2 ' + (tones[tone] || tones.ok);
   el.textContent = msg;
 }
 function renderCloud() {
   const sec = $('cloudSection');
+  renderSyncChip();
   if (!cloud.isConfigured()) { sec.classList.add('hidden'); return; }
   sec.classList.remove('hidden');
   const c = state.meta.cloud;
@@ -1522,159 +1750,221 @@ function renderCloud() {
   $('cloudSignedOut').classList.toggle('hidden', c.linked);
   $('cloudSignedIn').classList.toggle('hidden', !c.linked);
   $('cloudEmail').textContent = c.email || 'Google 帳號';
-  $('cloudLastText').textContent = c.lastBackup ? '上次雲端備份：' + fmtTime(c.lastBackup) : '還沒有備份到雲端';
+  $('cloudLastText').textContent = c.lastSync ? '上次同步：' + fmtTime(c.lastSync) : '還沒有同步過';
   $('cloudAutoCheck').checked = c.auto !== false;
-  ['cloudConnectBtn', 'cloudRestoreNewBtn', 'cloudBackupBtn', 'cloudRestoreBtn', 'cloudDisconnectBtn'].forEach(id => { $(id).disabled = cloudBusy; });
-  $('cloudBackupBtn').textContent = cloudBusy ? '處理中…' : '立即備份';
+  ['cloudConnectBtn', 'cloudSyncBtn', 'cloudDisconnectBtn'].forEach(id => { $(id).disabled = cloudBusy; });
+  $('cloudSyncBtn').textContent = cloudBusy ? '同步中…' : '立即同步';
+}
+function renderSyncChip() {
+  const chip = $('syncChip');
+  const c = state.meta.cloud;
+  if (!cloud.isConfigured() || !c.linked) { chip.classList.add('hidden'); return; }
+  chip.classList.remove('hidden');
+  let icon = '☁️';
+  let label = '已同步';
+  let tone = 'ok';
+  if (cloudBusy) { label = '同步中'; tone = 'busy'; }
+  else if (c.needAuth) { label = '需登入'; tone = 'warn'; }
+  else if (c.dirty) { label = '待同步'; tone = 'idle'; }
+  else if (c.lastSync) { label = fmtClock(c.lastSync); }
+  chip.dataset.tone = tone;
+  $('syncChipIcon').textContent = icon;
+  $('syncChipLabel').textContent = label;
+  chip.setAttribute('aria-label', '雲端同步：' + label);
 }
 
-function startSignIn(action) {
+function startSignIn(action, silent = false) {
   // 避免授權後馬上又失效時無限跳轉
   const last = Number(sessionStorage.getItem('diet_reauth_at') || 0);
-  if (Date.now() - last < 30000) {
+  if (!silent && Date.now() - last < 30000) {
     setCloudStatus('Google 登入沒有成功，請稍後再試一次', 'err');
     return;
   }
-  try { sessionStorage.setItem('diet_reauth_at', String(Date.now())); } catch (e) { /* ignore */ }
-  setCloudStatus('前往 Google 登入…', 'busy');
-  cloud.signIn(action, state.meta.cloud.email);
+  try { sessionStorage.setItem(silent ? 'diet_silent_tried' : 'diet_reauth_at', String(Date.now())); } catch (e) { /* ignore */ }
+  if (!silent) setCloudStatus('前往 Google 登入…', 'busy');
+  cloud.signIn(action, state.meta.cloud.email, silent);
+}
+
+function scheduleSync(delay = 8000) {
+  const c = state.meta.cloud;
+  renderSyncChip();
+  if (!cloud.isConfigured() || !c.linked || c.auto === false) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => cloudRun('sync', { auto: true }), delay);
 }
 
 async function cloudRun(action, { auto = false } = {}) {
-  if (cloudBusy || !cloud.isConfigured()) return;
+  if (!cloud.isConfigured()) return;
+  if (cloudBusy) { syncAgain = true; return; }
+  const c = state.meta.cloud;
   if (cloud.isBlockedInAppBrowser()) {
     if (!auto) { goToCloudSection(); showToast('請改用 Safari／Chrome 開啟後再登入 Google'); }
     return;
   }
   if (!cloud.getToken()) {
     if (!auto) startSignIn(action);
+    else if (c.linked && !c.needAuth) { c.needAuth = true; persistLocal(); renderBanners(); renderSyncChip(); }
     return;
   }
+  clearTimeout(syncTimer);
   cloudBusy = true;
   renderCloud();
-  renderBanners();
   try {
-    const c = state.meta.cloud;
     if (!c.linked || !c.email) {
       const u = await cloud.getUser();
       c.email = u.emailAddress || '';
       c.linked = true;
-      persist();
+      persistLocal();
     }
-    if (action === 'connect') await cloudAfterConnect();
-    else if (action === 'backup') await cloudBackup(auto);
-    else if (action === 'restore') await cloudRestore();
+    c.needAuth = false;
+    await doSync({ auto, first: action === 'connect' });
     try { sessionStorage.removeItem('diet_reauth_at'); } catch (e) { /* ignore */ }
   } catch (err) {
     if (err && err.auth) {
-      if (auto) setCloudStatus('Google 登入已過期，按「立即備份」重新登入', 'warn');
+      c.needAuth = true;
+      persistLocal();
+      if (auto) setCloudStatus('Google 登入過期了，按「立即同步」重新登入', 'warn');
       else { cloudBusy = false; startSignIn(action); }
     } else {
-      setCloudStatus((err && err.message) || '雲端備份失敗', 'err');
-      if (!auto) showToast('雲端備份失敗，請稍後再試');
+      setCloudStatus((err && err.message) || '同步失敗', 'err');
+      if (!auto) showToast('同步失敗，請稍後再試');
     }
   } finally {
     cloudBusy = false;
     renderCloud();
     renderBanners();
     renderBackupInfo();
+    if (syncAgain) { syncAgain = false; scheduleSync(1500); }
   }
 }
 
-async function cloudAfterConnect() {
-  setCloudStatus('檢查雲端備份…', 'busy');
-  const info = await cloud.getInfo();
-  const c = state.meta.cloud;
-  if (!info.exists) {
-    if (hasLocalData()) await cloudBackup(false);
-    else setCloudStatus('✓ 已連結。開始記錄後會自動備份到雲端', 'ok');
-    return;
-  }
-  if (info.deviceId === state.meta.deviceId) { await cloudBackup(false); return; }
-  if (!hasLocalData()) {
-    const ok = await confirmAsync('找到雲端備份', `雲端有 ${fmtTime(info.savedAt)} 的備份（${info.entries} 筆記錄、${info.photos} 張照片），要還原到這支手機嗎？`, '還原');
-    if (ok) await cloudRestore(info);
-    else setCloudStatus('✓ 已連結。雲端已有備份，需要時按「從雲端還原」', 'ok');
-    return;
-  }
-  c.conflict = true;
-  persist();
-  setCloudStatus(`雲端已有另一台裝置 ${fmtTime(info.savedAt)} 的備份（${info.entries} 筆）。要用雲端的資料就按「從雲端還原」（會合併）；要以這支手機為主就按「立即備份」覆蓋。`, 'warn');
+function syncShape(d) {
+  return {
+    targets: d.targets, targetsAt: Number(d.targetsAt) || 0, profile: d.profile || {}, profileAt: Number(d.profileAt) || 0,
+    logs: d.logs || {}, days: d.days || {}, quickItems: Array.isArray(d.quickItems) ? d.quickItems : [], tomb: d.tomb || {}
+  };
 }
+function applySyncData(d) {
+  state.targets = { ...DEFAULT_TARGETS, ...(d.targets || {}), ex: { ...((d.targets && d.targets.ex) || {}) } };
+  state.targetsAt = d.targetsAt;
+  state.profile = { name: '', ...(d.profile || {}) };
+  state.profileAt = d.profileAt;
+  state.logs = d.logs;
+  state.days = d.days;
+  state.quickItems = d.quickItems;
+  state.tomb = d.tomb;
+}
+function photoKeyOf(it) { return it.photoKey || it.id; }
 
-async function cloudBackup(auto) {
+async function doSync({ auto, first }) {
   const c = state.meta.cloud;
-  setCloudStatus('檢查雲端備份…', 'busy');
+  if (!auto) setCloudStatus('同步中…', 'busy');
   const info = await cloud.getInfo();
-  const otherDevice = info.exists && info.deviceId !== state.meta.deviceId && info.modifiedTime !== c.knownModified;
-  if (otherDevice) {
-    if (auto) {
-      c.conflict = true;
-      persist();
-      setCloudStatus('雲端有另一台裝置的備份，沒有自動覆蓋。請按「從雲端還原」或「立即備份」決定要保留哪一邊。', 'warn');
-      return;
+  const remoteChanged = info.exists && info.modifiedTime !== c.knownModified;
+  if (info.exists && !c.dirty && !remoteChanged) {
+    c.lastSync = now();
+    persistLocal();
+    if (!auto) setCloudStatus('✓ 已經是最新的了（' + fmtTime(c.lastSync) + '）', 'ok');
+    return;
+  }
+  const local = syncShape(syncData());
+  const localStr = stableStringify(local);
+  const remote = info.exists ? syncShape(await cloud.downloadData(info.fileId)) : null;
+  const merged = mergeData(local, remote);
+
+  // 照片：本機是最新版本、雲端沒有 → 上傳；本機沒有或是舊版本、雲端有 → 下載
+  const cloudPhotoMap = await cloud.listPhotos();
+  const keyToId = new Map();
+  Object.values(merged.logs).forEach(list => (list || []).forEach(it => { if (it.hasPhoto) keyToId.set(photoKeyOf(it), it.id); }));
+  const toUpload = [];
+  const toDownload = [];
+  for (const [key, id] of keyToId) {
+    const haveCurrent = localPhotoKey(id) === key && Boolean(await getPhoto(id));
+    if (haveCurrent && !cloudPhotoMap.has(key)) toUpload.push(key);
+    else if (!haveCurrent && cloudPhotoMap.has(key)) toDownload.push([key, cloudPhotoMap.get(key)]);
+  }
+  if (toUpload.length) {
+    await cloud.uploadPhotos(toUpload, (key) => getPhoto(keyToId.get(key)), (n, total) => setCloudStatus(`上傳照片 ${n}/${total}…`, 'busy'));
+  }
+  if (toDownload.length) {
+    const got = await cloud.downloadPhotos(toDownload, (n, total) => setCloudStatus(`下載照片 ${n}/${total}…`, 'busy'));
+    for (const [key, dataUrl] of Object.entries(got)) {
+      const id = keyToId.get(key);
+      await savePhoto(id, dataUrl);
+      setLocalPhotoKey(id, key);
     }
-    const ok = await confirmAsync('覆蓋雲端備份？', `雲端的備份來自另一台裝置（${fmtTime(info.savedAt)}，${info.entries} 筆記錄）。確定要用這支手機的資料覆蓋嗎？想保留雲端資料的話，請先按「從雲端還原」。`, '覆蓋');
-    if (!ok) { setCloudStatus('已取消備份', 'warn'); return; }
   }
-  const r = await cloud.backup({
-    data: buildPayload(), photoIds: photoIdList(), getPhoto, deviceId: state.meta.deviceId,
-    onProgress: (m) => setCloudStatus(m, 'busy')
-  });
-  c.lastBackup = r.savedAt;
-  c.knownModified = r.modifiedTime;
-  c.conflict = false;
-  state.meta.lastBackup = r.savedAt;
-  persist();
-  setCloudStatus(`✓ ${auto ? '已自動' : '已'}備份 ${r.entries} 筆記錄${r.uploadedPhotos ? '，新上傳 ' + r.uploadedPhotos + ' 張照片' : ''}（${fmtTime(r.savedAt)}）`, 'ok');
-  if (!auto) showToast('已備份到 Google 雲端');
+  // 清掉雲端上已刪除記錄或舊版本的照片
+  {
+    for (const [key, fileId] of cloudPhotoMap) {
+      if (keyToId.has(key)) continue;
+      const entryId = key.split('-')[0];
+      if (merged.tomb['e:' + entryId] || Object.values(merged.logs).some(l => (l || []).some(it => it.id === entryId))) {
+        await cloud.deleteFile(fileId);
+      }
+    }
+  }
+
+  const mergedStr = stableStringify(merged);
+  let modifiedTime = info.modifiedTime;
+  if (!remote || mergedStr !== stableStringify(remote)) {
+    const r = await cloud.uploadData({ app: 'diet-tracker', version: SYNC_VERSION, ...merged }, info, state.meta.deviceId);
+    modifiedTime = r.modifiedTime;
+  }
+  // 同步期間使用者若又改了東西，以最新的本機資料再合併一次
+  const nowLocal = syncShape(syncData());
+  let finalData = merged;
+  if (stableStringify(nowLocal) !== localStr) { finalData = mergeData(nowLocal, merged); syncAgain = true; }
+  const changedLocally = stableStringify(finalData) !== stableStringify(nowLocal);
+  if (changedLocally) applySyncData(finalData);
+  c.knownModified = modifiedTime;
+  c.lastSync = now();
+  c.lastBackup = c.lastSync;
+  state.meta.lastBackup = c.lastSync;
+  c.dirty = syncAgain;
+  persistLocal();
+  if (changedLocally) renderAll();
+  const extra = [];
+  if (toUpload.length) extra.push('上傳 ' + toUpload.length + ' 張照片');
+  if (toDownload.length) extra.push('下載 ' + toDownload.length + ' 張照片');
+  if (first) {
+    setCloudStatus('✓ 已連結並同步' + (remote ? '：這台裝置和雲端的資料已合併' : '') + (extra.length ? '（' + extra.join('、') + '）' : ''), 'ok');
+    showToast('已連結 Google 雲端，之後會自動同步');
+  } else {
+    setCloudStatus('✓ 已同步（' + fmtTime(c.lastSync) + '）' + (extra.length ? '，' + extra.join('、') : ''), 'ok');
+    if (!auto) showToast(changedLocally ? '已同步，資料已更新' : '已同步');
+  }
 }
 
-async function cloudRestore(knownInfo) {
-  setCloudStatus('檢查雲端備份…', 'busy');
-  const info = knownInfo || await cloud.getInfo();
-  if (!info.exists) { setCloudStatus('雲端還沒有備份', 'warn'); return; }
-  if (!knownInfo && hasLocalData()) {
-    const ok = await confirmAsync('從雲端還原', `雲端備份：${fmtTime(info.savedAt)}，${info.entries} 筆記錄、${info.photos} 張照片。會合併到這支手機現有的資料（相同的記錄不會重複）。`, '還原');
-    if (!ok) { setCloudStatus('已取消還原', 'warn'); return; }
-  }
-  const r = await cloud.restore({ onProgress: (m) => setCloudStatus(m, 'busy') });
-  const res = await mergeImport({ ...r.data, photos: r.photos });
+function autoSyncOnOpen() {
   const c = state.meta.cloud;
-  c.knownModified = r.info.modifiedTime;
-  c.lastBackup = c.lastBackup || r.info.savedAt;
-  c.conflict = false;
-  persist();
-  renderAll();
-  setCloudStatus(`✓ 已從雲端還原：新增 ${res.added} 筆記錄、${res.photos} 張照片`, 'ok');
-  showToast('已從雲端還原');
-}
-
-function maybeAutoBackup() {
-  const c = state.meta.cloud;
-  if (!cloud.isConfigured() || !c.linked || c.auto === false || c.conflict || cloudBusy) return;
-  if (!hasLocalData() || !cloud.getToken()) return;
-  if (c.lastBackup && Date.now() - c.lastBackup < 20 * 3600000) return;
-  cloudRun('backup', { auto: true });
+  if (!cloud.isConfigured() || !c.linked || c.auto === false) return;
+  if (cloud.getToken()) { cloudRun('sync', { auto: true }); return; }
+  if (cloud.isBlockedInAppBrowser()) return;
+  // 登入過期：每次開啟最多試一次「不跳畫面」的重新登入
+  if (!sessionStorage.getItem('diet_silent_tried')) startSignIn('sync', true);
+  else { c.needAuth = true; persistLocal(); renderBanners(); renderSyncChip(); }
 }
 
 $('cloudConnectBtn').addEventListener('click', () => cloudRun('connect'));
-$('cloudRestoreNewBtn').addEventListener('click', () => cloudRun('restore'));
-$('cloudBackupBtn').addEventListener('click', () => cloudRun('backup'));
-$('cloudRestoreBtn').addEventListener('click', () => cloudRun('restore'));
-$('cloudAutoCheck').addEventListener('change', (e) => { state.meta.cloud.auto = e.target.checked; persist(); renderBanners(); });
+$('cloudSyncBtn').addEventListener('click', () => cloudRun('sync'));
+$('syncChip').addEventListener('click', () => cloudRun('sync'));
+$('cloudAutoCheck').addEventListener('change', (e) => { state.meta.cloud.auto = e.target.checked; persistLocal(); renderBanners(); if (e.target.checked) scheduleSync(500); });
 $('cloudDisconnectBtn').addEventListener('click', () => {
-  openConfirm('中斷 Google 連結', '這支手機會停止備份到雲端。雲端硬碟裡已經備份的檔案不會刪除，之後重新連結就能繼續使用。', async () => {
+  openConfirm('中斷 Google 連結', '這台裝置會停止同步。雲端硬碟裡的資料不會刪除，之後重新連結就能繼續使用。', async () => {
     await cloud.revoke();
     cloud.resetCache();
-    state.meta.cloud = { linked: false, email: '', auto: true, lastBackup: null, knownModified: null, conflict: false };
-    persist();
+    state.meta.cloud = { linked: false, email: '', auto: true, lastBackup: null, knownModified: null, dirty: false, needAuth: false };
+    persistLocal();
     setCloudStatus('');
     renderCloud();
     renderBanners();
     showToast('已中斷 Google 連結');
   }, '中斷連結');
 });
+setInterval(() => {
+  if (document.visibilityState === 'visible' && state.meta.cloud.linked && state.meta.cloud.auto !== false && cloud.getToken()) cloudRun('sync', { auto: true });
+}, 60000);
 
 /* ---------------- 字體大小 ---------------- */
 const FONT_SIZES = { m: { px: 16, label: '標準' }, l: { px: 18, label: '大' }, xl: { px: 20, label: '特大' } };
@@ -1688,7 +1978,7 @@ $('fontSizeBtn').addEventListener('click', () => {
   const order = ['m', 'l', 'xl'];
   const cur = FONT_SIZES[state.meta.fontSize] ? state.meta.fontSize : 'l';
   state.meta.fontSize = order[(order.indexOf(cur) + 1) % order.length];
-  persist();
+  persistLocal();
   applyFontSize();
   showToast('字體：' + FONT_SIZES[state.meta.fontSize].label);
 });
@@ -1698,17 +1988,22 @@ document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click',
 
 (async function init() {
   await loadState();
-  if (!state.meta.deviceId) { state.meta.deviceId = uid('dev'); persist(); }
+  if (!state.meta.deviceId) { state.meta.deviceId = uid('dev'); persistLocal(); }
   applyFontSize();
   renderAll();
   switchTab('log');
   const redirect = cloud.isConfigured() ? cloud.consumeRedirect() : null;
   if (redirect) {
-    goToCloudSection();
-    if (redirect.error) setCloudStatus(redirect.error, 'err');
-    else cloudRun(redirect.action);
+    if (redirect.silent && redirect.error) {
+      state.meta.cloud.needAuth = true; persistLocal(); renderBanners(); renderSyncChip();
+    } else if (redirect.error) {
+      goToCloudSection(); setCloudStatus(redirect.error, 'err');
+    } else {
+      if (redirect.action === 'connect') goToCloudSection();
+      cloudRun(redirect.action === 'connect' ? 'connect' : 'sync', { auto: Boolean(redirect.silent) });
+    }
   } else {
-    maybeAutoBackup();
+    autoSyncOnOpen();
   }
   if (navigator.storage && navigator.storage.persist) {
     try { await navigator.storage.persist(); } catch (e) { /* ignore */ }
@@ -1719,8 +2014,14 @@ document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click',
   // 跨日後回到 App 時自動跳到今天
   let lastToday = todayStr();
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
-    maybeAutoBackup();
+    if (document.visibilityState === 'hidden') {
+      if (state.meta.cloud.dirty && cloud.getToken()) cloudRun('sync', { auto: true });
+      return;
+    }
+    if (state.meta.cloud.linked && state.meta.cloud.auto !== false) {
+      if (cloud.getToken()) cloudRun('sync', { auto: true });
+      else if (!state.meta.cloud.needAuth) { state.meta.cloud.needAuth = true; persistLocal(); renderBanners(); renderSyncChip(); }
+    }
     const now = todayStr();
     if (now !== lastToday) {
       if (ui.date === lastToday) ui.date = now;

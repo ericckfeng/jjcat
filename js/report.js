@@ -1,5 +1,7 @@
 // 給營養師的報告：HTML（畫面／列印／分享檔共用）與 LINE 文字摘要
 import { MEAL_KEYS, MEAL_META, MACRO_KEYS, MACRO_META, EX_KEYS, EX_META, HUNGER_LABELS, MOOD_OPTIONS, BOWEL_LABELS } from './nutrition.js';
+import { MEASURES, bmiCategory } from './body.js';
+const EXTRA_MEASURES = MEASURES.filter(m => m.key !== 'weight' && m.key !== 'waist');
 
 const WEEK = '日一二三四五六';
 
@@ -57,7 +59,8 @@ function inject() {
 
 export async function buildReportHTML(ctx, opts) {
   inject();
-  const { state, dayTotals, rangeStats, datesBetween, esc, fmt, r1, num, fmtMD, parseDate, getPhoto } = ctx;
+  const { state, dayTotals, rangeStats, datesBetween, esc, fmt, r1, num, fmtMD, parseDate, getPhoto, calcBmi } = ctx;
+  const height = state.profile.height;
   const dates = datesBetween(opts.from, opts.to);
   const s = rangeStats(dates);
   const tg = state.targets;
@@ -67,6 +70,8 @@ export async function buildReportHTML(ctx, opts) {
   const anyMacro = s.macroDays > 0 || MACRO_KEYS.some(k => tg[k]);
   const anyEx = s.exDays > 0 || EX_KEYS.some(k => tg.ex && tg.ex[k]);
   const cols = { weight: has('weight'), waist: has('waist'), water: has('water'), exercise: has('exercise') || has('exMin') };
+  cols.bmi = cols.weight && Boolean(height);
+  const extraCols = EXTRA_MEASURES.filter(m => has(m.key));
 
   let h = '<div class="rpt">';
   // 標題
@@ -81,7 +86,8 @@ export async function buildReportHTML(ctx, opts) {
   h += '<h2>期間摘要</h2><div class="stats">';
   h += stat('記錄天數', s.loggedDays + ' / ' + dates.length + ' 天', s.pending ? '暫估待修 ' + s.pending + ' 筆' : '');
   h += stat('平均攝取', s.avgKcal != null ? fmt(s.avgKcal) + ' kcal' : '–', '目標 ' + fmt(tg.kcal) + '・超標 ' + s.overDays + ' 天');
-  h += stat('體重', w.length ? w[w.length - 1].w + ' kg' : '–', wDelta != null ? '期間 ' + (wDelta > 0 ? '+' : '') + wDelta + ' kg（' + w[0].w + '→' + w[w.length - 1].w + '）' : (tg.weight ? '目標 ' + tg.weight + ' kg' : ''));
+  const lastBmi = w.length ? calcBmi(w[w.length - 1].w, height) : null;
+  h += stat('體重', w.length ? w[w.length - 1].w + ' kg' : '–', (wDelta != null ? '期間 ' + (wDelta > 0 ? '+' : '') + wDelta + ' kg（' + w[0].w + '→' + w[w.length - 1].w + '）' : (tg.weight ? '目標 ' + tg.weight + ' kg' : '')) + (lastBmi ? '・BMI ' + lastBmi + ' ' + bmiCategory(lastBmi).label : ''));
   h += stat('喝水／運動', s.avgWater != null ? fmt(s.avgWater) + ' ml' : '–', '運動共 ' + s.exMinTotal + ' 分鐘');
   h += '</div>';
   if (s.macroDays) {
@@ -99,7 +105,9 @@ export async function buildReportHTML(ctx, opts) {
   if (anyMacro) MACRO_KEYS.forEach(k => { h += `<th>${MACRO_META[k].label}</th>`; });
   if (anyEx) EX_KEYS.forEach(k => { h += `<th>${EX_META[k].short}</th>`; });
   if (cols.weight) h += '<th>體重</th>';
+  if (cols.bmi) h += '<th>BMI</th>';
   if (cols.waist) h += '<th>腰圍</th>';
+  extraCols.forEach(m => { h += `<th>${m.label}</th>`; });
   if (cols.water) h += '<th>喝水</th>';
   if (cols.exercise) h += '<th>運動</th>';
   h += '</tr></thead><tbody>';
@@ -108,7 +116,9 @@ export async function buildReportHTML(ctx, opts) {
   if (anyMacro) MACRO_KEYS.forEach(k => { h += `<td>${tg[k] ? fmt(tg[k], 1) : ''}</td>`; });
   if (anyEx) EX_KEYS.forEach(k => { h += `<td>${tg.ex && tg.ex[k] ? fmt(tg.ex[k], 1) : ''}</td>`; });
   if (cols.weight) h += `<td>${tg.weight ? tg.weight : ''}</td>`;
-  if (cols.waist) h += '<td></td>';
+  if (cols.bmi) h += '<td>18.5–24</td>';
+  if (cols.waist) h += `<td>${state.profile.sex === 'm' ? '&lt;90' : state.profile.sex === 'f' ? '&lt;80' : ''}</td>`;
+  extraCols.forEach(() => { h += '<td></td>'; });
   if (cols.water) h += '<td></td>';
   if (cols.exercise) h += '<td></td>';
   h += '</tr>';
@@ -121,7 +131,9 @@ export async function buildReportHTML(ctx, opts) {
     if (anyMacro) MACRO_KEYS.forEach(k => { h += `<td class="${cmpClass(t.macroItems ? t[k] : null, tg[k], false)}">${t.macroItems ? fmt(t[k], 1) : ''}</td>`; });
     if (anyEx) EX_KEYS.forEach(k => { h += `<td class="${cmpClass(t.exItems ? t.ex[k] : null, tg.ex && tg.ex[k], k === 'veg' || k === 'fruit' || k === 'dairy')}">${t.exItems ? fmt(t.ex[k], 1) : ''}</td>`; });
     if (cols.weight) h += `<td>${dd.weight ?? ''}</td>`;
+    if (cols.bmi) { const b = calcBmi(dd.weight, height); h += `<td class="${b != null && (b >= 24 || b < 18.5) ? 'under' : ''}">${b ?? ''}</td>`; }
     if (cols.waist) h += `<td>${dd.waist ?? ''}</td>`;
+    extraCols.forEach(m => { h += `<td>${dd[m.key] ?? ''}</td>`; });
     if (cols.water) h += `<td>${dd.water != null ? fmt(dd.water) : ''}</td>`;
     if (cols.exercise) h += `<td class="l">${esc(dd.exercise || '')}${dd.exMin ? ' ' + dd.exMin + '分' : ''}</td>`;
     h += '</tr>';
@@ -131,7 +143,9 @@ export async function buildReportHTML(ctx, opts) {
   if (anyMacro) MACRO_KEYS.forEach(k => { h += `<td>${s.avgMacro[k] != null ? fmt(s.avgMacro[k], 1) : ''}</td>`; });
   if (anyEx) EX_KEYS.forEach(k => { h += `<td>${s.avgEx[k] != null ? fmt(s.avgEx[k], 1) : ''}</td>`; });
   if (cols.weight) h += '<td></td>';
+  if (cols.bmi) h += '<td></td>';
   if (cols.waist) h += '<td></td>';
+  extraCols.forEach(() => { h += '<td></td>'; });
   if (cols.water) h += `<td>${s.avgWater != null ? fmt(s.avgWater) : ''}</td>`;
   if (cols.exercise) h += `<td>${s.exMinTotal ? s.exMinTotal + '分' : ''}</td>`;
   h += '</tr></tbody></table></div>';
@@ -152,7 +166,7 @@ export async function buildReportHTML(ctx, opts) {
       const d = dates[i];
       const list = state.logs[d] || [];
       const dd = days[d] || {};
-      const hasDay = Object.keys(dd).length > 0;
+      const hasDay = Object.keys(dd).some(k => k !== '_t');
       if (!list.length && !hasDay) continue;
       const t = s.totals[i];
       h += `<div class="day"><div class="dayh"><span>${dw(d)}</span><span>${fmt(t.kcal)} kcal${t.macroItems ? '　<span class="sub">P ' + fmt(t.p, 1) + '・C ' + fmt(t.c, 1) + '・F ' + fmt(t.f, 1) + ' g</span>' : ''}</span></div>`;
@@ -176,8 +190,9 @@ export async function buildReportHTML(ctx, opts) {
         h += '</div>';
       }
       const chips = [];
-      if (dd.weight != null) chips.push('體重 ' + dd.weight + ' kg');
+      if (dd.weight != null) chips.push('體重 ' + dd.weight + ' kg' + (calcBmi(dd.weight, height) ? '（BMI ' + calcBmi(dd.weight, height) + '）' : ''));
       if (dd.waist != null) chips.push('腰圍 ' + dd.waist + ' cm');
+      EXTRA_MEASURES.forEach(m => { if (dd[m.key] != null) chips.push(m.label + ' ' + dd[m.key] + ' ' + m.short); });
       if (dd.water != null) chips.push('喝水 ' + fmt(dd.water) + ' ml');
       if (dd.exercise || dd.exMin) chips.push('運動 ' + esc(dd.exercise || '') + (dd.exMin ? ' ' + dd.exMin + ' 分' : ''));
       if (dd.hunger != null) chips.push('飢餓感 ' + dd.hunger + '/5 ' + (HUNGER_LABELS[dd.hunger] || ''));
@@ -206,7 +221,7 @@ export async function buildReportHTML(ctx, opts) {
 }
 
 export function buildReportText(ctx, opts) {
-  const { state, rangeStats, datesBetween, fmt, r1, fmtMD } = ctx;
+  const { state, rangeStats, datesBetween, fmt, r1, fmtMD, calcBmi, num } = ctx;
   const dates = datesBetween(opts.from, opts.to);
   const s = rangeStats(dates);
   const tg = state.targets;
@@ -226,6 +241,16 @@ export function buildReportText(ctx, opts) {
   } else if (w.length === 1) {
     lines.push('體重：' + w[0].w + ' kg');
   }
+  if (w.length) {
+    const b = calcBmi(w[w.length - 1].w, state.profile.height);
+    if (b) lines.push('BMI：' + b + '（' + bmiCategory(b).label + '）');
+  }
+  const measureLine = MEASURES.filter(m => m.key !== 'weight').map(m => {
+    const vals = dates.map(d => num((state.days[d] || {})[m.key])).filter(v => v != null);
+    if (!vals.length) return null;
+    return m.label + ' ' + (vals.length > 1 ? vals[0] + '→' + vals[vals.length - 1] : vals[0]) + m.short;
+  }).filter(Boolean);
+  if (measureLine.length) lines.push('尺寸：' + measureLine.join('、'));
   const extra = [];
   if (s.avgWater != null) extra.push('平均喝水 ' + fmt(s.avgWater) + ' ml');
   if (s.exMinTotal) extra.push('運動共 ' + s.exMinTotal + ' 分鐘');

@@ -40,9 +40,9 @@ export function clearToken() {
 }
 
 // 跳轉到 Google 登入；回來後由 consumeRedirect() 接手繼續執行 action
-export function signIn(action, loginHint) {
+export function signIn(action, loginHint, silent = false) {
   const state = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
-  localStorage.setItem(PENDING_KEY, JSON.stringify({ state, action, at: Date.now() }));
+  localStorage.setItem(PENDING_KEY, JSON.stringify({ state, action, silent, at: Date.now() }));
   const p = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: redirectUri(),
@@ -52,6 +52,7 @@ export function signIn(action, loginHint) {
     state
   });
   if (loginHint) p.set('login_hint', loginHint);
+  if (silent) p.set('prompt', 'none');
   location.assign('https://accounts.google.com/o/oauth2/v2/auth?' + p.toString());
 }
 
@@ -66,6 +67,7 @@ export function consumeRedirect() {
   localStorage.removeItem(PENDING_KEY);
   if (!pending || h.get('state') !== pending.state) return { error: '登入狀態不符，請再試一次' };
   if (h.get('error')) {
+    if (pending.silent) return { error: 'need_interactive', silent: true, action: pending.action };
     return { error: h.get('error') === 'access_denied' ? '已取消 Google 授權' : 'Google 授權失敗：' + h.get('error') };
   }
   const granted = h.get('scope') || '';
@@ -76,7 +78,7 @@ export function consumeRedirect() {
     token: h.get('access_token'),
     exp: Date.now() + (Number(h.get('expires_in')) || 3600) * 1000
   }));
-  return { action: pending.action };
+  return { action: pending.action, silent: Boolean(pending.silent) };
 }
 
 export async function revoke() {
@@ -207,57 +209,60 @@ function blobToDataUrl(blob) {
   });
 }
 
-// 備份：照片一張一個檔（只上傳新的），資料存成一個 JSON
-export async function backup({ data, photoIds, getPhoto, deviceId, onProgress = () => {} }) {
-  onProgress('準備雲端資料夾…');
+/* ---------- 同步用的基本動作 ---------- */
+export async function downloadData(fileId) {
+  return (await api(API + '/files/' + fileId + '?alt=media')).json();
+}
+
+export async function uploadData(data, info, deviceId) {
   const f = await folders(true);
-  const existing = await listFiles(`${qs(f.photos)} in parents and trashed=false`, 'id,name,appProperties');
-  const have = new Set(existing.map(x => (x.appProperties && x.appProperties.itemId) || x.name.replace(/\.jpg$/, '')));
-  const todo = photoIds.filter(id => !have.has(id));
+  const entries = Object.values(data.logs || {}).reduce((s, l) => s + (l ? l.length : 0), 0);
+  const savedAt = Date.now();
+  const appProperties = { deviceId, savedAt: String(savedAt), entries: String(entries) };
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const file = info && info.exists
+    ? await updateFile(info.fileId, { appProperties }, blob)
+    : await createFile({ name: DATA_NAME, parents: [f.root], appProperties }, blob);
+  return { modifiedTime: file.modifiedTime, savedAt, fileId: file.id };
+}
+
+// 雲端已有的照片：itemId -> 檔案 id
+export async function listPhotos() {
+  const f = await folders(true);
+  const files = await listFiles(`${qs(f.photos)} in parents and trashed=false`, 'id,name,appProperties');
+  const map = new Map();
+  files.forEach(x => map.set((x.appProperties && x.appProperties.itemId) || x.name.replace(/\.jpg$/, ''), x.id));
+  return map;
+}
+
+export async function uploadPhotos(ids, getPhoto, onProgress = () => {}) {
+  const f = await folders(true);
   let done = 0;
-  if (todo.length) onProgress(`上傳照片 0/${todo.length}…`);
-  await runPool(todo, 3, async (id) => {
+  const uploaded = [];
+  await runPool(ids, 3, async (id) => {
     const src = await getPhoto(id);
     if (src) {
       await createFile({ name: id + '.jpg', parents: [f.photos], appProperties: { itemId: id } }, dataUrlToBlob(src));
+      uploaded.push(id);
     }
     done++;
-    onProgress(`上傳照片 ${done}/${todo.length}…`);
+    onProgress(done, ids.length);
   });
-  onProgress('上傳記錄…');
-  const savedAt = Date.now();
-  const entries = Object.values(data.logs || {}).reduce((s, l) => s + (l ? l.length : 0), 0);
-  const appProperties = { deviceId, savedAt: String(savedAt), entries: String(entries), photos: String(photoIds.length) };
-  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-  const info = await getInfo();
-  const file = info.exists
-    ? await updateFile(info.fileId, { appProperties }, blob)
-    : await createFile({ name: DATA_NAME, parents: [f.root], appProperties }, blob);
-  return { modifiedTime: file.modifiedTime, savedAt, uploadedPhotos: todo.length, entries };
+  return uploaded;
 }
 
-// 還原：下載資料 JSON 與所有照片
-export async function restore({ onProgress = () => {} }) {
-  onProgress('讀取雲端備份…');
-  const info = await getInfo();
-  if (!info.exists) throw new Error('雲端還沒有備份');
-  const data = await (await api(API + '/files/' + info.fileId + '?alt=media')).json();
-  const f = await folders(false);
-  const need = new Set();
-  Object.values(data.logs || {}).forEach(list => (list || []).forEach(it => { if (it && it.hasPhoto) need.add(it.id); }));
-  const photos = {};
-  if (f && f.photos && need.size) {
-    const files = (await listFiles(`${qs(f.photos)} in parents and trashed=false`, 'id,name,appProperties'))
-      .map(x => ({ id: x.id, itemId: (x.appProperties && x.appProperties.itemId) || x.name.replace(/\.jpg$/, '') }))
-      .filter(x => need.has(x.itemId));
-    let done = 0;
-    onProgress(`下載照片 0/${files.length}…`);
-    await runPool(files, 4, async (x) => {
-      const blob = await (await api(API + '/files/' + x.id + '?alt=media')).blob();
-      photos[x.itemId] = await blobToDataUrl(blob);
-      done++;
-      onProgress(`下載照片 ${done}/${files.length}…`);
-    });
-  }
-  return { data, photos, info };
+export async function downloadPhotos(pairs, onProgress = () => {}) {
+  const out = {};
+  let done = 0;
+  await runPool(pairs, 4, async ([itemId, fileId]) => {
+    const blob = await (await api(API + '/files/' + fileId + '?alt=media')).blob();
+    out[itemId] = await blobToDataUrl(blob);
+    done++;
+    onProgress(done, pairs.length);
+  });
+  return out;
+}
+
+export async function deleteFile(fileId) {
+  try { await api(API + '/files/' + fileId, { method: 'DELETE' }); } catch (e) { if (e.auth) throw e; }
 }

@@ -336,10 +336,38 @@
 
       <section id="reportArea" class="hidden bg-white rounded-2xl border border-stone-200 p-4 sm:p-6"></section>
 
+      <section id="cloudSection" class="no-print hidden bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
+        <div>
+          <h2 class="text-sm font-bold text-stone-900">☁️ Google 雲端備份</h2>
+          <p class="text-xs text-stone-500 leading-relaxed">備份到你自己的 Google 雲端硬碟「飲控隨身記」資料夾，換手機時登入同一個帳號就能還原。App 只能存取它自己建立的檔案，看不到你雲端硬碟裡的其他東西。</p>
+        </div>
+        <div id="cloudInAppWarn" class="hidden text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-xl p-2.5 leading-relaxed">
+          你現在是用 LINE／Facebook 等 App 裡的瀏覽器開啟，Google 不允許在這裡登入。請點右上角選單，選「用 Safari／Chrome 開啟」。
+        </div>
+        <div id="cloudSignedOut" class="space-y-2">
+          <button id="cloudConnectBtn" type="button" class="btn-primary w-full">用 Google 帳號連結</button>
+          <button id="cloudRestoreNewBtn" type="button" class="btn-secondary w-full">換了新手機？登入並從雲端還原</button>
+        </div>
+        <div id="cloudSignedIn" class="hidden space-y-2.5">
+          <div class="text-xs text-stone-600">已連結：<b id="cloudEmail" class="text-stone-800"></b></div>
+          <div id="cloudLastText" class="text-xs text-stone-500"></div>
+          <div class="grid grid-cols-2 gap-2">
+            <button id="cloudBackupBtn" type="button" class="btn-primary">立即備份</button>
+            <button id="cloudRestoreBtn" type="button" class="btn-secondary">從雲端還原</button>
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <label class="inline-flex items-center gap-2 text-xs text-stone-700"><input id="cloudAutoCheck" type="checkbox" class="rounded border-stone-300 text-emerald-600 w-4 h-4" />每天開 App 時自動備份</label>
+            <button id="cloudDisconnectBtn" type="button" class="text-xs text-stone-400 hover:text-rose-600 underline">中斷連結</button>
+          </div>
+        </div>
+        <p id="cloudStatus" class="hidden text-xs font-medium rounded-xl px-3 py-2"></p>
+        <p class="text-[11px] text-stone-400"><a href="privacy.html" class="underline hover:text-stone-600">隱私權政策</a></p>
+      </section>
+
       <section id="backupSection" class="no-print bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
         <div>
-          <h2 class="text-sm font-bold text-stone-900">資料備份與匯出</h2>
-          <p class="text-xs text-stone-500">記錄只存在這支手機的瀏覽器裡（不會上傳到 GitHub）。換手機或清除瀏覽器前，記得先下載備份。</p>
+          <h2 class="text-sm font-bold text-stone-900">備份檔與匯出</h2>
+          <p class="text-xs text-stone-500">記錄存在這支手機的瀏覽器裡。不想用 Google 雲端的話，也可以下載備份檔自己保存。</p>
           <p id="lastBackupText" class="text-xs text-stone-500 mt-1"></p>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">

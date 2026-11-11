@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>隱私權政策｜飲控隨身記</title>
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <style>
+    body { font-family: 'Noto Sans TC', 'PingFang TC', -apple-system, sans-serif; color: #292524; background: #fafaf9; margin: 0; line-height: 1.8; }
+    main { max-width: 720px; margin: 0 auto; padding: 32px 20px 64px; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    h2 { font-size: 16px; margin: 28px 0 6px; color: #047857; }
+    p, li { font-size: 15px; }
+    .muted { color: #78716c; font-size: 13px; }
+    a { color: #047857; }
+    code { background: #f5f5f4; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>隱私權政策</h1>
+  <p class="muted">飲控隨身記（https://ericckfeng.github.io/jjcat/）｜最後更新：2026 年 11 月 11 日</p>
+
+  <h2>一、我們不收集你的資料</h2>
+  <p>飲控隨身記是一個純前端的網頁 App，沒有後端伺服器。你輸入的飲食記錄、照片、體重、備註等所有資料，都只儲存在你自己裝置的瀏覽器中（localStorage 與 IndexedDB）。開發者無法看到、也不會收到任何使用者的資料。</p>
+
+  <h2>二、Google 雲端備份（選用）</h2>
+  <p>如果你選擇「用 Google 帳號連結」，App 會請求 Google 雲端硬碟的 <code>drive.file</code> 權限，用途僅限於：</p>
+  <ul>
+    <li>在<strong>你自己的</strong> Google 雲端硬碟建立「飲控隨身記」資料夾，存放備份檔與餐點照片；</li>
+    <li>在你按下「從雲端還原」時讀回這些檔案；</li>
+    <li>讀取你的 Google 帳號電子郵件，用來顯示目前連結的帳號。</li>
+  </ul>
+  <p><code>drive.file</code> 權限只能存取這個 App 自己建立的檔案，App <strong>無法</strong>看到或修改你雲端硬碟中的其他任何檔案。</p>
+  <p>資料直接在你的裝置與 Google 之間傳輸，不經過開發者的任何伺服器。登入憑證（存取權杖）只暫存在你的裝置上，約一小時後自動失效。</p>
+  <p>本 App 對 Google 使用者資料的使用與傳輸，遵守 <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>，包括其中的 Limited Use 規定。資料不會用於廣告、不會出售，也不會轉移給任何第三方。</p>
+
+  <h2>三、如何刪除資料</h2>
+  <ul>
+    <li><strong>裝置上的資料</strong>：在瀏覽器設定中清除此網站的資料，或刪除主畫面上的 App。</li>
+    <li><strong>雲端備份</strong>：到你的 Google 雲端硬碟刪除「飲控隨身記」資料夾。</li>
+    <li><strong>撤銷授權</strong>：在 App 中按「中斷連結」，或到 <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">Google 帳戶的第三方存取權</a> 移除飲控隨身記。</li>
+  </ul>
+
+  <h2>四、第三方資源</h2>
+  <p>App 會從公開 CDN 載入 Tailwind CSS、Chart.js 與 Google Fonts。這些請求不包含你的任何記錄內容。</p>
+
+  <h2>五、健康資訊聲明</h2>
+  <p>App 中的熱量、營養素與份數皆為參考或估算值，不能取代醫師或營養師的專業建議。</p>
+
+  <h2>六、聯絡方式</h2>
+  <p>如有任何問題，請來信：<a href="mailto:ericckfeng@gmail.com">ericckfeng@gmail.com</a></p>
+
+  <p style="margin-top:32px"><a href="./">← 回到飲控隨身記</a></p>
+</main>
+</body>
+</html>

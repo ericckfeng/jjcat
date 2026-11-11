@@ -4,6 +4,7 @@ import {
 } from './nutrition.js';
 import { photoDB } from './db.js';
 import { REPORT_CSS, buildReportHTML, buildReportText } from './report.js';
+import * as cloud from './cloud.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
 const LEGACY_KEY = 'daily_calorie_tracker_v1';
@@ -103,7 +104,7 @@ const state = {
   days: {},
   quickItems: PRESET_FOODS.map(f => ({ ...f, isFav: false })),
   profile: { name: '' },
-  meta: { lastBackup: null, installHintDismissed: false }
+  meta: { lastBackup: null, installHintDismissed: false, deviceId: null, cloud: { linked: false, email: '', auto: true, lastBackup: null, knownModified: null, conflict: false } }
 };
 const ui = {
   date: todayStr(),
@@ -161,7 +162,7 @@ function applyLoaded(p) {
   if (p.days && typeof p.days === 'object') state.days = p.days;
   if (Array.isArray(p.quickItems)) state.quickItems = p.quickItems;
   if (p.profile) state.profile = { ...state.profile, ...p.profile };
-  if (p.meta) state.meta = { ...state.meta, ...p.meta };
+  if (p.meta) state.meta = { ...state.meta, ...p.meta, cloud: { ...state.meta.cloud, ...(p.meta.cloud || {}) } };
 }
 
 // 合併匯入（相容舊版 v1：targetKcal + 照片直接放在記錄裡）
@@ -289,17 +290,29 @@ $('toastAction').addEventListener('click', () => {
 });
 
 let pendingConfirm = null;
-function openConfirm(title, message, onOk, okLabel = '確定') {
+let pendingCancel = null;
+function openConfirm(title, message, onOk, okLabel = '確定', onCancel = null) {
+  if (typeof pendingCancel === 'function') pendingCancel();
   $('confirmTitle').textContent = title;
   $('confirmMessage').textContent = message;
   $('confirmOkBtn').textContent = okLabel;
   pendingConfirm = onOk;
+  pendingCancel = onCancel;
   openModal('confirmModal');
 }
-$('confirmCancelBtn').addEventListener('click', () => { pendingConfirm = null; closeModal('confirmModal'); });
+function confirmAsync(title, message, okLabel) {
+  return new Promise(resolve => openConfirm(title, message, () => resolve(true), okLabel, () => resolve(false)));
+}
+function cancelConfirm() {
+  const fn = pendingCancel;
+  pendingConfirm = null; pendingCancel = null;
+  closeModal('confirmModal');
+  if (typeof fn === 'function') fn();
+}
+$('confirmCancelBtn').addEventListener('click', cancelConfirm);
 $('confirmOkBtn').addEventListener('click', () => {
   const fn = pendingConfirm;
-  pendingConfirm = null;
+  pendingConfirm = null; pendingCancel = null;
   closeModal('confirmModal');
   if (typeof fn === 'function') fn();
 });
@@ -309,10 +322,14 @@ function closeModal(id) { $(id).classList.add('hidden'); }
 document.addEventListener('click', (e) => {
   const closer = e.target.closest('[data-close]');
   if (closer) { closeModal(closer.getAttribute('data-close')); return; }
-  if (e.target.classList && e.target.classList.contains('modal')) e.target.classList.add('hidden');
+  if (e.target.classList && e.target.classList.contains('modal')) {
+    if (e.target.id === 'confirmModal') cancelConfirm(); else e.target.classList.add('hidden');
+  }
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') document.querySelectorAll('.modal:not(.hidden)').forEach(m => m.classList.add('hidden'));
+  if (e.key !== 'Escape') return;
+  if (!$('confirmModal').classList.contains('hidden')) cancelConfirm();
+  document.querySelectorAll('.modal:not(.hidden)').forEach(m => m.classList.add('hidden'));
 });
 
 /* ---------------- 營養欄位元件 ---------------- */
@@ -766,21 +783,37 @@ function switchTab(tab) {
   document.querySelectorAll('.nav-tab, .mobile-nav-tab').forEach(btn => btn.classList.toggle('is-active', btn.getAttribute('data-tab') === tab));
   $('dateBar').classList.toggle('hidden', tab === 'report');
   if (tab === 'trends') renderTrends();
-  if (tab === 'report') renderBackupInfo();
+  if (tab === 'report') { renderBackupInfo(); renderCloud(); }
   window.scrollTo({ top: 0 });
 }
 function renderBanners() {
   const show = !isStandalone() && !state.meta.installHintDismissed;
   $('installBanner').classList.toggle('hidden', !show);
   const hasData = Object.values(state.logs).some(l => l && l.length);
+  const c = state.meta.cloud;
+  const banner = $('backupBanner');
+  if (cloud.isConfigured() && c.linked) {
+    const stale = !c.lastBackup || Date.now() - c.lastBackup > 24 * 3600000;
+    const show = hasData && !cloudBusy && (c.conflict || (stale && !(c.auto && cloud.getToken())));
+    banner.classList.toggle('hidden', !show);
+    banner.dataset.mode = c.conflict ? 'goto' : 'cloud';
+    $('goBackupBtn').textContent = c.conflict ? '去確認' : '☁️ 備份';
+    $('backupBannerText').textContent = c.conflict
+      ? '雲端有另一台裝置的備份，為了不覆蓋它，這支手機暫停自動備份。'
+      : (c.lastBackup ? '超過一天沒有備份到雲端了。' : '還沒有備份到 Google 雲端。');
+    return;
+  }
   const last = state.meta.lastBackup;
   const daysSince = last ? Math.floor((Date.now() - last) / 86400000) : null;
   const needBackup = hasData && (daysSince === null ? Object.keys(state.logs).length >= 3 : daysSince >= 7);
-  $('backupBanner').classList.toggle('hidden', !needBackup);
+  banner.classList.toggle('hidden', !needBackup);
+  banner.dataset.mode = 'goto';
+  $('goBackupBtn').textContent = '去備份';
   if (needBackup) {
+    const tip = cloud.isConfigured() ? '可以連結 Google 雲端自動備份。' : '建議定期下載備份。';
     $('backupBannerText').textContent = daysSince === null
-      ? '還沒有下載過備份。資料只存在這支手機，建議定期備份。'
-      : '已經 ' + daysSince + ' 天沒備份了，建議下載一份新的備份。';
+      ? '資料只存在這支手機，' + tip
+      : '已經 ' + daysSince + ' 天沒備份了，' + tip;
   }
 }
 function renderAll() {
@@ -810,9 +843,14 @@ $('mealSelectorGroup').addEventListener('click', (e) => {
 $('libraryMealSelect').addEventListener('change', (e) => { ui.meal = e.target.value; renderMealSelector(); });
 $('dismissInstallBtn').addEventListener('click', () => { state.meta.installHintDismissed = true; persist(); renderBanners(); });
 $('goBackupBtn').addEventListener('click', () => {
-  switchTab('report');
-  setTimeout(() => $('backupSection').scrollIntoView({ behavior: 'smooth' }), 50);
+  if ($('backupBanner').dataset.mode === 'cloud') { cloudRun('backup'); return; }
+  goToCloudSection();
 });
+function goToCloudSection() {
+  switchTab('report');
+  const target = cloud.isConfigured() ? $('cloudSection') : $('backupSection');
+  setTimeout(() => target.scrollIntoView({ behavior: 'smooth' }), 50);
+}
 
 /* ---------------- 事件：新增表單 ---------------- */
 $('homeQuickStrip').addEventListener('click', (e) => {
@@ -1234,11 +1272,20 @@ function renderBackupInfo() {
   $('lastBackupText').textContent = last ? '上次備份：' + new Date(last).toLocaleString('zh-TW', { hour12: false }) : '尚未備份過';
   if (!$('rptFrom').value) setReportRange(7);
 }
-$('exportJsonBtn').addEventListener('click', async () => {
+function photoIdList() {
   const ids = [];
   Object.values(state.logs).forEach(list => (list || []).forEach(it => { if (it.hasPhoto) ids.push(it.id); }));
-  const photos = await photoDB.getMany(ids);
-  const payload = { app: 'diet-tracker', version: 2, exportedAt: new Date().toISOString(), targets: state.targets, profile: state.profile, logs: state.logs, days: state.days, quickItems: state.quickItems, photos };
+  return ids;
+}
+function buildPayload() {
+  return { app: 'diet-tracker', version: 2, exportedAt: new Date().toISOString(), targets: state.targets, profile: state.profile, logs: state.logs, days: state.days, quickItems: state.quickItems };
+}
+function hasLocalData() {
+  return Object.values(state.logs).some(l => l && l.length) || Object.keys(state.days).length > 0;
+}
+$('exportJsonBtn').addEventListener('click', async () => {
+  const photos = await photoDB.getMany(photoIdList());
+  const payload = { ...buildPayload(), photos };
   const fileName = '飲控備份_' + todayStr() + '.json';
   const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
   const file = new File([blob], fileName, { type: 'application/json' });
@@ -1305,13 +1352,196 @@ $('exportDaysCsvBtn').addEventListener('click', () => {
   showToast('已匯出每日 CSV');
 });
 
+
+/* ---------------- Google 雲端備份 ---------------- */
+let cloudBusy = false;
+function fmtTime(ms) { return new Date(ms).toLocaleString('zh-TW', { hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+function setCloudStatus(msg, tone = 'ok') {
+  const el = $('cloudStatus');
+  if (!msg) { el.classList.add('hidden'); return; }
+  const tones = { ok: 'bg-emerald-50 text-emerald-800', busy: 'bg-stone-100 text-stone-700', warn: 'bg-amber-50 text-amber-800', err: 'bg-rose-50 text-rose-700' };
+  el.className = 'text-xs font-medium rounded-xl px-3 py-2 ' + (tones[tone] || tones.ok);
+  el.textContent = msg;
+}
+function renderCloud() {
+  const sec = $('cloudSection');
+  if (!cloud.isConfigured()) { sec.classList.add('hidden'); return; }
+  sec.classList.remove('hidden');
+  const c = state.meta.cloud;
+  $('cloudInAppWarn').classList.toggle('hidden', !cloud.isBlockedInAppBrowser());
+  $('cloudSignedOut').classList.toggle('hidden', c.linked);
+  $('cloudSignedIn').classList.toggle('hidden', !c.linked);
+  $('cloudEmail').textContent = c.email || 'Google 帳號';
+  $('cloudLastText').textContent = c.lastBackup ? '上次雲端備份：' + fmtTime(c.lastBackup) : '還沒有備份到雲端';
+  $('cloudAutoCheck').checked = c.auto !== false;
+  ['cloudConnectBtn', 'cloudRestoreNewBtn', 'cloudBackupBtn', 'cloudRestoreBtn', 'cloudDisconnectBtn'].forEach(id => { $(id).disabled = cloudBusy; });
+  $('cloudBackupBtn').textContent = cloudBusy ? '處理中…' : '立即備份';
+}
+
+function startSignIn(action) {
+  // 避免授權後馬上又失效時無限跳轉
+  const last = Number(sessionStorage.getItem('diet_reauth_at') || 0);
+  if (Date.now() - last < 30000) {
+    setCloudStatus('Google 登入沒有成功，請稍後再試一次', 'err');
+    return;
+  }
+  try { sessionStorage.setItem('diet_reauth_at', String(Date.now())); } catch (e) { /* ignore */ }
+  setCloudStatus('前往 Google 登入…', 'busy');
+  cloud.signIn(action, state.meta.cloud.email);
+}
+
+async function cloudRun(action, { auto = false } = {}) {
+  if (cloudBusy || !cloud.isConfigured()) return;
+  if (cloud.isBlockedInAppBrowser()) {
+    if (!auto) { goToCloudSection(); showToast('請改用 Safari／Chrome 開啟後再登入 Google'); }
+    return;
+  }
+  if (!cloud.getToken()) {
+    if (!auto) startSignIn(action);
+    return;
+  }
+  cloudBusy = true;
+  renderCloud();
+  renderBanners();
+  try {
+    const c = state.meta.cloud;
+    if (!c.linked || !c.email) {
+      const u = await cloud.getUser();
+      c.email = u.emailAddress || '';
+      c.linked = true;
+      persist();
+    }
+    if (action === 'connect') await cloudAfterConnect();
+    else if (action === 'backup') await cloudBackup(auto);
+    else if (action === 'restore') await cloudRestore();
+    try { sessionStorage.removeItem('diet_reauth_at'); } catch (e) { /* ignore */ }
+  } catch (err) {
+    if (err && err.auth) {
+      if (auto) setCloudStatus('Google 登入已過期，按「立即備份」重新登入', 'warn');
+      else { cloudBusy = false; startSignIn(action); }
+    } else {
+      setCloudStatus((err && err.message) || '雲端備份失敗', 'err');
+      if (!auto) showToast('雲端備份失敗，請稍後再試');
+    }
+  } finally {
+    cloudBusy = false;
+    renderCloud();
+    renderBanners();
+    renderBackupInfo();
+  }
+}
+
+async function cloudAfterConnect() {
+  setCloudStatus('檢查雲端備份…', 'busy');
+  const info = await cloud.getInfo();
+  const c = state.meta.cloud;
+  if (!info.exists) {
+    if (hasLocalData()) await cloudBackup(false);
+    else setCloudStatus('✓ 已連結。開始記錄後會自動備份到雲端', 'ok');
+    return;
+  }
+  if (info.deviceId === state.meta.deviceId) { await cloudBackup(false); return; }
+  if (!hasLocalData()) {
+    const ok = await confirmAsync('找到雲端備份', `雲端有 ${fmtTime(info.savedAt)} 的備份（${info.entries} 筆記錄、${info.photos} 張照片），要還原到這支手機嗎？`, '還原');
+    if (ok) await cloudRestore(info);
+    else setCloudStatus('✓ 已連結。雲端已有備份，需要時按「從雲端還原」', 'ok');
+    return;
+  }
+  c.conflict = true;
+  persist();
+  setCloudStatus(`雲端已有另一台裝置 ${fmtTime(info.savedAt)} 的備份（${info.entries} 筆）。要用雲端的資料就按「從雲端還原」（會合併）；要以這支手機為主就按「立即備份」覆蓋。`, 'warn');
+}
+
+async function cloudBackup(auto) {
+  const c = state.meta.cloud;
+  setCloudStatus('檢查雲端備份…', 'busy');
+  const info = await cloud.getInfo();
+  const otherDevice = info.exists && info.deviceId !== state.meta.deviceId && info.modifiedTime !== c.knownModified;
+  if (otherDevice) {
+    if (auto) {
+      c.conflict = true;
+      persist();
+      setCloudStatus('雲端有另一台裝置的備份，沒有自動覆蓋。請按「從雲端還原」或「立即備份」決定要保留哪一邊。', 'warn');
+      return;
+    }
+    const ok = await confirmAsync('覆蓋雲端備份？', `雲端的備份來自另一台裝置（${fmtTime(info.savedAt)}，${info.entries} 筆記錄）。確定要用這支手機的資料覆蓋嗎？想保留雲端資料的話，請先按「從雲端還原」。`, '覆蓋');
+    if (!ok) { setCloudStatus('已取消備份', 'warn'); return; }
+  }
+  const r = await cloud.backup({
+    data: buildPayload(), photoIds: photoIdList(), getPhoto, deviceId: state.meta.deviceId,
+    onProgress: (m) => setCloudStatus(m, 'busy')
+  });
+  c.lastBackup = r.savedAt;
+  c.knownModified = r.modifiedTime;
+  c.conflict = false;
+  state.meta.lastBackup = r.savedAt;
+  persist();
+  setCloudStatus(`✓ ${auto ? '已自動' : '已'}備份 ${r.entries} 筆記錄${r.uploadedPhotos ? '，新上傳 ' + r.uploadedPhotos + ' 張照片' : ''}（${fmtTime(r.savedAt)}）`, 'ok');
+  if (!auto) showToast('已備份到 Google 雲端');
+}
+
+async function cloudRestore(knownInfo) {
+  setCloudStatus('檢查雲端備份…', 'busy');
+  const info = knownInfo || await cloud.getInfo();
+  if (!info.exists) { setCloudStatus('雲端還沒有備份', 'warn'); return; }
+  if (!knownInfo && hasLocalData()) {
+    const ok = await confirmAsync('從雲端還原', `雲端備份：${fmtTime(info.savedAt)}，${info.entries} 筆記錄、${info.photos} 張照片。會合併到這支手機現有的資料（相同的記錄不會重複）。`, '還原');
+    if (!ok) { setCloudStatus('已取消還原', 'warn'); return; }
+  }
+  const r = await cloud.restore({ onProgress: (m) => setCloudStatus(m, 'busy') });
+  const res = await mergeImport({ ...r.data, photos: r.photos });
+  const c = state.meta.cloud;
+  c.knownModified = r.info.modifiedTime;
+  c.lastBackup = c.lastBackup || r.info.savedAt;
+  c.conflict = false;
+  persist();
+  renderAll();
+  setCloudStatus(`✓ 已從雲端還原：新增 ${res.added} 筆記錄、${res.photos} 張照片`, 'ok');
+  showToast('已從雲端還原');
+}
+
+function maybeAutoBackup() {
+  const c = state.meta.cloud;
+  if (!cloud.isConfigured() || !c.linked || c.auto === false || c.conflict || cloudBusy) return;
+  if (!hasLocalData() || !cloud.getToken()) return;
+  if (c.lastBackup && Date.now() - c.lastBackup < 20 * 3600000) return;
+  cloudRun('backup', { auto: true });
+}
+
+$('cloudConnectBtn').addEventListener('click', () => cloudRun('connect'));
+$('cloudRestoreNewBtn').addEventListener('click', () => cloudRun('restore'));
+$('cloudBackupBtn').addEventListener('click', () => cloudRun('backup'));
+$('cloudRestoreBtn').addEventListener('click', () => cloudRun('restore'));
+$('cloudAutoCheck').addEventListener('change', (e) => { state.meta.cloud.auto = e.target.checked; persist(); renderBanners(); });
+$('cloudDisconnectBtn').addEventListener('click', () => {
+  openConfirm('中斷 Google 連結', '這支手機會停止備份到雲端。雲端硬碟裡已經備份的檔案不會刪除，之後重新連結就能繼續使用。', async () => {
+    await cloud.revoke();
+    cloud.resetCache();
+    state.meta.cloud = { linked: false, email: '', auto: true, lastBackup: null, knownModified: null, conflict: false };
+    persist();
+    setCloudStatus('');
+    renderCloud();
+    renderBanners();
+    showToast('已中斷 Google 連結');
+  }, '中斷連結');
+});
+
 /* ---------------- 啟動 ---------------- */
 document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click', () => { ui.trendRange = Number(b.getAttribute('data-range')); renderTrends(); }));
 
 (async function init() {
   await loadState();
+  if (!state.meta.deviceId) { state.meta.deviceId = uid('dev'); persist(); }
   renderAll();
   switchTab('log');
+  const redirect = cloud.isConfigured() ? cloud.consumeRedirect() : null;
+  if (redirect) {
+    goToCloudSection();
+    if (redirect.error) setCloudStatus(redirect.error, 'err');
+    else cloudRun(redirect.action);
+  } else {
+    maybeAutoBackup();
+  }
   if (navigator.storage && navigator.storage.persist) {
     try { await navigator.storage.persist(); } catch (e) { /* ignore */ }
   }
@@ -1322,6 +1552,7 @@ document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click',
   let lastToday = todayStr();
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
+    maybeAutoBackup();
     const now = todayStr();
     if (now !== lastToday) {
       if (ui.date === lastToday) ui.date = now;

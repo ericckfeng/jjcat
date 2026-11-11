@@ -1,6 +1,7 @@
 // Service Worker：讓 App 可以離線開啟
 // 自己的檔案「先上網抓最新版，失敗才用快取」；CDN 檔案「有快取就用快取」
-const CACHE = 'diet-tracker-v1';
+const CACHE = 'diet-tracker-v2';
+const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 const CORE = [
   './',
   './index.html',
@@ -9,6 +10,9 @@ const CORE = [
   './js/db.js',
   './js/nutrition.js',
   './js/report.js',
+  './js/cloud.js',
+  './js/config.js',
+  './privacy.html',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -34,6 +38,7 @@ self.addEventListener('fetch', (event) => {
   if (!url.protocol.startsWith('http')) return;
 
   if (url.origin === self.location.origin) {
+    if (url.hash && /access_token|error/.test(url.hash)) return;
     event.respondWith(
       fetch(req)
         .then((res) => {
@@ -48,7 +53,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 第三方 CDN（Tailwind、Chart.js、Google Fonts）
+  // 只快取第三方 CDN（Tailwind、Chart.js、Google Fonts）；Google 登入與雲端硬碟 API 一律直接連線
+  if (!CDN_HOSTS.includes(url.hostname)) return;
   event.respondWith(
     caches.match(req).then((cached) => {
       if (cached) return cached;

@@ -41,6 +41,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/report.js` | 營養師報告 HTML／文字摘要 |
 | `js/cloud.js` | Google OAuth（整頁跳轉、`drive.file` 權限）與 Drive API |
 | `js/db.js` | 照片存 IndexedDB |
+| `js/foods.js` | **純函式**：食物資料庫的克數換算、生熟重、六大類份數、搜尋（有單元測試） |
 | `js/nutrition.js` | 餐別、營養素、六大類代換表、預設快選 |
 | `js/config.js` | Google OAuth 用戶端 ID（公開值，可以放程式碼裡） |
 | `sw.js` | Service worker：自己的檔案一律向伺服器確認最新版（`cache: 'no-cache'`），離線才用快取 |

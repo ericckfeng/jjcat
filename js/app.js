@@ -8,6 +8,7 @@ import * as cloud from './cloud.js';
 import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VERSION } from './sync.js';
 import { MEASURES, MEASURE_META, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
 import { mascotSVG, buildMascotMessages } from './mascot.js';
+import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS } from './foods.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
 const LEGACY_KEY = 'daily_calorie_tracker_v1';
@@ -149,8 +150,16 @@ function persistSoon() {
   }, 400);
 }
 
+// 匯入時保留看不懂的欄位（新版 App 加的，例如 grams、foodId），只去掉 v1 的照片與舊欄位
+const LEGACY_ONLY = ['photo', 'baseKcal'];
+function extraFields(raw) {
+  const out = { ...raw };
+  LEGACY_ONLY.forEach(k => delete out[k]);
+  return out;
+}
 function normalizeEntry(raw) {
   return {
+    ...extraFields(raw),
     id: String(raw.id || uid('item')),
     name: String(raw.name || '未命名'),
     kcal: Math.max(0, Math.round(num(raw.kcal) || 0)),
@@ -165,6 +174,7 @@ function normalizeEntry(raw) {
 }
 function normalizeQuick(q) {
   return {
+    ...extraFields(q),
     id: String(q.id || uid('qi')), name: String(q.name), kcal: Math.max(0, Math.round(num(q.kcal) || 0)),
     cat: ['fav', 'breakfast', 'meal', 'drink'].includes(q.cat) ? q.cat : 'fav',
     isFav: Boolean(q.isFav || q.cat === 'fav'),
@@ -419,11 +429,12 @@ document.addEventListener('click', (e) => {
 });
 
 /* ---------------- 新增／刪除記錄 ---------------- */
-async function addEntry({ name, nutr, mult = 1, meal, photo = null, pending = false, saveFav = false }) {
+async function addEntry({ name, nutr, mult = 1, meal, photo = null, pending = false, saveFav = false, extra = null }) {
   const s = scaleNutr(nutr, mult);
   const it = {
     id: uid('item'), name: name.trim(), kcal: s.kcal, multiplier: mult, meal, time: nowTime(),
-    pending: Boolean(pending), hasPhoto: Boolean(photo), p: s.p, c: s.c, f: s.f, ex: s.ex, updatedAt: now()
+    pending: Boolean(pending), hasPhoto: Boolean(photo), p: s.p, c: s.c, f: s.f, ex: s.ex, updatedAt: now(),
+    ...(extra || {})
   };
   if (photo) await savePhoto(it.id, photo);
   (state.logs[ui.date] || (state.logs[ui.date] = [])).push(it);
@@ -549,7 +560,10 @@ function renderQuickPick() {
     return matchCat && (!q || item.name.toLowerCase().includes(q));
   });
   if (!list.length) {
-    $('quickPickList').innerHTML = `<div class="rounded-2xl border border-dashed border-stone-300 p-6 text-center text-base text-stone-500">找不到「${esc(q)}」<br><span class="text-sm">可以改用「自己輸入」記錄</span></div>`;
+    $('quickPickList').innerHTML = `<div class="rounded-2xl border border-dashed border-stone-300 p-6 text-center text-base text-stone-500 space-y-3">
+      <div>找不到「${esc(q)}」</div>
+      ${q ? `<button type="button" data-food-query="${esc($('quickPickSearch').value.trim())}" class="btn-secondary w-full">🔍 到食物資料庫查「${esc($('quickPickSearch').value.trim())}」</button>` : ''}
+      <div class="text-sm">或改用「自己輸入」記錄</div></div>`;
     return;
   }
   $('quickPickList').innerHTML = list.map(item =>
@@ -578,6 +592,144 @@ $('quickPickList').addEventListener('click', (e) => {
 });
 $('quickPickManage').addEventListener('click', () => { closeAllScreens(); switchTab('library'); });
 
+/* ---------------- 查食物・秤克數（衛福部食品營養成分資料庫） ---------------- */
+let foodDB = null;      // { source, foods }
+let foodDBLoading = null;
+function loadFoodDB() {
+  if (foodDB) return Promise.resolve(foodDB);
+  if (!foodDBLoading) {
+    foodDBLoading = fetch('tfda_foods.json')
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(d => { foodDB = d; return d; })
+      .catch(err => { foodDBLoading = null; throw err; });
+  }
+  return foodDBLoading;
+}
+function foodRowHTML(food) {
+  const kcal = Math.round(food.per100g.kcal);
+  return `<button type="button" data-food-id="${esc(food.id)}" class="pick-row">
+    <span class="min-w-0 flex-1 text-left"><span class="block text-lg font-semibold text-stone-900 leading-snug break-words">${esc(food.name)}</span>
+    ${food.note ? `<span class="block text-sm text-stone-500 break-words">${esc(food.note)}</span>` : ''}
+    <span class="block text-base text-emerald-700 font-bold tabular-nums">每 100 g　${kcal} kcal</span></span>
+    <span class="pick-add">選擇 ›</span>
+  </button>`;
+}
+async function renderFoodResults() {
+  const box = $('foodResults');
+  const q = $('foodSearch').value.trim();
+  if (!foodDB) {
+    box.innerHTML = '<div class="text-base text-stone-500 py-2">載入食物資料中…</div>';
+    try { await loadFoodDB(); } catch (e) {
+      box.innerHTML = '<div class="rounded-2xl bg-rose-50 text-rose-800 p-4 text-base">食物資料載入失敗。請確認有連上網路再試一次（連網開過一次之後，離線也能查）。</div>';
+      return;
+    }
+    if ($('foodSearch').value.trim() !== q) return; // 載入期間又打了字，交給下一次
+  }
+  $('foodSource').textContent = '資料來源：衛生福利部食品藥物管理署「食品營養成分資料庫」（' + foodDB.source.version + '）。數值為每 100 公克可食部分。';
+  if (!q) {
+    box.innerHTML = '<div class="text-base text-stone-500 leading-relaxed py-2">輸入食物名稱就會列出來。<br>這裡是生鮮食材和常見食品；便當、小吃請用「常吃的」或「自己輸入」。</div>';
+    return;
+  }
+  const results = searchFoods(foodDB.foods, q, { limit: 30, now: new Date() });
+  if (!results.length) {
+    box.innerHTML = `<div class="rounded-2xl border border-dashed border-stone-300 p-6 text-center text-base text-stone-500 space-y-3">
+      <div>資料庫裡找不到「${esc(q)}」</div>
+      <div class="text-sm">換個說法試試（例如「雞胸」「甘藷」），<br>或用「自己輸入」記錄。</div>
+      <button type="button" data-screen="scr-manual" class="btn-secondary w-full">✏️ 自己輸入</button></div>`;
+    return;
+  }
+  box.innerHTML = results.map(r => foodRowHTML(r.food)).join('');
+}
+$('foodSearch').addEventListener('input', renderFoodResults);
+$('foodResults').addEventListener('click', (e) => {
+  const row = e.target.closest('[data-food-id]');
+  if (!row || !foodDB) return;
+  const food = foodDB.foods.find(f => f.id === row.getAttribute('data-food-id'));
+  if (food) openGrams(food);
+});
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-food-query]');
+  if (!b) return;
+  // 疊在目前的畫面上打開（「完成」會回到原本的畫面）
+  openScreen('scr-food');
+  $('foodSearch').value = b.getAttribute('data-food-query');
+  renderFoodResults();
+});
+
+const gramsDraft = { food: null, weighed: 'asis' };
+function openGrams(food) {
+  gramsDraft.food = food;
+  gramsDraft.weighed = 'asis';
+  $('gramsInput').value = '100';
+  openScreen('scr-grams');
+}
+function gramsValue() {
+  const g = Number($('gramsInput').value);
+  return Number.isFinite(g) && g > 0 && g <= 5000 ? Math.round(g * 10) / 10 : 0;
+}
+function renderGrams() {
+  const food = gramsDraft.food;
+  if (!food) return;
+  const conv = cookConversion(food);
+  $('gramsFoodName').textContent = food.name;
+  $('gramsFoodNote').textContent = [food.note, '每 100 g ' + Math.round(food.per100g.kcal) + ' kcal'].filter(Boolean).join('・');
+  $('gramsCookWrap').classList.toggle('hidden', !conv);
+  if (conv) {
+    const rice = conv.factor > 1;
+    $('gramsRawBtn').textContent = rice ? '生米' : '生的';
+    $('gramsCookedBtn').textContent = rice ? '煮好的飯' : '煮熟的';
+    $('gramsRawBtn').classList.toggle('is-active', gramsDraft.weighed !== 'cooked');
+    $('gramsCookedBtn').classList.toggle('is-active', gramsDraft.weighed === 'cooked');
+  }
+  $('gramsPresets').innerHTML = [
+    ...GRAM_PRESETS.map(p => `<button type="button" data-grams-set="${p.g}" class="chip-btn chip-lg">${p.label} ${p.g}g</button>`),
+    '<button type="button" data-grams-add="10" class="chip-btn chip-lg">+10g</button>',
+    '<button type="button" data-grams-add="-10" class="chip-btn chip-lg">−10g</button>'
+  ].join('');
+  $('gramsSaveBtn').textContent = '記到' + MEAL_META[ui.meal].label;
+  const g = gramsValue();
+  const box = $('gramsResult');
+  if (!g) { box.innerHTML = '<div class="text-base text-stone-500">請輸入公克數</div>'; $('gramsSaveBtn').disabled = true; return; }
+  $('gramsSaveBtn').disabled = false;
+  const n = nutrientsFor(food, g, gramsDraft.weighed);
+  const cooked = conv && gramsDraft.weighed === 'cooked';
+  const macro = (k, label) => `<div class="bg-stone-50 rounded-xl p-2 text-center"><div class="text-sm text-stone-500">${label}</div><div class="text-lg font-bold text-stone-800 tabular-nums">${n[k] == null ? '—' : n[k] + ' g'}</div></div>`;
+  const ex = n.ex ? Object.entries(n.ex).map(([k, v]) => `${EX_META[k].emoji} ${EX_META[k].short} ${v} 份`).join('、') : '';
+  box.innerHTML = `
+    <div class="text-center"><span class="text-4xl font-bold text-emerald-700 tabular-nums">${n.kcal}</span> <span class="text-lg text-stone-600">kcal</span></div>
+    ${cooked ? `<div class="text-sm text-stone-500 text-center">熟重 ${g} g ≈ ${conv.factor > 1 ? '生米' : '生重'} ${Math.round(baseGrams(food, g, 'cooked'))} g（${esc(conv.label)}）</div>` : ''}
+    <div class="grid grid-cols-3 gap-2">${macro('p', '蛋白質')}${macro('f', '脂肪')}${macro('c', '碳水')}</div>
+    <div class="text-base text-stone-700">${ex ? '六大類：' + ex : '<span class="text-stone-500">這類食物無法換算六大類份數</span>'}</div>`;
+}
+$('gramsInput').addEventListener('input', renderGrams);
+$('scr-grams').addEventListener('click', (e) => {
+  const set = e.target.closest('[data-grams-set]');
+  const add = e.target.closest('[data-grams-add]');
+  const w = e.target.closest('[data-weighed]');
+  if (set) $('gramsInput').value = set.getAttribute('data-grams-set');
+  else if (add) $('gramsInput').value = String(Math.max(0, (gramsValue() || 0) + Number(add.getAttribute('data-grams-add'))));
+  else if (w) gramsDraft.weighed = w.getAttribute('data-weighed');
+  else return;
+  renderGrams();
+});
+$('gramsSaveBtn').addEventListener('click', async () => {
+  const food = gramsDraft.food;
+  const g = gramsValue();
+  if (!food || !g) { showToast('請輸入公克數'); return; }
+  const cooked = Boolean(cookConversion(food)) && gramsDraft.weighed === 'cooked';
+  const n = nutrientsFor(food, g, cooked ? 'cooked' : 'asis');
+  const extra = { grams: g, foodId: food.id };
+  if (cooked) extra.weighed = 'cooked';
+  await addEntry({
+    name: food.name + ' ' + g + 'g' + (cooked ? '（熟重）' : ''),
+    nutr: { kcal: n.kcal, p: n.p, c: n.c, f: n.f, ex: n.ex },
+    meal: ui.meal, extra
+  });
+  closeScreen(); // 回到搜尋頁，可以接著記下一樣
+  $('foodSearch').value = '';
+  renderFoodResults();
+});
+
 /* ---------------- 全螢幕輸入頁 ---------------- */
 const screenStack = [];
 function openScreen(id) {
@@ -592,6 +744,8 @@ function openScreen(id) {
   renderMealSelector();
   renderDayPanel();
   if (id === 'scr-quick') { $('quickPickSearch').value = ''; renderQuickPick(); }
+  if (id === 'scr-food') { $('foodSearch').value = ''; renderFoodResults(); }
+  if (id === 'scr-grams') renderGrams();
   if (id === 'scr-est') renderEst();
   if (id === 'scr-weight') renderWeightHint();
   if (id === 'scr-water') renderWaterBig();

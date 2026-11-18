@@ -66,6 +66,11 @@
 | `p` `c` `f` | 蛋白質、碳水、脂肪（公克，可為 `null`） |
 | `ex` | 六大類份數 `{ grain, prot, veg, fruit, dairy, oil }`，只存非零值，可為 `null` |
 | `updatedAt` | 最後修改時間（舊資料可能沒有，視為 0） |
+| `grams` | （選填，v11 起）從「查食物」記錄時輸入的公克數 |
+| `foodId` | （選填，v11 起）食物資料庫的 id（`tfda_foods.json` 的 TFDA 整合編號） |
+| `weighed` | （選填，v11 起）`'cooked'`＝輸入的是熟重，已換算回生重計算 |
+
+匯入備份檔時（`normalizeEntry`／`normalizeQuick`），記錄和常吃清單裡看不懂的欄位會保留；只去掉 v1 的 `photo`（照片改存 IndexedDB）和 `baseKcal`。
 
 ### Day（每日身體數據與備註）
 
@@ -112,3 +117,4 @@
 | v3 | 2026-11-11 | 改成「同步」：新增 `updatedAt`、`tomb`、每日 `_t`、`targetsAt`、`profileAt`、`photoKey`；新增身體尺寸、`profile.height/sex`。 |
 | v3 | 2026-11-12 | 新增睡眠欄位 `sleepBed/sleepWake/sleepMin/sleepQ/naps`。睡眠歸屬日在當天改為「起床那天」（只有極少量測試資料用過「前一天」的規則，未做搬移）。 |
 | v3（App v9） | 2026-11-18 | 資料格式不變（`SYNC_VERSION` 仍是 3）。同步、匯入、匯出、本機儲存都會保留看不懂的最上層資料，為之後的自訂食物庫、套餐等新功能做準備。樣本：`backup-v3-extra-keys.json`。 |
+| v3（App v11） | 2026-11-19 | 飲食記錄新增選填欄位 `grams`、`foodId`、`weighed`（查食物・秤克數）。匯入時保留記錄與常吃清單的未知欄位（之前匯入會丟掉）。 |

@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/app.css?v=10" />
+  <link rel="stylesheet" href="css/app.css?v=11" />
 </head>
 <body class="bg-stone-50 text-stone-800 min-h-screen pb-24 sm:pb-10">
   <!-- Header -->
@@ -126,6 +126,7 @@
           <button type="button" data-screen="scr-photo" class="tile"><span class="tile-ic">📷</span><span class="tile-t">拍照記</span><span class="tile-s">先拍，熱量之後補</span></button>
           <button type="button" data-screen="scr-est" class="tile"><span class="tile-ic">✋</span><span class="tile-t">估份量</span><span class="tile-s">自助餐、家常菜</span></button>
           <button type="button" data-screen="scr-manual" class="tile"><span class="tile-ic">✏️</span><span class="tile-t">自己輸入</span><span class="tile-s">知道熱量時用</span></button>
+          <button type="button" data-screen="scr-food" class="tile col-span-2 tile-wide"><span class="tile-ic">🔍</span><span class="min-w-0"><span class="tile-t block">查食物・秤克數</span><span class="tile-s block">輸入名稱和克數，算出蛋白質等營養素</span></span></button>
         </div>
       </section>
 
@@ -368,6 +369,42 @@
       <button type="button" id="quickPickManage" class="text-sm text-stone-500 underline self-start py-2">管理清單（新增、修改、刪除項目）</button>
     </div>
     <div class="scr-foot"><button type="button" data-back class="btn-primary btn-xl w-full">完成</button></div>
+  </div>
+
+  <!-- 查食物（衛福部食品營養成分資料庫） -->
+  <div id="scr-food" class="screen hidden" role="dialog" aria-label="查食物">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>🔍 查食物</h2></div>
+    <div class="scr-body">
+      <div><div class="scr-label">記到哪一餐？</div><div class="meal-picker"></div></div>
+      <input id="foodSearch" type="search" class="field text-lg" placeholder="輸入食物，例如：雞胸肉、地瓜" autocomplete="off" />
+      <div id="foodResults" class="space-y-2"></div>
+      <p id="foodSource" class="text-sm text-stone-500 leading-relaxed"></p>
+    </div>
+    <div class="scr-foot"><button type="button" data-back class="btn-primary btn-xl w-full">完成</button></div>
+  </div>
+
+  <!-- 秤克數（從查食物點進來） -->
+  <div id="scr-grams" class="screen hidden" role="dialog" aria-label="吃了多少">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>⚖️ 吃了多少</h2></div>
+    <div class="scr-body">
+      <div>
+        <div id="gramsFoodName" class="text-xl font-bold text-stone-900 leading-snug break-words"></div>
+        <div id="gramsFoodNote" class="text-base text-stone-500"></div>
+      </div>
+      <div id="gramsCookWrap" class="hidden">
+        <div class="scr-label">秤的是？</div>
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" data-weighed="asis" id="gramsRawBtn" class="toggle-btn">生的</button>
+          <button type="button" data-weighed="cooked" id="gramsCookedBtn" class="toggle-btn">煮熟的</button>
+        </div>
+      </div>
+      <label class="block"><span class="scr-label">幾公克（g）</span>
+        <input id="gramsInput" type="number" inputmode="decimal" min="0" max="5000" step="1" class="field tabular-nums text-2xl" placeholder="例如：135" />
+      </label>
+      <div id="gramsResult" class="rounded-2xl bg-white border border-stone-200 p-4 space-y-2"></div>
+      <div id="gramsPresets" class="flex flex-wrap gap-2"></div>
+    </div>
+    <div class="scr-foot"><button type="button" id="gramsSaveBtn" class="btn-primary btn-xl w-full">儲存</button></div>
   </div>
 
   <!-- 拍照記 -->
@@ -791,6 +828,6 @@
     <button id="toastAction" type="button" class="hidden font-bold text-emerald-300 hover:text-emerald-200 shrink-0"></button>
   </div>
 
-  <script type="module" src="js/app.js?v=10"></script>
+  <script type="module" src="js/app.js?v=11"></script>
 </body>
 </html>

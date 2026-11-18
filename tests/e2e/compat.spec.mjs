@@ -79,6 +79,8 @@ test('含新版資料的備份檔：看不懂的最上層資料會保留，重�
   let s = await appState(page);
   expect(s.customFoods.map(x => x.id)).toEqual(['cf_1', 'cf_2']);
   expect(s.futureSettings).toMatchObject({ mode: 'auto' });
+  // 記錄裡新版才有的欄位也要保留
+  expect(s.logs['2026-11-12'].find(i => i.id === 'item_v3b')).toMatchObject({ grams: 135, foodId: 'I0410201', weighed: 'cooked', futureEntryField: 'x' });
   await page.reload();
   await page.waitForFunction(() => window.__dietApp);
   s = await appState(page);
@@ -96,4 +98,6 @@ test('最早單檔版的欄位（targetKcal）不會被當成新資料存起來'
   await importFile(page, fx('backup-v1-single-file.json'));
   const s = await appState(page);
   expect(s.targetKcal).toBeUndefined();
+  // v1 的照片 data URL 和 baseKcal 不會留在記錄裡
+  for (const it of s.logs['2026-10-01']) { expect(it.photo).toBeUndefined(); expect(it.baseKcal).toBeUndefined(); }
 });

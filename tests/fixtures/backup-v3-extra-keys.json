@@ -51,7 +51,11 @@
     "c": 12,
     "f": 14,
     "ex": null,
-    "updatedAt": 1794400000000
+    "updatedAt": 1794400000000,
+    "grams": 135,
+    "foodId": "I0410201",
+    "weighed": "cooked",
+    "futureEntryField": "x"
    }
   ]
  },

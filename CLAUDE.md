@@ -46,6 +46,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `sw.js` | Service worker：自己的檔案一律向伺服器確認最新版（`cache: 'no-cache'`），離線才用快取 |
 | `privacy.html` | 隱私權政策（Google 同意畫面有連到，不要刪） |
 | `docs/DATA_FORMAT.md` | 資料格式、版本沿革、相容性規則 |
+| `docs/ROADMAP.md` | 改進構想與優先順序（討論用；新想法補在「使用者的想法」） |
 | `tests/` | `unit/`（node:test）、`e2e/`（Playwright）、`fixtures/`（各版本的備份檔樣本） |
 
 重點機制：

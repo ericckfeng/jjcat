@@ -45,6 +45,8 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/config.js` | Google OAuth 用戶端 ID（公開值，可以放程式碼裡） |
 | `sw.js` | Service worker：自己的檔案一律向伺服器確認最新版（`cache: 'no-cache'`），離線才用快取 |
 | `privacy.html` | 隱私權政策（Google 同意畫面有連到，不要刪） |
+| `tfda_foods.json` | 衛福部 TFDA 食品營養成分資料（每 100g），由 `scripts/build_foods.py` 產生，**不要手改** |
+| `scripts/build_foods.py` | TFDA xlsx → `tfda_foods.json` 轉換程式（只用 Python 內建模組） |
 | `docs/DATA_FORMAT.md` | 資料格式、版本沿革、相容性規則 |
 | `docs/ROADMAP.md` | 改進構想與優先順序（討論用；新想法補在「使用者的想法」） |
 | `tests/` | `unit/`（node:test）、`e2e/`（Playwright）、`fixtures/`（各版本的備份檔樣本） |
@@ -67,6 +69,18 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
    - `index.html` 裡 `js/app.js?v=N` 和 `css/app.css?v=N`
    - 新增 JS 檔時，也要加進 `sw.js` 的 `CORE` 清單
 3. commit（英文 conventional commits），push 到 `main`。GitHub Pages 約 1 分鐘更新；GitHub 會讓檔案快取最多 10 分鐘。
+
+## 更新 TFDA 食品資料（TFDA 發佈新版 xlsx 時）
+
+1. 把新的 xlsx 放進專案（例如 `docs/`）。
+2. `python3 scripts/build_foods.py <xlsx>`：會列出和上一版的差異（新增／刪除／數值變更），先加 `--dry-run` 只看差異。
+3. 給使用者看差異摘要，確認沒問題再繼續。
+4. `npm test`（含 `tfda_foods.json` 格式檢查）、版本號加 1、commit、push。
+
+規則：
+- 食物 id 就是 TFDA「整合編號」，不能改。TFDA 刪掉的品項，程式會自動保留並標記 `removed`（舊記錄、套餐還找得到），不要手動刪掉。
+- 不要修改官方數字；使用者覺得不對的，存成自己的自訂食物。
+- 如果 TFDA 改了欄位名稱，程式會停下來並說明缺哪一欄，改 `COLS` 對照表即可。
 
 ## 外部服務
 

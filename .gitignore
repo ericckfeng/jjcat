@@ -3,3 +3,6 @@ test-results/
 playwright-report/
 .DS_Store
 ._*
+
+# TFDA 原始 xlsx 不放進 repo（tfda_foods.json 已記錄檔名與 sha256，需要時向 TFDA 重新下載）
+docs/*.xlsx

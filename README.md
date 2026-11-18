@@ -48,11 +48,24 @@ js/body.js            BMI 與身體量測標準
 js/mascot.js          小芽角色與鼓勵訊息
 js/config.js          Google OAuth 用戶端 ID
 privacy.html          隱私權政策（Google 同意畫面需要）
+docs/DATA_FORMAT.md   資料格式與相容性規則
+tests/                單元測試、e2e 測試、各版本備份檔樣本
 sw.js                 離線快取
 manifest.webmanifest  App 名稱與圖示
 ```
 
 修改後直接 push 到 `main`，GitHub Pages 約 1 分鐘內更新；手機上關掉 App 重開即可拿到新版。
+
+## 開發
+
+用 Claude Code 開發時會自動讀 [`CLAUDE.md`](CLAUDE.md)（架構、發佈步驟、外部服務）。資料格式與「不能弄壞舊資料」的規則在 [`docs/DATA_FORMAT.md`](docs/DATA_FORMAT.md)。
+
+```bash
+npm run serve        # 本機預覽 http://localhost:8000
+npm test             # 單元測試（不用安裝套件）
+npm install && npx playwright install chromium
+npm run test:e2e     # 瀏覽器測試：各版本備份檔匯入＋主要流程
+```
 
 ## 備註
 

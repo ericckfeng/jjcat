@@ -1,0 +1,107 @@
+# 資料格式與相容性
+
+這份文件記錄飲控隨身記所有「會留在使用者那邊」的資料格式。這些資料存在使用者的手機、電腦和 Google 雲端硬碟裡，改程式時**不能讓它們讀不進來**。
+
+## 相容性規則（改程式前必讀）
+
+1. **只增不刪不改名**：新增欄位可以；不要刪除或改名既有欄位，也不要改變既有欄位的意義或單位（例如 `sleepMin` 永遠是「分鐘」）。
+2. **讀取時要容錯**：任何欄位都可能不存在（舊資料）或是 `null`。讀取一律用預設值，不要假設欄位一定在。
+3. **儲存位置名稱不能改**：`localStorage` 的 `diet_tracker_v2`、IndexedDB 的 `diet-tracker`／`photos`、雲端硬碟的「飲控隨身記」資料夾、「照片」子資料夾、`飲控隨身記備份.json` 檔名，改了就找不到使用者的資料。
+4. **舊版備份檔一定要能匯入**：`tests/fixtures/` 裡每個版本的樣本都要通過 `npm run test:e2e` 的匯入測試。新增資料版本時，加一份新樣本。
+5. **同步會在新舊版本 App 之間進行**：使用者的手機可能還是舊版、電腦已是新版。新欄位必須讓舊版 App「看不懂但會原樣保留」：
+   - 每日資料（`days`）放新欄位最安全：合併是逐欄位進行，舊版會保留它不認得的欄位。
+   - 飲食記錄、常吃清單：整筆以 `updatedAt` 比較，舊版會整筆保留。
+   - 不要在合併規則（`js/sync.js`）裡做會丟掉未知欄位的事。
+6. **需要搬移資料時**：寫成「讀取時轉換」或一次性搬移，並在 `meta` 記一個旗標避免重複執行。要考慮同步：兩台裝置可能都各自搬移一次，搬移結果必須相同（冪等），不能因為重複搬移而錯位。
+7. **時間戳**：所有 `updatedAt`、`_t`、`tomb` 的值都是毫秒（`Date.now()`）。合併時數字大的勝出。
+8. **SYNC_VERSION** 只在資料結構有不相容變化時才加 1，並在下方「版本沿革」記錄。目前沒有任何地方因版本號拒絕資料，請維持這樣。
+
+## 儲存位置
+
+| 位置 | 名稱 | 內容 |
+|---|---|---|
+| localStorage | `diet_tracker_v2` | 整個 `state`（JSON） |
+| localStorage | `daily_calorie_tracker_v1` | 最早的單檔版本；第一次開啟新版時會自動匯入（只讀） |
+| localStorage | `diet_gdrive_token` | Google 存取權杖 `{ token, exp }`，約 1 小時過期 |
+| localStorage | `diet_gdrive_pending` | 跳轉去 Google 登入前暫存的 `{ state, action, silent, at }` |
+| sessionStorage | `diet_reauth_at`、`diet_silent_tried` | 防止登入無限重試 |
+| IndexedDB | 資料庫 `diet-tracker` v1，store `photos` | key＝飲食記錄的 `id`，value＝JPEG 的 data URL |
+| Google 雲端硬碟 | `飲控隨身記/飲控隨身記備份.json` | 同步資料（不含照片） |
+| Google 雲端硬碟 | `飲控隨身記/照片/<photoKey>.jpg` | 照片，`appProperties.itemId` = photoKey |
+
+## `state` 結構（localStorage `diet_tracker_v2`）
+
+```js
+{
+  targets:   { kcal, p, c, f, ex: { grain, prot, veg, fruit, dairy, oil }, weight },
+  targetsAt: 0,                      // targets 的修改時間（同步用）
+  profile:   { name, height, sex },  // sex: 'm' | 'f' | null；height 公分
+  profileAt: 0,
+  logs:      { 'YYYY-MM-DD': [Entry, ...] },
+  days:      { 'YYYY-MM-DD': Day },
+  quickItems:[QuickItem, ...],
+  tomb:      { 'e:<entryId>': 刪除時間, 'q:<quickItemId>': 刪除時間 },
+  meta:      { ...只存在這台裝置，不同步... }
+}
+```
+
+### Entry（一筆飲食記錄）
+
+| 欄位 | 說明 |
+|---|---|
+| `id` | `item_xxxx`，唯一 |
+| `name` | 食物名稱 |
+| `kcal` | 這筆的**總**熱量（已乘上份數） |
+| `multiplier` | 份數（只是顯示用，kcal 已經乘過） |
+| `meal` | `breakfast` / `lunch` / `dinner` / `snack` |
+| `time` | `HH:MM` |
+| `pending` | 是否「暫估待修」 |
+| `hasPhoto` | 是否有照片（照片在 IndexedDB，key = `id`） |
+| `photoKey` | 照片版本（沒有時等於 `id`；編輯換照片時變成 `id-時間`） |
+| `p` `c` `f` | 蛋白質、碳水、脂肪（公克，可為 `null`） |
+| `ex` | 六大類份數 `{ grain, prot, veg, fruit, dairy, oil }`，只存非零值，可為 `null` |
+| `updatedAt` | 最後修改時間（舊資料可能沒有，視為 0） |
+
+### Day（每日身體數據與備註）
+
+每個欄位都可能不存在。`_t` 記錄每個欄位最後修改的時間（同步逐欄位合併用）；欄位被清空時，值會刪掉但 `_t` 保留，表示「這個時間點被清空」。
+
+| 欄位 | 單位／值 |
+|---|---|
+| `weight` | 公斤 |
+| `waist` `hip` `arm` `thigh` `chest` | 公分（arm＝上臂圍、thigh＝大腿圍） |
+| `bodyFat` | % |
+| `water` | ml |
+| `exercise` | 文字；`exMin` 分鐘 |
+| `hunger` `mood` | 1–5 |
+| `bowel` | 0／1／2（無／1 次／2 次以上） |
+| `note` `question` | 文字（question＝想問營養師） |
+| `sleepBed` `sleepWake` | `HH:MM`。**昨晚的睡眠記在起床那天**（2026-11-12 起） |
+| `sleepMin` | 夜間睡眠分鐘數（跨午夜自動 +24 小時） |
+| `sleepQ` | 睡眠品質 1–5 |
+| `naps` | 補眠 `[{ id, min }]`，記在當天 |
+| `_t` | `{ 欄位名: 修改時間 }` |
+
+### QuickItem（常吃清單）
+
+`{ id, name, kcal, cat, isFav, p, c, f, ex, updatedAt }`，`cat` 為 `fav` / `breakfast` / `meal` / `drink`。預設項目 id 為 `f1`…`f17`。
+
+### meta（只存在這台裝置）
+
+`deviceId`、`fontSize`（`m`/`l`/`xl`）、`mascot`（false＝關閉小芽）、`lastCheer`、`installHintDismissed`、`lastBackup`、`photoVer`（`{ entryId: 本機照片的 photoKey }`）、`cloud: { linked, email, auto, lastSync, lastBackup, knownModified, dirty, needAuth }`。
+
+## 匯出／同步檔案格式
+
+- **雲端同步檔**（`飲控隨身記備份.json`）：`{ app: 'diet-tracker', version, targets, targetsAt, profile, profileAt, logs, days, quickItems, tomb }`，不含照片。
+- **下載的完整備份**：同上，另加 `exportedAt` 和 `photos: { entryId: dataURL }`。
+- **匯入**（`mergeImport()`）接受以上所有版本，以及最早的 v1 格式，一律「合併」，相同 `id` 不重複。
+
+## 版本沿革
+
+| 版本 | 日期 | 變化 |
+|---|---|---|
+| v1 | 2026-11 以前 | 單一 HTML 檔「每日飲食熱量隨身記」。localStorage `daily_calorie_tracker_v1`：`{ targetKcal, logs, quickItems }`，照片以 data URL 直接放在記錄的 `photo` 欄位，記錄有 `baseKcal`。 |
+| v2 | 2026-11-11 | 改成 PWA。`state` 改存 `diet_tracker_v2`；照片移到 IndexedDB（記錄只留 `hasPhoto`）；新增 `targets`、`days`、`profile`；備份檔加 `photos` 對照表。 |
+| v2（雲端備份） | 2026-11-11 | Google 雲端硬碟「備份／還原」：上傳同樣格式的 JSON 與照片檔，`appProperties` 記錄 `deviceId`。 |
+| v3 | 2026-11-11 | 改成「同步」：新增 `updatedAt`、`tomb`、每日 `_t`、`targetsAt`、`profileAt`、`photoKey`；新增身體尺寸、`profile.height/sex`。 |
+| v3 | 2026-11-12 | 新增睡眠欄位 `sleepBed/sleepWake/sleepMin/sleepQ/naps`。睡眠歸屬日在當天改為「起床那天」（只有極少量測試資料用過「前一天」的規則，未做搬移）。 |

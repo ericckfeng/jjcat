@@ -1,0 +1,87 @@
+{
+ "app": "diet-tracker",
+ "version": 2,
+ "exportedAt": "2026-11-11T09:00:00.000Z",
+ "targets": {
+  "kcal": 1500,
+  "p": 80,
+  "c": 180,
+  "f": 50,
+  "ex": {
+   "grain": 8,
+   "prot": 5,
+   "veg": 3
+  },
+  "weight": 68
+ },
+ "profile": {
+  "name": "測試者"
+ },
+ "logs": {
+  "2026-11-10": [
+   {
+    "id": "item_v2a",
+    "name": "鮪魚蛋餅",
+    "kcal": 350,
+    "multiplier": 1,
+    "meal": "breakfast",
+    "time": "08:00",
+    "pending": false,
+    "hasPhoto": true,
+    "p": 15,
+    "c": 40,
+    "f": 12,
+    "ex": {
+     "grain": 2,
+     "prot": 1
+    }
+   },
+   {
+    "id": "item_v2b",
+    "name": "自選組合",
+    "kcal": 310,
+    "multiplier": 1,
+    "meal": "dinner",
+    "time": "18:30",
+    "pending": false,
+    "hasPhoto": false,
+    "p": null,
+    "c": null,
+    "f": null,
+    "ex": null
+   }
+  ]
+ },
+ "days": {
+  "2026-11-10": {
+   "weight": 70.2,
+   "waist": 88,
+   "water": 750,
+   "exercise": "快走",
+   "exMin": 30,
+   "hunger": 3,
+   "mood": 4,
+   "bowel": 1,
+   "note": "加班",
+   "question": "晚上嘴饞怎麼辦？"
+  }
+ },
+ "quickItems": [
+  {
+   "id": "f1",
+   "name": "茶葉蛋 (1顆)",
+   "kcal": 77,
+   "cat": "breakfast",
+   "p": 7,
+   "c": 0,
+   "f": 5,
+   "ex": {
+    "prot": 1
+   },
+   "isFav": false
+  }
+ ],
+ "photos": {
+  "item_v2a": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCAAQABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDRooorwT2z/9k="
+ }
+}

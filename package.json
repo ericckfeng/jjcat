@@ -1,0 +1,14 @@
+{
+  "name": "jjcat-diet-tracker",
+  "private": true,
+  "description": "飲控隨身記：手機飲食記錄 PWA（GitHub Pages，無建置步驟）",
+  "type": "module",
+  "scripts": {
+    "serve": "python3 -m http.server 8000",
+    "test": "node --test \"tests/unit/*.test.mjs\"",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

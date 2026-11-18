@@ -1,0 +1,110 @@
+{
+ "app": "diet-tracker",
+ "version": 3,
+ "exportedAt": "2026-11-12T08:00:00.000Z",
+ "targets": {
+  "kcal": 1800,
+  "p": null,
+  "c": null,
+  "f": null,
+  "ex": {},
+  "weight": 68
+ },
+ "targetsAt": 1794400000000,
+ "profile": {
+  "name": "",
+  "height": 168,
+  "sex": "m"
+ },
+ "profileAt": 1794400000000,
+ "logs": {
+  "2026-11-12": [
+   {
+    "id": "item_v3a",
+    "name": "燕麥牛奶",
+    "kcal": 260,
+    "multiplier": 1,
+    "meal": "breakfast",
+    "time": "07:30",
+    "pending": false,
+    "hasPhoto": true,
+    "photoKey": "item_v3a-1794400100000",
+    "p": 12,
+    "c": 35,
+    "f": 7,
+    "ex": {
+     "grain": 2,
+     "dairy": 1
+    },
+    "updatedAt": 1794400100000
+   },
+   {
+    "id": "item_v3b",
+    "name": "雞胸沙拉",
+    "kcal": 320,
+    "multiplier": 1,
+    "meal": "lunch",
+    "time": "12:10",
+    "pending": false,
+    "hasPhoto": false,
+    "p": 30,
+    "c": 12,
+    "f": 14,
+    "ex": null,
+    "updatedAt": 1794400000000
+   }
+  ]
+ },
+ "days": {
+  "2026-11-12": {
+   "weight": 70.6,
+   "waist": 89.5,
+   "hip": 100,
+   "arm": 31,
+   "thigh": 55,
+   "chest": 98,
+   "bodyFat": 24.5,
+   "sleepBed": "23:30",
+   "sleepWake": "07:00",
+   "sleepMin": 450,
+   "sleepQ": 4,
+   "naps": [
+    {
+     "id": "nap_1",
+     "min": 30
+    }
+   ],
+   "_t": {
+    "weight": 1794400000000,
+    "waist": 1794400000000,
+    "hip": 1794400000000,
+    "arm": 1794400000000,
+    "thigh": 1794400000000,
+    "chest": 1794400000000,
+    "bodyFat": 1794400000000,
+    "sleepBed": 1794400000000,
+    "sleepWake": 1794400000000,
+    "sleepMin": 1794400000000,
+    "sleepQ": 1794400000000,
+    "naps": 1794400000000,
+    "water": 1794400000000
+   }
+  }
+ },
+ "quickItems": [
+  {
+   "id": "qi_v3",
+   "name": "全家烤地瓜",
+   "kcal": 185,
+   "cat": "fav",
+   "isFav": true,
+   "updatedAt": 1794400000000
+  }
+ ],
+ "tomb": {
+  "e:item_deleted": 1794400000000
+ },
+ "photos": {
+  "item_v3a": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCAAQABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDRooorwT2z/9k="
+ }
+}

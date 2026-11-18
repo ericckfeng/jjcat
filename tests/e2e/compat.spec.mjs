@@ -72,3 +72,28 @@ test('瀏覽器裡還留著最早單檔版的資料時，第一次開啟會自�
   expect(s.logs['2026-10-01']).toHaveLength(2);
   expect(s.targets.kcal).toBe(1600);
 });
+
+test('含新版資料的備份檔：看不懂的最上層資料會保留，重新整理、再匯出都還在', async ({ page }) => {
+  await openApp(page);
+  await importFile(page, fx('backup-v3-extra-keys.json'));
+  let s = await appState(page);
+  expect(s.customFoods.map(x => x.id)).toEqual(['cf_1', 'cf_2']);
+  expect(s.futureSettings).toMatchObject({ mode: 'auto' });
+  await page.reload();
+  await page.waitForFunction(() => window.__dietApp);
+  s = await appState(page);
+  expect(s.customFoods.map(x => x.id)).toEqual(['cf_1', 'cf_2']);
+  await page.click('.mobile-nav-tab[data-tab=report]');
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#exportJsonBtn')]);
+  const out = JSON.parse(readFileSync(await download.path(), 'utf8'));
+  expect(out.customFoods.map(x => x.id)).toEqual(['cf_1', 'cf_2']);
+  expect(out.futureSettings).toMatchObject({ mode: 'auto' });
+  expect(out.meta).toBeUndefined();
+});
+
+test('最早單檔版的欄位（targetKcal）不會被當成新資料存起來', async ({ page }) => {
+  await openApp(page);
+  await importFile(page, fx('backup-v1-single-file.json'));
+  const s = await appState(page);
+  expect(s.targetKcal).toBeUndefined();
+});

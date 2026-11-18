@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { mergeData, stableStringify } from '../../js/sync.js';
+import { mergeData, stableStringify, syncShape, extraKeys } from '../../js/sync.js';
 
 const T0 = Date.now() - 1000;
 const base = () => ({ targets: { kcal: 1800 }, targetsAt: 0, profile: { name: '' }, profileAt: 0, logs: {}, days: {}, quickItems: [], tomb: {} });
@@ -94,4 +94,71 @@ test('v2 舊雲端備份（無 updatedAt／tomb／_t）可和 v3 本機資料合
   assert.equal(m.days['2026-11-10'].weight, 70.2);
   assert.equal(m.days['2026-11-12'].sleepMin, 450);
   assert.equal(m.targets.kcal, 1800, 'v3 有 targetsAt，勝過沒有時間戳的 v2');
+});
+
+// ---- 新版才有的最上層資料（例如自訂食物庫）：舊資料、舊雲端檔都不能讓它消失 ----
+const food = (id, at, extra = {}) => ({ id, name: id, updatedAt: T0 + at, ...extra });
+
+test('最上層的新資料：只有一邊有時原樣保留（雲端還是舊版格式）', () => {
+  const A = base(); const B = base();
+  A.customFoods = [food('f1', 1)]; A.settingsX = { mode: 'auto', updatedAt: T0 + 1 };
+  const m = mergeData(A, B);
+  assert.deepEqual(m.customFoods.map(x => x.id), ['f1']);
+  assert.equal(m.settingsX.mode, 'auto');
+  const m2 = mergeData(B, A);
+  assert.deepEqual(m2.customFoods.map(x => x.id), ['f1']);
+  assert.equal(m2.settingsX.mode, 'auto');
+});
+test('最上層的新清單：以 id 合併、較新的勝出', () => {
+  const A = base(); const B = base();
+  A.customFoods = [food('f1', 1, { kcal: 100 }), food('f2', 1)];
+  B.customFoods = [food('f1', 5, { kcal: 120 }), food('f3', 2)];
+  const m = mergeData(A, B);
+  assert.deepEqual(m.customFoods.map(x => x.id + ':' + (x.kcal || '')), ['f1:120', 'f2:', 'f3:']);
+});
+test('最上層的新清單：刪除標記 <key>:<id> 會生效，也不會被舊資料救回', () => {
+  const A = base(); const B = base();
+  A.customFoods = [food('f1', 1), food('f2', 1)]; A.tomb = { 'customFoods:f1': T0 + 3 };
+  B.customFoods = [food('f1', 2)];
+  const m = mergeData(A, B);
+  assert.deepEqual(m.customFoods.map(x => x.id), ['f2']);
+  assert.deepEqual(mergeData(B, m).customFoods.map(x => x.id), ['f2']);
+});
+test('最上層的新物件：整組以 updatedAt 較新的勝出，時間相同時兩邊結果一致', () => {
+  const A = base(); const B = base();
+  A.settingsX = { v: 1, updatedAt: T0 + 9 }; B.settingsX = { v: 2, updatedAt: T0 + 5 };
+  assert.equal(mergeData(A, B).settingsX.v, 1);
+  assert.equal(mergeData(B, A).settingsX.v, 1);
+  A.flag = 'a'; B.flag = 'b';
+  assert.equal(mergeData(A, B).flag, mergeData(B, A).flag);
+  B.settingsX = { v: 3, updatedAt: T0 + 9 };
+  assert.equal(mergeData(A, B).settingsX.v, mergeData(B, A).settingsX.v);
+});
+test('最上層的新資料：合併與順序無關，重複合併結果不變', () => {
+  const A = base(); const B = base();
+  A.customFoods = [food('f1', 1)]; B.customFoods = [food('f2', 2)]; B.combos = [food('c1', 3)];
+  const sortIds = (m) => { const c = JSON.parse(JSON.stringify(m)); for (const k of ['customFoods', 'combos']) c[k].sort((x, y) => (x.id < y.id ? -1 : 1)); return stableStringify(c); };
+  const m1 = mergeData(A, B);
+  assert.equal(sortIds(m1), sortIds(mergeData(B, A)));
+  assert.equal(sortIds(m1), sortIds(mergeData(m1, m1)));
+});
+test('檔案外框與本機設定不會被當成同步資料', () => {
+  const file = { app: 'diet-tracker', version: 3, exportedAt: 'x', photos: {}, meta: { deviceId: 'd' }, customFoods: [] };
+  assert.deepEqual(extraKeys(file), ['customFoods']);
+  const s = syncShape(file);
+  assert.equal(s.app, undefined); assert.equal(s.photos, undefined); assert.equal(s.meta, undefined);
+  assert.deepEqual(s.customFoods, []);
+});
+test('syncShape 會補上預設值並帶著新資料', () => {
+  const s = syncShape({ customFoods: [food('f1', 1)] });
+  assert.deepEqual(s.logs, {}); assert.deepEqual(s.quickItems, []); assert.deepEqual(s.tomb, {});
+  assert.equal(s.customFoods[0].id, 'f1');
+});
+test('含新資料的備份樣本可和 v3 資料合併，新資料保留', () => {
+  const local = syncShape(fixture('backup-v3-sync.json'));
+  const remote = syncShape(fixture('backup-v3-extra-keys.json'));
+  const m = mergeData(local, remote);
+  assert.deepEqual(m.customFoods.map(x => x.id), ['cf_1', 'cf_2']);
+  assert.equal(m.futureSettings.mode, 'auto');
+  assert.ok(m.logs['2026-11-12'].length === 2);
 });

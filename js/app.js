@@ -5,7 +5,7 @@ import {
 import { photoDB } from './db.js';
 import { REPORT_CSS, buildReportHTML, buildReportText } from './report.js';
 import * as cloud from './cloud.js';
-import { mergeData, stableStringify, SYNC_VERSION } from './sync.js';
+import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VERSION } from './sync.js';
 import { MEASURES, MEASURE_META, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
 import { mascotSVG, buildMascotMessages } from './mascot.js';
 
@@ -182,6 +182,7 @@ function applyLoaded(p) {
   if (p.tomb && typeof p.tomb === 'object') state.tomb = p.tomb;
   state.targetsAt = Number(p.targetsAt) || 0;
   state.profileAt = Number(p.profileAt) || 0;
+  Object.assign(state, pickExtras(p)); // 新版才有的資料（舊版也要原樣保留）
 }
 
 // 合併匯入（相容舊版 v1：targetKcal + 照片直接放在記錄裡）
@@ -238,6 +239,8 @@ async function mergeImport(data) {
       if (q && q.id && q.name && !state.quickItems.some(x => x.id === q.id)) state.quickItems.push(normalizeQuick(q));
     });
   }
+  // 新版才有的資料：照同步規則合併（只認本 App 的備份檔，最早的 v1 檔沒有這類資料）
+  if (data.app === 'diet-tracker') Object.assign(state, mergeExtras(pickExtras(state), pickExtras(data), state.tomb));
   return { added, photos };
 }
 
@@ -1809,6 +1812,7 @@ function buildPayload() {
 }
 function syncData() {
   return {
+    ...pickExtras(state),
     targets: state.targets, targetsAt: state.targetsAt, profile: state.profile, profileAt: state.profileAt,
     logs: state.logs, days: state.days, quickItems: state.quickItems, tomb: state.tomb
   };
@@ -2003,12 +2007,6 @@ async function cloudRun(action, { auto = false } = {}) {
   }
 }
 
-function syncShape(d) {
-  return {
-    targets: d.targets, targetsAt: Number(d.targetsAt) || 0, profile: d.profile || {}, profileAt: Number(d.profileAt) || 0,
-    logs: d.logs || {}, days: d.days || {}, quickItems: Array.isArray(d.quickItems) ? d.quickItems : [], tomb: d.tomb || {}
-  };
-}
 function applySyncData(d) {
   state.targets = { ...DEFAULT_TARGETS, ...(d.targets || {}), ex: { ...((d.targets && d.targets.ex) || {}) } };
   state.targetsAt = d.targetsAt;
@@ -2018,6 +2016,7 @@ function applySyncData(d) {
   state.days = d.days;
   state.quickItems = d.quickItems;
   state.tomb = d.tomb;
+  Object.assign(state, pickExtras(d));
 }
 function photoKeyOf(it) { return it.photoKey || it.id; }
 

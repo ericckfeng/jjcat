@@ -36,6 +36,8 @@ export async function photoBytes(page, id) {
 
 export async function importFile(page, file) {
   await page.click('.mobile-nav-tab[data-tab=report]');
+  // 清掉上一次的提示，否則連續匯入時會誤認為已完成
+  await page.evaluate(() => { document.getElementById('toastMsg').textContent = ''; });
   await page.setInputFiles('#importJsonInput', file);
   await page.click('#confirmOkBtn');
   await page.waitForFunction(() => /匯入完成|匯入失敗/.test(document.getElementById('toastMsg').textContent));

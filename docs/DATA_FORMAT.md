@@ -11,6 +11,10 @@
 5. **同步會在新舊版本 App 之間進行**：使用者的手機可能還是舊版、電腦已是新版。新欄位必須讓舊版 App「看不懂但會原樣保留」：
    - 每日資料（`days`）放新欄位最安全：合併是逐欄位進行，舊版會保留它不認得的欄位。
    - 飲食記錄、常吃清單：整筆以 `updatedAt` 比較，舊版會整筆保留。
+   - **最上層新資料**（例如自訂食物庫、套餐）：2026-11-18（v9）起的 App 會原樣保留看不懂的最上層資料。但**更早的 App 同步時會把它丟掉**，所以第一個寫入最上層新資料的功能，要等使用者裝置都更新到 v9 以後才能發佈。形狀必須是下列其中一種（見 `js/sync.js` 的 `mergeExtra()`）：
+     - 清單 `[{ id, updatedAt, ... }]`：以 `id` 合併、`updatedAt` 較新的勝出；刪除用 `tomb['<key>:<id>']`（例如 `customFoods:abc`）。`e:`、`q:` 已被飲食記錄和常吃清單使用。
+     - 物件 `{ updatedAt, ... }`：整組比較，較新的勝出。
+     - 名稱不能用 `app`、`version`、`exportedAt`、`photos`、`meta`（檔案外框和本機設定）。
    - 不要在合併規則（`js/sync.js`）裡做會丟掉未知欄位的事。
 6. **需要搬移資料時**：寫成「讀取時轉換」或一次性搬移，並在 `meta` 記一個旗標避免重複執行。要考慮同步：兩台裝置可能都各自搬移一次，搬移結果必須相同（冪等），不能因為重複搬移而錯位。
 7. **時間戳**：所有 `updatedAt`、`_t`、`tomb` 的值都是毫秒（`Date.now()`）。合併時數字大的勝出。
@@ -40,7 +44,8 @@
   logs:      { 'YYYY-MM-DD': [Entry, ...] },
   days:      { 'YYYY-MM-DD': Day },
   quickItems:[QuickItem, ...],
-  tomb:      { 'e:<entryId>': 刪除時間, 'q:<quickItemId>': 刪除時間 },
+  tomb:      { 'e:<entryId>': 刪除時間, 'q:<quickItemId>': 刪除時間, '<key>:<id>': 刪除時間 },
+  ...其他最上層資料（新版功能用，見相容性規則 5）,
   meta:      { ...只存在這台裝置，不同步... }
 }
 ```
@@ -94,7 +99,8 @@
 
 - **雲端同步檔**（`飲控隨身記備份.json`）：`{ app: 'diet-tracker', version, targets, targetsAt, profile, profileAt, logs, days, quickItems, tomb }`，不含照片。
 - **下載的完整備份**：同上，另加 `exportedAt` 和 `photos: { entryId: dataURL }`。
-- **匯入**（`mergeImport()`）接受以上所有版本，以及最早的 v1 格式，一律「合併」，相同 `id` 不重複。
+- 兩種檔案都會帶著其他最上層資料（相容性規則 5）。
+- **匯入**（`mergeImport()`）接受以上所有版本；其他最上層資料只從本 App 的檔案（`app: 'diet-tracker'`）照同步規則合併，最早的 v1 檔不會帶入，以及最早的 v1 格式，一律「合併」，相同 `id` 不重複。
 
 ## 版本沿革
 
@@ -105,3 +111,4 @@
 | v2（雲端備份） | 2026-11-11 | Google 雲端硬碟「備份／還原」：上傳同樣格式的 JSON 與照片檔，`appProperties` 記錄 `deviceId`。 |
 | v3 | 2026-11-11 | 改成「同步」：新增 `updatedAt`、`tomb`、每日 `_t`、`targetsAt`、`profileAt`、`photoKey`；新增身體尺寸、`profile.height/sex`。 |
 | v3 | 2026-11-12 | 新增睡眠欄位 `sleepBed/sleepWake/sleepMin/sleepQ/naps`。睡眠歸屬日在當天改為「起床那天」（只有極少量測試資料用過「前一天」的規則，未做搬移）。 |
+| v3（App v9） | 2026-11-18 | 資料格式不變（`SYNC_VERSION` 仍是 3）。同步、匯入、匯出、本機儲存都會保留看不懂的最上層資料，為之後的自訂食物庫、套餐等新功能做準備。樣本：`backup-v3-extra-keys.json`。 |

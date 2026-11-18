@@ -93,7 +93,7 @@
 
 ### meta（只存在這台裝置）
 
-`deviceId`、`fontSize`（`m`/`l`/`xl`）、`mascot`（false＝關閉小芽）、`lastCheer`、`installHintDismissed`、`lastBackup`、`photoVer`（`{ entryId: 本機照片的 photoKey }`）、`cloud: { linked, email, auto, lastSync, lastBackup, knownModified, dirty, needAuth }`。
+`deviceId`、`welcomed`（true＝這台裝置已經選過歡迎畫面的開始方式）、`fontSize`（`m`/`l`/`xl`）、`mascot`（false＝關閉小芽）、`lastCheer`、`installHintDismissed`、`lastBackup`、`photoVer`（`{ entryId: 本機照片的 photoKey }`）、`cloud: { linked, email, auto, lastSync, lastBackup, knownModified, dirty, needAuth }`。
 
 ## 匯出／同步檔案格式
 

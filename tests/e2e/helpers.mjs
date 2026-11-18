@@ -10,7 +10,8 @@ export async function stubCdn(page) {
   await page.route('https://fonts.gstatic.com/**', r => r.fulfill({ body: '' }));
 }
 
-export async function openApp(page, { errors } = {}) {
+// keepWelcome：保留新裝置的歡迎畫面（預設會按「直接開始」關掉，方便測其他流程）
+export async function openApp(page, { errors, keepWelcome = false } = {}) {
   await stubCdn(page);
   if (errors) {
     page.on('pageerror', e => errors.push(String(e)));
@@ -18,6 +19,7 @@ export async function openApp(page, { errors } = {}) {
   }
   await page.goto('/');
   await page.waitForFunction(() => window.__dietApp);
+  if (!keepWelcome && await page.isVisible('#scr-welcome')) await page.click('#welcomeStartBtn');
 }
 
 export const appState = (page) => page.evaluate(() => JSON.parse(JSON.stringify(window.__dietApp.state)));

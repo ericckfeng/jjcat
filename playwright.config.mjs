@@ -6,15 +6,15 @@ export default defineConfig({
   timeout: 30000,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:4173/',
+    baseURL: 'http://127.0.0.1:4173/',
     viewport: { width: 390, height: 844 },
     serviceWorkers: 'block',
     // 沒有用 npx playwright install 的環境，可用 CHROME_PATH 指定瀏覽器
     launchOptions: process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}
   },
   webServer: {
-    command: 'python3 -m http.server 4173',
-    url: 'http://localhost:4173/',
+    command: 'node tests/e2e/server.mjs',
+    url: 'http://127.0.0.1:4173/',
     reuseExistingServer: true,
     stdout: 'ignore',
     stderr: 'ignore'

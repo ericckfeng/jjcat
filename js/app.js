@@ -1368,6 +1368,32 @@ $('goBackupBtn').addEventListener('click', () => {
   if ($('backupBanner').dataset.mode === 'reauth') { startSignIn('sync'); return; }
   goToCloudSection();
 });
+/* ---------------- 歡迎（新裝置第一次打開） ---------------- */
+// 只在這台裝置沒有任何資料、也沒連結雲端時出現；選過一次就不再出現（meta.welcomed 只存本機）
+function shouldWelcome() {
+  return !state.meta.welcomed && !state.meta.cloud.linked && !hasLocalData();
+}
+function finishWelcome() {
+  state.meta.welcomed = true;
+  persistLocal();
+  closeScreen();
+}
+$('welcomeCloudBtn').classList.toggle('hidden', !cloud.isConfigured());
+$('welcomeCloudBtn').addEventListener('click', () => {
+  if (cloud.isBlockedInAppBrowser()) { $('welcomeInAppWarn').classList.remove('hidden'); return; }
+  // 先回到雲端區塊再登入，登入失敗的訊息才看得到
+  finishWelcome();
+  goToCloudSection();
+  setTimeout(() => cloudRun('connect'), 300);
+});
+$('welcomeImportBtn').addEventListener('click', () => {
+  $('importJsonInput').click();
+  finishWelcome();
+  switchTab('report');
+  setTimeout(() => $('backupSection').scrollIntoView({ behavior: 'smooth' }), 50);
+});
+$('welcomeStartBtn').addEventListener('click', finishWelcome);
+
 function goToCloudSection() {
   switchTab('report');
   const target = cloud.isConfigured() ? $('cloudSection') : $('backupSection');
@@ -2031,6 +2057,7 @@ async function doSync({ auto, first }) {
     if (!auto) setCloudStatus('✓ 已經是最新的了（' + fmtTime(c.lastSync) + '）', 'ok');
     return;
   }
+  const wasEmpty = !hasLocalData();
   const local = syncShape(syncData());
   const localStr = stableStringify(local);
   const remote = info.exists ? syncShape(await cloud.downloadData(info.fileId)) : null;
@@ -2092,6 +2119,13 @@ async function doSync({ auto, first }) {
   if (toUpload.length) extra.push('上傳 ' + toUpload.length + ' 張照片');
   if (toDownload.length) extra.push('下載 ' + toDownload.length + ' 張照片');
   if (first) {
+    const days = Object.values(state.logs).filter(l => l && l.length).length;
+    if (wasEmpty && remote && days) {
+      setCloudStatus('✓ 已取回 ' + days + ' 天的記錄，之後會自動同步' + (extra.length ? '（' + extra.join('、') + '）' : ''), 'ok');
+      showToast('已取回 ' + days + ' 天的記錄 ✓');
+      switchTab('log');
+      return;
+    }
     setCloudStatus('✓ 已連結並同步' + (remote ? '：這台裝置和雲端的資料已合併' : '') + (extra.length ? '（' + extra.join('、') + '）' : ''), 'ok');
     showToast('已連結 Google 雲端，之後會自動同步');
   } else {
@@ -2168,6 +2202,7 @@ document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click',
     }
   } else {
     autoSyncOnOpen();
+    if (shouldWelcome()) openScreen('scr-welcome');
   }
   if (navigator.storage && navigator.storage.persist) {
     try { await navigator.storage.persist(); } catch (e) { /* ignore */ }

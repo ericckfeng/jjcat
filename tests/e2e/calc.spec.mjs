@@ -109,11 +109,10 @@ test('體重和試算時差 2 公斤：小芽提醒重算；手動改過目標�
 test('有 InBody 基礎代謝：預設用它，可以切回公式；只填體重也能算', async ({ page }) => {
   await seed(page, { days: { [ago(9)]: { weight: 80, bmr: 1720 }, [ago(0)]: { weight: 80 } } });
   await openApp(page);
-  // 體重・尺寸頁可以填 InBody 基礎代謝
-  await page.click('[data-screen=scr-weight]');
-  await page.click('#moreMeasures summary');
-  await expect(page.locator('#moreMeasures [data-day-num=bmr]')).toBeVisible();
-  await page.click('#scr-weight [data-back]');
+  // 體脂機報告頁可以填基礎代謝
+  await page.click('#tab-log [data-screen=scr-bodycomp]');
+  await expect(page.locator('#scr-bodycomp [data-bc=bmr]')).toBeVisible();
+  await page.click('#scr-bodycomp [data-back]');
   await openCalc(page);
   await expect(page.locator('#calcBmrWrap')).toBeVisible();
   await expect(page.locator('[data-calc-bmr=inbody]')).toHaveClass(/is-active/);
@@ -161,11 +160,10 @@ test('骨骼肌：減重時肌肉也掉了，小提醒和營養師報告都會�
   });
   await openApp(page, { errors });
   await expect(page.locator('#tipsList')).toContainText('骨骼肌也少了 0.6 公斤');
-  // 體重・尺寸頁有骨骼肌欄位
-  await page.click('[data-screen=scr-weight]');
-  await page.click('#moreMeasures summary');
-  await expect(page.locator('#moreMeasures [data-day-num=smm]')).toBeVisible();
-  await page.click('#scr-weight [data-back]');
+  // 體脂機報告頁有骨骼肌欄位
+  await page.click('#tab-log [data-screen=scr-bodycomp]');
+  await expect(page.locator('#scr-bodycomp [data-bc=smm]')).toBeVisible();
+  await page.click('#scr-bodycomp [data-back]');
   await closeScreens(page); await page.click('.mobile-nav-tab[data-tab=report]');
   await page.click('[data-days="7"]');
   await page.click('#genReportBtn');
@@ -177,13 +175,12 @@ test('內臟脂肪、相位角、細胞外水分比：可以記錄，報告和�
   const errors = [];
   await seed(page, { days: {} });
   await openApp(page, { errors });
-  await page.click('[data-screen=scr-weight]');
-  await page.click('#moreMeasures summary');
-  await page.fill('#moreMeasures [data-day-num=vfl]', '11');
-  await page.fill('#moreMeasures [data-day-num=pa]', '4.8');
-  await page.fill('#moreMeasures [data-day-num=ecw]', '0.392');
-  await page.fill('#moreMeasures [data-day-num=vfa]', '261.7');
-  await page.click('#scr-weight [data-back]');
+  await page.click('#tab-log [data-screen=scr-bodycomp]');
+  await page.fill('[data-bc=vfl]', '11');
+  await page.fill('[data-bc=pa]', '4.8');
+  await page.fill('[data-bc=ecw]', '0.392');
+  await page.fill('[data-bc=vfa]', '261.7');
+  await page.click('#scr-bodycomp [data-back]');
   const d = (await appState(page)).days[ago(0)];
   expect(d).toMatchObject({ vfl: 11, pa: 4.8, ecw: 0.392, vfa: 261.7 });
   await closeScreens(page); await page.click('.mobile-nav-tab[data-tab=report]');
@@ -203,20 +200,19 @@ test('四肢肌肉量：手腳四個數字幫忙加總，算出 SMI；偏低時�
   const errors = [];
   await seed(page, { days: { [ago(0)]: { weight: 140.6 } }, profile: { name: '', sex: 'm', height: 181 }, profileAt: 1 });
   await openApp(page, { errors });
-  await page.click('[data-screen=scr-weight]');
-  await page.click('#moreMeasures summary');
+  await page.click('#tab-log [data-screen=scr-bodycomp]');
   await page.click('#limbHelper summary');
   const limbs = page.locator('[data-limb]');
   for (const [i, v] of ['4.54', '4.41', '12.9', '12.7'].entries()) await limbs.nth(i).fill(v);
-  await expect(page.locator('#dayAsm')).toHaveValue('34.55');
+  await expect(page.locator('#bcAsm')).toHaveValue('34.55');
   await expect(page.locator('#smiText')).toContainText('SMI 10.5 kg/m²');
   await expect(page.locator('#smiText')).toContainText('在參考值（男性 7.0）以上');
   expect((await appState(page)).days[ago(0)].asm).toBe(34.55);
   // 改成偏低的數字
-  await page.fill('#dayAsm', '21');
+  await page.fill('#bcAsm', '21');
   await expect(page.locator('#smiText')).toContainText('SMI 6.4 kg/m²');
   await expect(page.locator('#smiText')).toContainText('肌肉偏少');
-  await page.click('#scr-weight [data-back]');
+  await page.click('#scr-bodycomp [data-back]');
   await closeScreens(page); await page.click('#openTargetBtn');
   await page.click('#openCalcBtn');
   await page.fill('#calcBirthYear', String(birthYearFor(58)));
@@ -228,5 +224,39 @@ test('四肢肌肉量：手腳四個數字幫忙加總，算出 SMI；偏低時�
   await page.click('[data-days="7"]');
   await page.click('#genReportBtn');
   await expect(page.locator('#reportArea .hl')).toContainText('四肢骨骼肌指數 6.4 kg/m²，低於肌少症參考值 7.0（AWGS 2019）');
+  expect(errors).toEqual([]);
+});
+
+test('體脂機報告：可以選量的日期；填體重和體脂率會算去脂體重；從試算頁去填，回來就有新選項', async ({ page }) => {
+  const errors = [];
+  await seed(page, { days: { [ago(0)]: { weight: 140.6 } }, profile: { name: '', sex: 'm', height: 181, birthYear: 1968 }, profileAt: 1 });
+  await openApp(page, { errors });
+  await expect(page.locator('#tileBodyComp')).toHaveText('InBody、健身房或家用體脂機');
+  await page.click('#openTargetBtn');
+  await page.click('#openCalcBtn');
+  await expect(page.locator('#calcBmrWrap')).toBeHidden();
+  await page.click('#calcBcLink');
+  await expect(page.locator('#scr-bodycomp')).toBeVisible();
+  await expect(page.locator('#bcDate')).toHaveValue(ago(0));
+  // 改成三天前量的
+  await page.fill('#bcDate', ago(3));
+  await page.dispatchEvent('#bcDate', 'change');
+  await page.fill('[data-bc=weight]', '140.6');
+  await page.fill('[data-bc=bodyFat]', '44.4');
+  await expect(page.locator('#bcInfo')).toContainText('去脂體重（肌肉、骨骼、水分）約 78.2 公斤');
+  await expect(page.locator('#bcInfo')).toContainText('基礎代謝約 2,059 kcal');
+  await page.fill('[data-bc=bmr]', '2058');
+  await expect(page.locator('#bcInfo')).toContainText('報表上是 2,058');
+  const d = (await appState(page)).days[ago(3)];
+  expect(d).toMatchObject({ weight: 140.6, bodyFat: 44.4, bmr: 2058 });
+  expect((await appState(page)).days[ago(0)].bodyFat).toBeUndefined();
+  // 回到試算頁：出現體脂機的選項
+  await page.click('#scr-bodycomp [data-back]');
+  await expect(page.locator('#scr-calc')).toBeVisible();
+  await expect(page.locator('#calcBmrWrap')).toBeVisible();
+  await expect(page.locator('[data-calc-bmr=inbody]')).toContainText('2,058 kcal');
+  await expect(page.locator('#calcBcLink')).toBeHidden();
+  await closeScreens(page);
+  await expect(page.locator('#tileBodyComp')).toContainText('上次 ' + Number(ago(3).slice(5, 7)) + '/' + Number(ago(3).slice(8)) + ' 量的');
   expect(errors).toEqual([]);
 });

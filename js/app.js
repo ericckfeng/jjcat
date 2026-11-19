@@ -893,7 +893,8 @@ function openScreen(id) {
   if (id === 'scr-food') { $('foodSearch').value = ''; renderFoodResults(); renderFoodCart(); }
   if (id === 'scr-grams') renderGrams();
   if (id === 'scr-est') renderEst();
-  if (id === 'scr-weight') { renderWeightHint(); document.querySelectorAll('[data-limb]').forEach(x => { x.value = ''; }); }
+  if (id === 'scr-weight') renderWeightHint();
+  if (id === 'scr-bodycomp') { bcDate = ui.date; renderBodyComp(); }
   if (id === 'scr-water') renderWaterBig();
   if (id === 'scr-calc') { initCalc(); renderCalc(); }
   if (id === 'scr-mealex') renderMealEx();
@@ -914,6 +915,15 @@ function hideTopScreen() {
   if (id) $(id).classList.add('hidden');
   if (!screenStack.length) document.body.style.overflow = '';
   if (id === 'scr-food') askUnsavedCart();
+  // 從體重頁去填體脂機報告：回來時更新體重和 BMI（同一天的體重可能改了）
+  if (id === 'scr-bodycomp' && screenStack[screenStack.length - 1] === 'scr-weight') { renderDayPanel(); renderBmiCard(); }
+  // 從試算頁去填體脂機報告，回來時更新基礎代謝的選項
+  if (id === 'scr-bodycomp' && screenStack[screenStack.length - 1] === 'scr-calc') {
+    calcDraft.inbody = latestInbodyBmr(state.days, todayStr());
+    calcDraft.comp = latestBodyComp(state.days, todayStr());
+    if (calcDraft.bmrSrc === 'formula') calcDraft.bmrSrc = calcDraft.inbody ? 'inbody' : calcDraft.comp ? 'ffm' : 'formula';
+    renderCalc();
+  }
 }
 function closeScreen() { if (screenStack.length) history.back(); }
 function closeAllScreens() { while (screenStack.length) { hideTopScreen(); history.back(); } }
@@ -938,6 +948,8 @@ function renderTiles() {
   const b = calcBmi(d.weight, state.profile.height);
   $('tileWeight').textContent = d.weight != null ? d.weight + ' 公斤' + (b ? '・BMI ' + b : '') : '還沒量';
   const wg = dayWaterGoal(ui.date);
+  const lbc = lastBodyCompDate();
+  $('tileBodyComp').textContent = lbc ? '上次 ' + fmtMD(lbc) + ' 量的' : 'InBody、健身房或家用體脂機';
   $('tileWater').textContent = wg
     ? (d.water || 0) + ' / ' + wg + ' ml' + ((d.water || 0) >= wg ? ' ✓' : '')
     : (d.water || 0) + ' ml' + (d.water ? '（約 ' + r1(d.water / 250) + ' 杯）' : '');
@@ -956,9 +968,9 @@ function renderWeightHint() {
   document.querySelectorAll('#sexGroup [data-sex]').forEach(b => b.classList.toggle('is-active', state.profile.sex === b.getAttribute('data-sex')));
   renderBmiCard();
 }
-// 四肢骨骼肌指數 SMI（肌少症篩檢）
+// 四肢骨骼肌指數 SMI（肌少症篩檢）：在體脂機報告頁顯示
 function renderSmi() {
-  const asm = num(getDay(ui.date, false).asm);
+  const asm = num(getDay(bcDate, false).asm);
   const h = state.profile.height;
   const smi = calcSmi(asm, h);
   const sex = state.profile.sex;
@@ -977,13 +989,54 @@ function renderSmi() {
 document.querySelectorAll('[data-limb]').forEach(el => el.addEventListener('input', () => {
   const sum = sumLimbs([...document.querySelectorAll('[data-limb]')].map(x => x.value));
   if (sum == null) return;
-  $('dayAsm').value = sum;
-  setDayField('asm', sum);
-  renderSmi();
+  $('bcAsm').value = sum;
+  setDayField('asm', sum, bcDate);
+  renderBcInfo();
 }));
-$('dayAsm').addEventListener('input', () => setTimeout(renderSmi, 0));
-function renderBmiCard() {
+
+/* ---------------- 📊 體脂機報告（一頁填完一張報表；可以選量的日期） ---------------- */
+const BC_FIELDS = ['bodyFat', 'smm', 'bmr', 'asm', 'vfl', 'vfa', 'pa', 'ecw'];
+let bcDate = todayStr();
+// 最近一次量體脂機的日期（首頁按鈕的副標題）
+function lastBodyCompDate() {
+  return Object.keys(state.days).filter(d => d <= todayStr() && BC_FIELDS.some(f => num(state.days[d][f]) != null)).sort().pop() || null;
+}
+function renderBodyComp() {
+  $('bcDate').value = bcDate;
+  $('bcDate').max = todayStr();
+  const d = getDay(bcDate, false);
+  document.querySelectorAll('[data-bc]').forEach(el => {
+    if (el === document.activeElement) return;
+    const v = d[el.getAttribute('data-bc')];
+    el.value = v == null ? '' : v;
+  });
+  document.querySelectorAll('[data-limb]').forEach(x => { x.value = ''; });
+  renderBcInfo();
+}
+// 有體重＋體脂率就算去脂體重和估計的基礎代謝；四肢肌肉量算 SMI
+function renderBcInfo() {
+  const d = getDay(bcDate, false);
+  const w = num(d.weight), bf = num(d.bodyFat);
+  const info = $('bcInfo');
+  if (w && bf && bf < 70) {
+    const ffm = r1(w * (1 - bf / 100));
+    info.textContent = '去脂體重（肌肉、骨骼、水分）約 ' + ffm + ' 公斤，依此估計基礎代謝約 ' + katchBmr(ffm).toLocaleString() + ' kcal' + (num(d.bmr) ? '（報表上是 ' + num(d.bmr).toLocaleString() + '）' : '') + '。';
+    info.classList.remove('hidden');
+  } else info.classList.add('hidden');
   renderSmi();
+}
+document.querySelectorAll('[data-bc]').forEach(el => el.addEventListener('input', () => {
+  setDayField(el.getAttribute('data-bc'), num(el.value), bcDate);
+  renderBcInfo();
+}));
+$('bcDate').addEventListener('change', () => {
+  const v = $('bcDate').value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || v > todayStr()) { $('bcDate').value = bcDate; return; }
+  bcDate = v;
+  renderBodyComp();
+});
+
+function renderBmiCard() {
   const d = getDay(ui.date, false);
   const h = state.profile.height;
   const b = calcBmi(d.weight, h);
@@ -2583,6 +2636,7 @@ function renderCalc() {
   const ib = calcDraft.inbody;
   const comp = calcDraft.comp;
   $('calcBmrWrap').classList.toggle('hidden', !ib && !comp);
+  $('calcBcLink').classList.toggle('hidden', Boolean(ib || comp));
   if (ib || comp) {
     const fb = calcBmr({ ...inp, measuredBmr: null });
     $('calcBmrSrc').innerHTML = choiceHTML('data-calc-bmr', [
@@ -3236,7 +3290,7 @@ document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click',
 const GO_SCREENS = {
   quick: 'scr-quick', photo: 'scr-photo', water: 'scr-water', weight: 'scr-weight', sleep: 'scr-sleep',
   food: 'scr-food', manual: 'scr-manual', est: 'scr-est', exercise: 'scr-exercise', note: 'scr-note',
-  ai: 'scr-ai', weekly: 'scr-weekly'
+  ai: 'scr-ai', weekly: 'scr-weekly', bodycomp: 'scr-bodycomp'
 };
 function openFromUrl() {
   const params = new URLSearchParams(location.search);

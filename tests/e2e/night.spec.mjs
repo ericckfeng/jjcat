@@ -42,36 +42,59 @@ test('沒有夜間進食時，報告不出現這一格和這一欄', async ({ pa
   await expect(page.locator('#reportArea')).not.toContainText('夜間');
 });
 
-test('記錄：補記過去的日期自動標補記；晚上記晚餐會問是不是現在吃的', async ({ page }) => {
+async function addManual(page, meal, name, kcal) {
+  await page.click('[data-screen=scr-manual]');
+  await page.click(`#scr-manual [data-meal=${meal}]`);
+  await page.fill('#foodNameInput', name);
+  await page.fill('#foodKcalInput', String(kcal));
+  await page.click('[form=addFoodForm][type=submit]');
+}
+
+test('晚上記的會問是不是現在吃的；不是就選大約幾點，記錄時間改成吃的時間', async ({ page }) => {
   await page.clock.install({ time: new Date(2026, 10, 19, 23, 15) });
   await openApp(page);
-  // 晚上 11 點記晚餐 → 問
-  await page.click('[data-screen=scr-manual]');
-  await page.click('#scr-manual [data-meal=dinner]');
-  await page.fill('#foodNameInput', '雞腿便當');
-  await page.fill('#foodKcalInput', '750');
-  await page.click('[form=addFoodForm][type=submit]');
-  await expect(page.locator('#confirmModal')).toBeVisible();
-  await expect(page.locator('#confirmTitle')).toHaveText('晚餐是現在吃的嗎？');
-  await page.click('#confirmOkBtn');   // 之前吃的（補記）
-  let list = (await appState(page)).logs['2026-11-19'];
-  expect(list.find(x => x.name === '雞腿便當').backfill).toBe(true);
-  // 晚上記點心（宵夜）不問
-  await page.click('[data-screen=scr-manual]');
-  await page.click('#scr-manual [data-meal=snack]');
-  await page.fill('#foodNameInput', '泡麵');
-  await page.fill('#foodKcalInput', '400');
-  await page.click('[form=addFoodForm][type=submit]');
-  await expect(page.locator('#confirmModal')).toBeHidden();
-  list = (await appState(page)).logs['2026-11-19'];
-  expect(list.find(x => x.name === '泡麵').backfill).toBeUndefined();
-  // 記到前一天 → 自動標補記，不問
+  await addManual(page, 'dinner', '雞腿便當', 750);
+  await expect(page.locator('#whenModal')).toBeVisible();
+  await expect(page.locator('#whenMsg')).toContainText('晚餐・雞腿便當（現在 23:15）');
+  await page.click('#whenEarlierBtn');
+  await expect(page.locator('#whenChips [data-when]')).toHaveCount(6);
+  await page.click('#whenChips [data-when="19:00"]');
+  await page.click('#whenOkBtn');
+  await expect(page.locator('#whenModal')).toBeHidden();
+  let it = (await appState(page)).logs['2026-11-19'].find(x => x.name === '雞腿便當');
+  expect(it.time).toBe('19:00');
+  expect(it.backfill).toBeUndefined();
+  // 宵夜：選「是，現在吃的」→ 時間不變
+  await addManual(page, 'snack', '泡麵', 400);
+  await expect(page.locator('#whenModal')).toBeVisible();
+  await expect(page.locator('#toast')).toBeHidden();       // 提示先收起來，不擋按鈕
+  await page.click('#whenNowBtn');
+  await expect(page.locator('#toastMsg')).toContainText('已加入「泡麵」');
+  it = (await appState(page)).logs['2026-11-19'].find(x => x.name === '泡麵');
+  expect(it.time).toBe('23:15');
+  // 記到過去的日期：不問，自動標補記
   await page.click('#prevDayBtn');
-  await page.click('[data-screen=scr-manual]');
-  await page.click('#scr-manual [data-meal=dinner]');
-  await page.fill('#foodNameInput', '牛肉麵');
-  await page.fill('#foodKcalInput', '650');
-  await page.click('[form=addFoodForm][type=submit]');
-  await expect(page.locator('#confirmModal')).toBeHidden();
+  await addManual(page, 'dinner', '牛肉麵', 650);
+  await expect(page.locator('#whenModal')).toBeHidden();
   expect((await appState(page)).logs['2026-11-18'][0].backfill).toBe(true);
+});
+
+test('過了午夜補記前一天的晚餐：選了晚上的時間就搬回前一天', async ({ page }) => {
+  await page.clock.install({ time: new Date(2026, 10, 20, 0, 30) });
+  await openApp(page);
+  await addManual(page, 'dinner', '滷肉飯', 600);
+  await page.click('#whenEarlierBtn');
+  await page.fill('#whenTime', '19:30');
+  await page.click('#whenOkBtn');
+  await expect(page.locator('#toastMsg')).toContainText('已記到 11/19 晚餐（19:30）');
+  const st = await appState(page);
+  expect(st.logs['2026-11-20']).toBeUndefined();
+  expect(st.logs['2026-11-19'].find(x => x.name === '滷肉飯').time).toBe('19:30');
+});
+
+test('白天記的不問', async ({ page }) => {
+  await page.clock.install({ time: new Date(2026, 10, 19, 12, 30) });
+  await openApp(page);
+  await addManual(page, 'lunch', '便當', 700);
+  await expect(page.locator('#whenModal')).toBeHidden();
 });

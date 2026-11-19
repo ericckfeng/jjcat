@@ -1,7 +1,7 @@
 // 一整餐的計算：購物車合計、複製某一餐（js/meals.js）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, inNightWindow, isNightEntry, shouldAskBackfill, nightSummary } from '../../js/meals.js';
+import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, inNightWindow, isNightEntry, shouldAskWhen, eatenAt, MEAL_TIME_CHIPS, nightSummary } from '../../js/meals.js';
 
 test('合計熱量、營養素與六大類份數', () => {
   const t = sumNutr([
@@ -113,13 +113,17 @@ test('夜間進食：早餐和補記的不算', () => {
   assert.equal(isNightEntry({ meal: 'snack', time: '15:00' }), false);
 });
 
-test('什麼時候問「是現在吃的嗎」：晚上 10 點到清晨 5 點記午餐或晚餐', () => {
-  assert.equal(shouldAskBackfill('dinner', '23:00'), true);
-  assert.equal(shouldAskBackfill('lunch', '01:30'), true);
-  assert.equal(shouldAskBackfill('snack', '23:00'), false, '宵夜就是宵夜');
-  assert.equal(shouldAskBackfill('dinner', '21:30'), false);
-  assert.equal(shouldAskBackfill('dinner', '05:30'), false);
-  assert.equal(shouldAskBackfill('breakfast', '23:00'), false);
+test('什麼時候問「是現在吃的嗎」：晚上 10 點到清晨 5 點記的，每一餐都問', () => {
+  for (const t of ['22:00', '23:30', '00:10', '04:59']) assert.equal(shouldAskWhen(t), true, t);
+  for (const t of ['21:59', '05:00', '12:00', '', null]) assert.equal(shouldAskWhen(t), false, String(t));
+});
+
+test('選了吃的時間：過了午夜補記前一天的晚餐要搬到前一天', () => {
+  assert.deepEqual(eatenAt('23:15', '19:00'), { time: '19:00', dayShift: 0 });
+  assert.deepEqual(eatenAt('00:30', '19:00'), { time: '19:00', dayShift: -1 });
+  assert.deepEqual(eatenAt('00:30', '00:10'), { time: '00:10', dayShift: 0 });
+  assert.deepEqual(eatenAt('04:00', '23:00'), { time: '23:00', dayShift: -1 });
+  assert.equal(MEAL_TIME_CHIPS.dinner.length, 6);
 });
 
 test('一段期間的夜間進食', () => {

@@ -114,10 +114,23 @@ export function inNightWindow(time) {
 export function isNightEntry(e) {
   return Boolean(e) && e.meal !== 'breakfast' && !e.backfill && inNightWindow(e.time);
 }
-// 記錄時要不要問「是現在吃的嗎？」：晚上 10 點到清晨 5 點記午餐或晚餐，多半是事後補記
-export function shouldAskBackfill(meal, time) {
+// 記錄時要不要問「是現在吃的嗎？」：晚上 10 點到清晨 5 點記的（任何一餐）
+export function shouldAskWhen(time) {
   const t = String(time || '');
-  return (meal === 'lunch' || meal === 'dinner') && (t >= NIGHT_FROM || t < '05:00');
+  return /^\d{2}:\d{2}$/.test(t) && (t >= NIGHT_FROM || t < '05:00');
+}
+// 「大約幾點吃的？」的快捷時間
+export const MEAL_TIME_CHIPS = {
+  breakfast: ['06:30', '07:00', '07:30', '08:00', '08:30', '09:00'],
+  lunch: ['11:30', '12:00', '12:30', '13:00', '13:30', '14:00'],
+  dinner: ['17:30', '18:00', '18:30', '19:00', '19:30', '20:00'],
+  snack: ['15:00', '16:00', '19:00', '20:00', '21:00', '22:00']
+};
+// 選了吃的時間後：過了午夜才記、選的時間比記錄的時間晚 → 是前一天吃的
+//   回傳 { time, dayShift }（dayShift：-1＝搬到前一天，0＝同一天）
+export function eatenAt(savedTime, picked) {
+  const s = String(savedTime || ''), p = String(picked || '');
+  return { time: p, dayShift: s < '05:00' && p > s ? -1 : 0 };
 }
 // 一段期間的夜間進食：{ days, entries, kcal, byDate: { 日期: kcal } }
 export function nightSummary(logs, dates) {

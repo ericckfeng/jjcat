@@ -10,7 +10,7 @@ import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VE
 import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, muscleChange, sumLimbs, calcSmi, smiLow, latestSmi, SMI_CUTOFF, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
 import { mascotSVG, buildMascotMessages } from './mascot.js';
 import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS, energyDensity, isGlutinous } from './foods.js';
-import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, shouldAskBackfill } from './meals.js';
+import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, shouldAskWhen, eatenAt, MEAL_TIME_CHIPS } from './meals.js';
 import { buildInsights } from './insights.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros } from './bank.js';
@@ -457,7 +457,7 @@ async function addEntry({ name, nutr, mult = 1, meal, photo = null, pending = fa
   renderAll();
   const hint = gapHint(it.meal);
   showToast('已加入「' + it.name + '」(' + it.kcal + ' kcal)' + hint, null, null, hint ? 6000 : 0);
-  askBackfill([it]);
+  askWhen([it]);
 }
 function addFromQuick(q) {
   addEntry({ name: q.name, nutr: q, mult: 1, meal: ui.meal });
@@ -861,7 +861,7 @@ function saveFoodCart() {
     persist();
     renderAll();
   }, hint ? 8000 : 0);
-  askBackfill(added);
+  askWhen(added);
 }
 $('foodCartSaveBtn').addEventListener('click', () => {
   saveFoodCart();
@@ -2292,19 +2292,67 @@ $('libraryGrid').addEventListener('click', (e) => {
   if (add) { const it = state.quickItems.find(q => q.id === add.getAttribute('data-qid')); if (it) addFromQuick(it); }
 });
 
-/* ---------------- 夜間進食：分清楚是現在吃的還是事後補記 ---------------- */
-// 晚上 10 點到清晨 5 點記午餐或晚餐，多半是事後補記；問一下，補記的不算夜間進食（只影響給營養師的報告）
-function askBackfill(entries) {
+/* ---------------- 晚上記的：是現在吃的嗎？不是就問大約幾點吃的 ---------------- */
+// 晚上 10 點到清晨 5 點記的（任何一餐）。選了時間就把記錄的時間改成吃的時間；
+// 過了午夜補記前一天的晚餐，搬回前一天。這樣報告的夜間進食才準。
+let whenEntries = null;
+function askWhen(entries) {
   const first = entries && entries[0];
-  if (!first || first.backfill || !shouldAskBackfill(first.meal, first.time)) return;
-  const label = MEAL_META[first.meal].label;
-  openConfirm(label + '是現在吃的嗎？', '現在是晚上 ' + first.time + '。如果是之前吃、現在才補記，請選「之前吃的」，給營養師的報告就不會算成夜間進食。',
-    () => {
-      const ids = new Set(entries.map(e => e.id));
-      (state.logs[ui.date] || []).forEach(e => { if (ids.has(e.id)) { e.backfill = true; touch(e); } });
-      persist();
-    }, '之前吃的（補記）', null, '現在吃的');
+  if (!first || ui.date !== todayStr() || !shouldAskWhen(first.time)) return;
+  // 剛才的提示會擋到按鈕：先收起來，選「現在吃的」後再顯示一次
+  whenEntries = { ids: entries.map(e => e.id), date: ui.date, meal: first.meal, saved: first.time, toast: $('toastMsg').textContent };
+  clearTimeout(toastTimer);
+  $('toast').classList.add('hidden');
+  $('whenMsg').textContent = MEAL_META[first.meal].label + '・' + (entries.length > 1 ? entries.length + ' 樣' : first.name) + '（現在 ' + first.time + '）';
+  $('whenAsk').classList.remove('hidden');
+  $('whenPick').classList.add('hidden');
+  openModal('whenModal');
 }
+function closeWhen() { whenEntries = null; closeModal('whenModal'); }
+$('whenNowBtn').addEventListener('click', () => {
+  const msg = whenEntries && whenEntries.toast;
+  closeWhen();
+  if (msg) showToast(msg);
+});
+$('whenEarlierBtn').addEventListener('click', () => {
+  if (!whenEntries) return;
+  const chips = MEAL_TIME_CHIPS[whenEntries.meal] || MEAL_TIME_CHIPS.snack;
+  $('whenChips').innerHTML = chips.map(t => `<button type="button" data-when="${t}" class="toggle-btn tabular-nums text-lg">${t}</button>`).join('');
+  $('whenTime').value = chips[2];
+  $('whenAsk').classList.add('hidden');
+  $('whenPick').classList.remove('hidden');
+  markWhenChip();
+});
+function markWhenChip() {
+  document.querySelectorAll('#whenChips [data-when]').forEach(b => b.classList.toggle('is-active', b.getAttribute('data-when') === $('whenTime').value));
+}
+$('whenChips').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-when]');
+  if (!b) return;
+  $('whenTime').value = b.getAttribute('data-when');
+  markWhenChip();
+});
+$('whenTime').addEventListener('input', markWhenChip);
+$('whenOkBtn').addEventListener('click', () => {
+  const w = whenEntries;
+  const picked = $('whenTime').value;
+  if (!w || !/^\d{2}:\d{2}$/.test(picked)) return;
+  const { time, dayShift } = eatenAt(w.saved, picked);
+  const to = dayShift ? addDays(w.date, dayShift) : w.date;
+  const ids = new Set(w.ids);
+  const from = state.logs[w.date] || [];
+  const moving = from.filter(e => ids.has(e.id));
+  moving.forEach(e => { e.time = time; delete e.backfill; touch(e); });
+  if (to !== w.date) {
+    state.logs[w.date] = from.filter(e => !ids.has(e.id));
+    if (!state.logs[w.date].length) delete state.logs[w.date];
+    (state.logs[to] || (state.logs[to] = [])).push(...moving);
+  }
+  persist();
+  renderAll();
+  closeWhen();
+  showToast(to !== w.date ? '已記到 ' + fmtMD(to) + ' ' + MEAL_META[w.meal].label + '（' + time + '）' : '時間改成 ' + time);
+});
 
 /* ---------------- 每餐份數分配／這一餐還差什麼 ---------------- */
 const MEALEX_MEALS = ['breakfast', 'lunch', 'dinner', 'snack'];

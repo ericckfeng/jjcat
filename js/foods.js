@@ -244,3 +244,31 @@ export function searchFoods(foods, query, { limit = 30, now = null } = {}) {
   out.sort((a, b) => b.score - a.score || a.food.name.length - b.food.name.length || (a.food.id < b.food.id ? -1 : 1));
   return out.slice(0, limit);
 }
+
+/* ---------------- 熱量密度（每公克幾大卡） ---------------- */
+// 糖尿病衛教學會《臺灣小吃營養大解析》：一般小吃每公克 1～2 大卡；糕餅、糖果、油炸類 3 大卡以上。
+// 3 以上標「熱量密度高」：一小份熱量就很多。
+// 不直接吃的乾料不標（照字面標會誤導，例如生米煮成飯每公克只剩約 1.6 大卡）：
+//   調味料香辛料（用量很少）、名稱有粉／沖泡／即溶的、還沒煮的穀物／澱粉／乾豆。
+export const DENSITY_HIGH = 3;
+const NOT_AS_EATEN_CATS = new Set(['調味料及香辛料類']);
+const DRY_CATS = new Set(['穀物類', '澱粉類', '豆類']);
+const POWDER = /粉|沖泡|即溶/;
+
+// 這樣食物適不適合標熱量密度
+export function densityApplies(food) {
+  if (!food) return false;
+  if (NOT_AS_EATEN_CATS.has(food.category)) return false;
+  if (POWDER.test(food.name || '')) return false;
+  if (DRY_CATS.has(food.category) && food.state !== 'cooked') return false;
+  return true;
+}
+// → null（不適用）或 { perG: 每公克大卡（一位小數）, high }
+//   kcalPerG：實際吃下去的每公克熱量（例如用熟重算的）；沒給就用每 100 g 的值
+export function energyDensity(food, kcalPerG = null) {
+  if (!densityApplies(food)) return null;
+  const v = kcalPerG != null ? Number(kcalPerG) : Number(food.per100g && food.per100g.kcal) / 100;
+  if (!Number.isFinite(v) || v <= 0) return null;
+  const perG = Math.round(v * 10) / 10;
+  return { perG, high: v >= DENSITY_HIGH };
+}

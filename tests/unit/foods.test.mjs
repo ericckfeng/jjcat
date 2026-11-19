@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   nutrientsFor, baseGrams, cookConversion, exchangeGroup, exchangesFor,
-  normalize, expandQuery, baseName, searchFoods, isBreakfastTime
+  normalize, expandQuery, baseName, searchFoods, isBreakfastTime, energyDensity, densityApplies
 } from '../../js/foods.js';
 
 const foods = JSON.parse(readFileSync(new URL('../../tfda_foods.json', import.meta.url), 'utf8')).foods;
@@ -119,4 +119,28 @@ test('全部 2,000 多筆搜尋一次夠快（每次打字都會搜）', () => {
   const t0 = performance.now();
   for (let i = 0; i < 20; i++) searchFoods(foods, '雞');
   assert.ok((performance.now() - t0) / 20 < 30, '每次搜尋超過 30 ms');
+});
+
+/* ---- 熱量密度 ---- */
+
+test('熱量密度：每公克 3 大卡以上算高（油炸、糕餅、堅果、果乾、油）', () => {
+  assert.deepEqual(energyDensity({ name: '炸雞', category: '加工調理食品及其他類', per100g: { kcal: 320 } }), { perG: 3.2, high: true });
+  assert.deepEqual(energyDensity({ name: '白飯', category: '穀物類', state: 'cooked', per100g: { kcal: 182 } }), { perG: 1.8, high: false });
+  const real = (n) => energyDensity(byName(n));
+  assert.equal(real('芒果乾').high, true, '直接吃的果乾要標');
+  assert.equal(real('白皮甘藷'), null, '生的根莖類沒煮不標');
+});
+
+test('不直接吃的乾料不標：麵粉、生米、奶粉、沖泡包、香料粉', () => {
+  for (const n of ['中筋麵粉', '小米', '全脂奶粉', '咖啡沖泡包(三合一)', '黑胡椒粉']) {
+    assert.equal(densityApplies(byName(n)), false, n);
+    assert.equal(energyDensity(byName(n)), null, n);
+  }
+});
+
+test('熱量密度用實際吃的重量算；AI 估的品項（沒有分類）也能算', () => {
+  const ai = { name: '鹹酥雞', per100g: { kcal: 330 } };
+  assert.equal(energyDensity(ai).high, true);
+  assert.deepEqual(energyDensity(ai, 1.5), { perG: 1.5, high: false });
+  assert.equal(energyDensity({ name: 'x', per100g: { kcal: 0 } }), null);
 });

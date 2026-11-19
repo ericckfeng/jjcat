@@ -151,3 +151,22 @@ test('購物車還有東西就離開：會問要不要記；選「不要了」�
   await openFood(page);
   await expect(page.locator('#foodCart')).toBeHidden();
 });
+
+test('熱量密度高的食物有標示；麵粉這類乾料不標；秤克數頁也提醒', async ({ page }) => {
+  await openApp(page);
+  await openFood(page);
+  await page.fill('#foodSearch', '芒果乾');
+  const row = page.locator('#foodResults .pick-row', { hasText: '芒果乾' }).first();
+  await expect(row.locator('[data-density]')).toContainText('熱量密度高・每公克 3.3 大卡');
+  await page.fill('#foodSearch', '中筋麵粉');
+  await expect(page.locator('#foodResults .pick-row', { hasText: '中筋麵粉' }).first()).toBeVisible();
+  await expect(page.locator('#foodResults .pick-row', { hasText: '中筋麵粉' }).first().locator('[data-density]')).toHaveCount(0);
+  await page.fill('#foodSearch', '芒果乾');
+  await row.click();
+  await expect(page.locator('#gramsResult [data-density]')).toContainText('一小份熱量就很多');
+  // 白飯：不標
+  await page.click('#scr-grams [data-back]');
+  await page.fill('#foodSearch', '白飯');
+  await page.locator('#foodResults .pick-row').first().click();
+  await expect(page.locator('#gramsResult [data-density]')).toHaveCount(0);
+});

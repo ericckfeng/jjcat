@@ -19,7 +19,7 @@
 <body>
 <main>
   <h1>隱私權政策</h1>
-  <p class="muted">飲控隨身記（https://ericckfeng.github.io/jjcat/）｜最後更新：2026 年 11 月 11 日</p>
+  <p class="muted">飲控隨身記（https://ericckfeng.github.io/jjcat/）｜最後更新：2026 年 11 月 19 日</p>
 
   <h2>一、我們不收集你的資料</h2>
   <p>飲控隨身記是一個純前端的網頁 App，沒有後端伺服器。你輸入的飲食記錄、照片、體重、備註等所有資料，都只儲存在你自己裝置的瀏覽器中（localStorage 與 IndexedDB）。開發者無法看到、也不會收到任何使用者的資料。</p>
@@ -35,20 +35,29 @@
   <p>資料直接在你的裝置與 Google 之間傳輸，不經過開發者的任何伺服器。登入憑證（存取權杖）只暫存在你的裝置上，約一小時後自動失效。</p>
   <p>本 App 對 Google 使用者資料的使用與傳輸，遵守 <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>，包括其中的 Limited Use 規定。資料不會用於廣告、不會出售，也不會轉移給任何第三方。</p>
 
-  <h2>三、如何刪除資料</h2>
+  <h2>三、AI 辨識（選用，預設關閉）</h2>
+  <p>如果你在 App 裡開啟「AI 辨識」，需要貼上<strong>你自己的</strong> Google Gemini API Key。開啟後：</p>
+  <ul>
+    <li>你按下「請 AI 幫我認」或「拍營養標示」時，那一張照片和你輸入的文字會從你的裝置<strong>直接</strong>傳到 Google 的 Gemini API 辨識，不經過開發者的任何伺服器。其他記錄（體重、備註等）不會傳送。</li>
+    <li>傳送的內容依 <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener noreferrer">Gemini API 服務條款</a> 處理。<strong>使用免費方案時，Google 可能用這些內容改進其產品</strong>，請不要拍到臉、證件或其他個人資料。</li>
+    <li>API Key 只存在你這台裝置的瀏覽器中，不會同步到雲端、不會放進備份檔，開發者也看不到。在 App 中按「關閉 AI」即會刪除。</li>
+    <li>不開啟 AI 辨識，App 就不會連到 Gemini API。</li>
+  </ul>
+
+  <h2>四、如何刪除資料</h2>
   <ul>
     <li><strong>裝置上的資料</strong>：在瀏覽器設定中清除此網站的資料，或刪除主畫面上的 App。</li>
     <li><strong>雲端備份</strong>：到你的 Google 雲端硬碟刪除「飲控隨身記」資料夾。</li>
     <li><strong>撤銷授權</strong>：在 App 中按「中斷連結」，或到 <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">Google 帳戶的第三方存取權</a> 移除飲控隨身記。</li>
   </ul>
 
-  <h2>四、第三方資源</h2>
+  <h2>五、第三方資源</h2>
   <p>App 會從公開 CDN 載入 Tailwind CSS、Chart.js 與 Google Fonts。這些請求不包含你的任何記錄內容。</p>
 
-  <h2>五、健康資訊聲明</h2>
-  <p>App 中的熱量、營養素與份數皆為參考或估算值，不能取代醫師或營養師的專業建議。</p>
+  <h2>六、健康資訊聲明</h2>
+  <p>App 中的熱量、營養素與份數（包括 AI 辨識的結果）皆為參考或估算值，不能取代醫師或營養師的專業建議。</p>
 
-  <h2>六、聯絡方式</h2>
+  <h2>七、聯絡方式</h2>
   <p>如有任何問題，請來信：<a href="mailto:ericckfeng@gmail.com">ericckfeng@gmail.com</a></p>
 
   <p style="margin-top:32px"><a href="./">← 回到飲控隨身記</a></p>

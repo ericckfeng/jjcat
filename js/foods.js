@@ -81,6 +81,12 @@ export function exchangeGroup(food) {
   return (per.c || 0) > 2 * (per.p || 0) ? 'grain' : 'prot';
 }
 export function exchangesFor(food, baseG) {
+  // 食物自己帶了每 100 g 的六大類份數（AI 估算、自訂食物）就直接用
+  if (food && food.exPer100g && baseG > 0) {
+    const out = {};
+    Object.entries(food.exPer100g).forEach(([k, v]) => { const n = r1((Number(v) || 0) * baseG / 100); if (n > 0) out[k] = n; });
+    return Object.keys(out).length ? out : null;
+  }
   const group = exchangeGroup(food);
   if (!group || !(baseG > 0)) return null;
   const per = food.per100g || {};

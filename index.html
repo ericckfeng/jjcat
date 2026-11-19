@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/app.css?v=26" />
+  <link rel="stylesheet" href="css/app.css?v=27" />
 </head>
 <body class="bg-stone-50 text-stone-800 min-h-screen pb-24 sm:pb-10">
   <!-- Header -->
@@ -141,6 +141,7 @@
           <button type="button" data-screen="scr-photo" class="tile"><span class="tile-ic">📷</span><span class="tile-t">拍照記</span><span class="tile-s">先拍，熱量之後補</span></button>
           <button type="button" data-screen="scr-est" class="tile"><span class="tile-ic">✋</span><span class="tile-t">估份量</span><span class="tile-s">自助餐、家常菜</span></button>
           <button type="button" data-screen="scr-manual" class="tile"><span class="tile-ic">✏️</span><span class="tile-t">自己輸入</span><span class="tile-s">知道熱量時用</span></button>
+          <button type="button" id="aiTile" data-screen="scr-ai" class="tile col-span-2 tile-wide hidden"><span class="tile-ic">🤖</span><span class="min-w-0"><span class="tile-t block">AI 幫我認</span><span class="tile-s block">拍一張或說一句，AI 拆成一樣一樣</span></span></button>
           <button type="button" data-screen="scr-food" class="tile col-span-2 tile-wide"><span class="tile-ic">🔍</span><span class="min-w-0"><span class="tile-t block">查食物・秤克數</span><span class="tile-s block">輸入名稱和克數，算出蛋白質等營養素</span></span></button>
         </div>
       </section>
@@ -305,6 +306,14 @@
         </div>
         <p id="cloudStatus" class="hidden text-sm font-medium rounded-xl px-3 py-2"></p>
         <p class="text-xs text-stone-400"><a href="privacy.html" class="underline hover:text-stone-600">隱私權政策</a></p>
+      </section>
+
+      <section id="aiSection" class="no-print bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
+        <div>
+          <h2 class="text-sm font-bold text-stone-900">🤖 AI 辨識（選用）</h2>
+          <p id="aiStatusText" class="text-xs text-stone-500 leading-relaxed"></p>
+        </div>
+        <button type="button" data-screen="scr-aikey" id="aiSetupBtn" class="btn-secondary w-full">設定 AI 辨識</button>
       </section>
 
       <section id="backupSection" class="no-print bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
@@ -473,6 +482,11 @@
     <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>✏️ 自己輸入</h2></div>
     <div class="scr-body">
       <div><div class="scr-label">哪一餐？</div><div class="meal-picker"></div></div>
+      <div id="aiLabelWrap" class="hidden space-y-2">
+        <input id="aiLabelInput" type="file" accept="image/*" capture="environment" class="hidden" />
+        <button type="button" id="aiLabelBtn" class="btn-secondary btn-xl w-full">📷 拍營養標示，AI 幫我填</button>
+        <p id="aiLabelNote" class="hidden rounded-2xl bg-sky-50 text-sky-900 p-3 text-base leading-relaxed"></p>
+      </div>
       <form id="addFoodForm" class="space-y-4">
         <label class="block"><span class="scr-label">吃了什麼</span><input id="foodNameInput" type="text" placeholder="例如：鮪魚蛋餅" class="field" /></label>
         <div>
@@ -530,6 +544,62 @@
   </div>
 
   <!-- 體重・尺寸 -->
+  <!-- AI 幫我認（拍照或一句話 → 拆成品項 → 放進購物車） -->
+  <div id="scr-ai" class="screen hidden" role="dialog" aria-label="AI 幫我認">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>🤖 AI 幫我認</h2></div>
+    <div class="scr-body">
+      <div><div class="scr-label">記到哪一餐？</div><div class="meal-picker"></div></div>
+      <input id="aiPhotoInput" type="file" accept="image/*" capture="environment" class="hidden" />
+      <button type="button" id="aiPhotoBtn" class="big-camera"><span class="text-4xl">📷</span><span>拍這一餐</span><span class="text-base font-normal text-stone-500">或選一張照片</span></button>
+      <div id="aiPhotoWrap" class="hidden space-y-2">
+        <img id="aiPhotoPreview" alt="這一餐的照片" class="w-full max-h-64 object-contain rounded-2xl border border-stone-200 bg-white" />
+        <button type="button" id="aiPhotoClear" class="text-base text-rose-600 underline">換一張／不用照片</button>
+      </div>
+      <label class="block"><span class="scr-label">也可以用說的、打字（可以和照片一起用）</span>
+        <textarea id="aiText" rows="2" class="field text-lg" placeholder="例如：一碗白飯、半條煎鯖魚、一盤炒高麗菜"></textarea>
+      </label>
+      <button type="button" id="aiMicBtn" class="hidden btn-secondary w-full">🎤 按一下開始說話</button>
+      <div id="aiStatus" class="hidden rounded-2xl p-3 text-base leading-relaxed"></div>
+      <div id="aiResults" class="space-y-2"></div>
+      <p class="text-sm text-stone-500 leading-relaxed">照片和文字會傳到 Google 的 Gemini 辨識。AI 估的份量和熱量可能有誤差，加入後還可以改克數。</p>
+    </div>
+    <div class="scr-foot">
+      <button type="button" id="aiGoBtn" class="btn-primary btn-xl w-full">請 AI 幫我認</button>
+      <button type="button" id="aiAddBtn" class="hidden btn-primary btn-xl w-full"></button>
+    </div>
+  </div>
+
+  <!-- AI 設定與教學（Key 只存在這台裝置） -->
+  <div id="scr-aikey" class="screen hidden" role="dialog" aria-label="設定 AI 辨識">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>🤖 設定 AI 辨識</h2></div>
+    <div class="scr-body">
+      <div id="aiKeyOn" class="hidden rounded-2xl bg-emerald-50 border border-emerald-200 p-4 space-y-3">
+        <div class="text-lg font-bold text-emerald-900">✓ 這支手機已經開啟 AI 辨識</div>
+        <button type="button" id="aiOffBtn" class="btn-secondary w-full">關閉 AI，並刪除這支手機上的 Key</button>
+      </div>
+      <p class="text-lg text-stone-800 leading-relaxed">開啟後，可以<b>拍一餐、說一句話</b>讓 AI 拆成一樣一樣記，也可以<b>拍包裝的營養標示</b>自動填數字。需要一把自己的 Google「API Key」，免費、不用綁信用卡。</p>
+      <ol class="space-y-3 text-lg text-stone-800 leading-relaxed list-decimal pl-6">
+        <li>按下面的按鈕，用自己的 Google 帳號登入 Google AI Studio。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="btn-secondary block w-full mt-2 text-center">打開 Google AI Studio</a></li>
+        <li>按「<b>Create API key</b>」（建立 API 金鑰），建立好後按「複製」。</li>
+        <li>回到這裡，貼在下面的格子，按「測試並開啟」。</li>
+      </ol>
+      <label class="block"><span class="scr-label">貼上 API Key</span>
+        <input id="aiKeyInput" type="text" class="field font-mono" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIza…" />
+      </label>
+      <div id="aiKeyStatus" class="hidden rounded-2xl p-3 text-base leading-relaxed"></div>
+      <div class="rounded-2xl bg-amber-50 text-amber-900 p-4 text-base leading-relaxed space-y-2">
+        <div class="font-bold">開啟前請先知道</div>
+        <ul class="list-disc pl-5 space-y-1">
+          <li>照片和文字會傳到 Google 辨識。<b>免費方案的內容可能被 Google 用來改進產品</b>，請不要拍到臉、證件或其他個人資料。</li>
+          <li>Key 只存在這支手機：不會同步到雲端、不會放進備份檔。換手機或用電腦，要各自設定。</li>
+          <li>Key 就像密碼，不要傳給別人。不用時按上面的「關閉」就會刪除。</li>
+          <li>進階（可不做）：在 Google Cloud 的「憑證」把這把 Key 限制只能用在 <code class="break-all">https://ericckfeng.github.io/*</code>，就算外流別人也用不了。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="scr-foot"><button type="button" id="aiKeySaveBtn" class="btn-primary btn-xl w-full">測試並開啟</button></div>
+  </div>
+
   <!-- 小芽週報 -->
   <div id="scr-weekly" class="screen hidden" role="dialog" aria-label="小芽週報">
     <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>📅 小芽週報</h2></div>
@@ -925,6 +995,6 @@
     <button id="toastAction" type="button" class="hidden font-bold text-emerald-300 hover:text-emerald-200 shrink-0"></button>
   </div>
 
-  <script type="module" src="js/app.js?v=26"></script>
+  <script type="module" src="js/app.js?v=27"></script>
 </body>
 </html>

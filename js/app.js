@@ -14,6 +14,7 @@ import { sumNutr, copyEntries, mealEntries } from './meals.js';
 import { buildInsights } from './insights.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros } from './bank.js';
+import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel } from './ai.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
 const LEGACY_KEY = 'daily_calorie_tracker_v1';
@@ -289,7 +290,7 @@ function hydratePhotos(root) {
     if (src) img.src = src;
   });
 }
-function compressImage(file) {
+function compressImage(file, maxDim = 900) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = reject;
@@ -297,7 +298,6 @@ function compressImage(file) {
       const img = new Image();
       img.onerror = reject;
       img.onload = () => {
-        const maxDim = 900;
         let w = img.width;
         let h = img.height;
         if (w > maxDim || h > maxDim) {
@@ -761,8 +761,10 @@ function cartEntryFor(food, g, weighed) {
   const n = nutrientsFor(food, g, cooked ? 'cooked' : 'asis');
   const entry = {
     name: food.name + ' ' + g + 'g' + (cooked ? '（熟重）' : ''),
-    kcal: n.kcal, p: n.p, c: n.c, f: n.f, ex: n.ex, grams: g, foodId: food.id
+    kcal: n.kcal, p: n.p, c: n.c, f: n.f, ex: n.ex, grams: g
   };
+  if (food.id) entry.foodId = food.id;
+  if (food.ai) entry.ai = food.ai;   // AI 估算的（'photo' 拍照／'text' 用說的）
   if (cooked) entry.weighed = 'cooked';
   return { weighed: cooked ? 'cooked' : 'asis', entry };
 }
@@ -818,15 +820,18 @@ function saveFoodCart() {
   const date = ui.date;
   const groupId = foodCart.length > 1 ? uid('grp') : null;
   const time = nowTime();
+  const photos = [];
   const added = foodCart.map(c => {
     const it = {
-      id: uid('item'), multiplier: 1, meal, time, pending: false, hasPhoto: false,
+      id: uid('item'), multiplier: 1, meal, time, pending: false, hasPhoto: Boolean(c.photo),
       ...c.entry, ex: cleanEx(c.entry.ex), updatedAt: now()
     };
     if (groupId) it.groupId = groupId;
+    if (c.photo) photos.push([it.id, c.photo]);
     return it;
   });
   foodCart = [];
+  photos.forEach(([id, photo]) => savePhoto(id, photo));
   (state.logs[date] || (state.logs[date] = [])).push(...added);
   persist();
   renderAll();
@@ -873,6 +878,9 @@ function openScreen(id) {
   if (id === 'scr-water') renderWaterBig();
   if (id === 'scr-calc') { initCalc(); renderCalc(); }
   if (id === 'scr-weekly') renderWeekly();
+  if (id === 'scr-ai') resetAi();
+  if (id === 'scr-manual') setBox('aiLabelNote', null, '');
+  if (id === 'scr-aikey') renderAiKey();
   if (id === 'scr-sleep') renderSleepScreen();
   if (id === 'scr-photo') resetPhotoQuick();
 }
@@ -1625,6 +1633,202 @@ function renderTips(insights) {
   $('tipsTitle').textContent = ui.date === todayStr() ? '今天的小提醒' : fmtMD(ui.date) + ' 的小提醒';
   $('tipsList').innerHTML = insights.map(m => `<li>${esc(m.text)}</li>`).join('');
 }
+/* ---------------- AI 辨識（使用者自己的 Gemini API Key，預設關閉） ---------------- */
+const aiKey = () => (state.meta.ai && state.meta.ai.key) || '';
+const AI_ERRORS = {
+  key: 'API Key 不對或已經失效，請到「報告」頁的「AI 辨識」重新設定。',
+  quota: '免費額度暫時用完了（或太頻繁），請過一會兒再試。',
+  referrer: '這把 Key 限制了可以使用的網站，請確認有加上 https://ericckfeng.github.io/*',
+  forbidden: 'Google 拒絕了這個請求，請確認這把 Key 是 Gemini API 用的。',
+  network: '連不上網路，請確認網路後再試一次。'
+};
+const aiErrorText = (e) => AI_ERRORS[e && e.kind] || 'AI 這次沒有回答好，請再試一次。';
+function setBox(id, tone, text) {
+  const el = $(id);
+  el.classList.toggle('hidden', !text);
+  el.className = el.className.replace(/\b(bg|text)-(sky|rose|emerald|amber)-\d+\b/g, '').trim();
+  if (text) el.classList.add(...({ info: ['bg-sky-50', 'text-sky-900'], err: ['bg-rose-50', 'text-rose-800'], ok: ['bg-emerald-50', 'text-emerald-900'] }[tone]));
+  el.textContent = text || '';
+}
+function renderAiUi() {
+  const on = Boolean(aiKey());
+  $('aiTile').classList.toggle('hidden', !on);
+  $('aiLabelWrap').classList.toggle('hidden', !on);
+  $('aiStatusText').textContent = on
+    ? '已開啟：首頁有「AI 幫我認」，自己輸入可以拍營養標示。Key 只存在這支手機。'
+    : '用自己的免費 Google API Key：拍一餐或說一句話，AI 拆成一樣一樣記；拍營養標示自動填數字。預設關閉。';
+  $('aiSetupBtn').textContent = on ? 'AI 辨識設定' : '設定 AI 辨識';
+}
+
+// 設定頁
+function renderAiKey() {
+  const on = Boolean(aiKey());
+  $('aiKeyOn').classList.toggle('hidden', !on);
+  $('aiKeyInput').value = '';
+  $('aiKeySaveBtn').textContent = on ? '換一把 Key' : '測試並開啟';
+  setBox('aiKeyStatus', null, '');
+}
+$('aiKeySaveBtn').addEventListener('click', async () => {
+  const key = $('aiKeyInput').value.trim();
+  if (!key) { setBox('aiKeyStatus', 'err', '請先貼上 API Key'); return; }
+  const btn = $('aiKeySaveBtn');
+  btn.disabled = true; btn.textContent = '測試中…';
+  try {
+    await callGemini({ key, request: PING_REQUEST });
+    state.meta.ai = { key, at: now() };
+    persistLocal();
+    renderAll();
+    renderAiKey();
+    setBox('aiKeyStatus', 'ok', '成功！AI 辨識已開啟。首頁多了「AI 幫我認」。');
+  } catch (e) {
+    setBox('aiKeyStatus', 'err', e.kind === 'key' ? '這把 Key 不能用，請確認有完整複製（通常是 AIza 開頭）。' : aiErrorText(e));
+  } finally {
+    btn.disabled = false;
+    if (!aiKey()) btn.textContent = '測試並開啟';
+  }
+});
+$('aiOffBtn').addEventListener('click', () => {
+  delete state.meta.ai;
+  persistLocal();
+  renderAll();
+  renderAiKey();
+  showToast('已關閉 AI，這支手機上的 Key 已刪除');
+});
+
+// AI 幫我認：拍照或一句話 → 品項清單 → 勾選 → 放進購物車
+const aiDraft = { photo: null, items: null, checked: new Set(), source: null };
+function resetAi() {
+  aiDraft.photo = null; aiDraft.items = null; aiDraft.checked = new Set();
+  $('aiText').value = '';
+  $('aiPhotoInput').value = '';
+  renderAiPhoto();
+  renderAiResults();
+  setBox('aiStatus', null, '');
+}
+function renderAiPhoto() {
+  $('aiPhotoWrap').classList.toggle('hidden', !aiDraft.photo);
+  $('aiPhotoBtn').classList.toggle('hidden', Boolean(aiDraft.photo));
+  if (aiDraft.photo) $('aiPhotoPreview').src = aiDraft.photo;
+}
+function clearAiResults() { if (aiDraft.items) { aiDraft.items = null; renderAiResults(); setBox('aiStatus', null, ''); } }
+function renderAiResults() {
+  const items = aiDraft.items;
+  const has = Boolean(items && items.length);
+  $('aiGoBtn').classList.toggle('hidden', has);
+  $('aiAddBtn').classList.toggle('hidden', !has);
+  if (!items) { $('aiResults').innerHTML = ''; return; }
+  $('aiResults').innerHTML = items.map((it, i) => `<label class="pick-row cursor-pointer">
+      <input type="checkbox" data-ai-item="${i}" class="big-check" ${aiDraft.checked.has(i) ? 'checked' : ''} />
+      <span class="min-w-0 flex-1"><span class="block text-lg font-semibold text-stone-900 break-words">${esc(it.name)}</span>
+      <span class="block text-base text-stone-500 tabular-nums">約 ${it.grams} g</span></span>
+      <span class="text-lg font-bold text-emerald-700 tabular-nums shrink-0">${it.kcal} kcal</span></label>`).join('');
+  const n = aiDraft.checked.size;
+  $('aiAddBtn').textContent = '加入這一餐（' + n + ' 樣）';
+  $('aiAddBtn').disabled = !n;
+}
+$('aiPhotoBtn').addEventListener('click', () => $('aiPhotoInput').click());
+$('aiPhotoInput').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  try { aiDraft.photo = await compressImage(file, 1024); } catch (err) { showToast('照片讀不到，請再試一次'); return; }
+  clearAiResults();
+  renderAiPhoto();
+});
+$('aiPhotoClear').addEventListener('click', () => { aiDraft.photo = null; $('aiPhotoInput').value = ''; clearAiResults(); renderAiPhoto(); });
+$('aiText').addEventListener('input', clearAiResults);
+$('aiResults').addEventListener('change', (e) => {
+  const cb = e.target.closest('[data-ai-item]');
+  if (!cb) return;
+  const i = Number(cb.getAttribute('data-ai-item'));
+  if (cb.checked) aiDraft.checked.add(i); else aiDraft.checked.delete(i);
+  renderAiResults();
+});
+$('aiGoBtn').addEventListener('click', async () => {
+  const text = $('aiText').value.trim();
+  if (!aiDraft.photo && !text) { setBox('aiStatus', 'err', '請先拍照，或用說的、打字描述吃了什麼'); return; }
+  const btn = $('aiGoBtn');
+  btn.disabled = true; btn.textContent = 'AI 辨識中…（大約 5～15 秒）';
+  setBox('aiStatus', 'info', 'AI 辨識中，請稍等…');
+  try {
+    const out = normalizeMeal(await callGemini({ key: aiKey(), request: buildRequest({ prompt: mealPrompt(text), imageDataUrl: aiDraft.photo, schema: MEAL_SCHEMA }) }));
+    aiDraft.items = out.items;
+    aiDraft.source = aiDraft.photo ? 'photo' : 'text';
+    aiDraft.checked = new Set(out.items.map((_, i) => i));
+    renderAiResults();
+    if (!out.items.length) setBox('aiStatus', 'err', 'AI 沒有認出食物。' + (out.note ? out.note : '請換個角度再拍，或用說的。'));
+    else setBox('aiStatus', 'info', '不對的可以取消打勾。' + (out.note ? out.note : ''));
+  } catch (e) {
+    setBox('aiStatus', 'err', aiErrorText(e));
+  } finally {
+    btn.disabled = false; btn.textContent = '請 AI 幫我認';
+  }
+});
+// 從目前的畫面換到另一個畫面（返回鍵直接回到首頁）
+function swapScreen(id) {
+  const once = () => { window.removeEventListener('popstate', once); setTimeout(() => openScreen(id), 0); };
+  window.addEventListener('popstate', once);
+  closeScreen();
+}
+$('aiAddBtn').addEventListener('click', () => {
+  const picked = (aiDraft.items || []).filter((_, i) => aiDraft.checked.has(i));
+  if (!picked.length) return;
+  picked.forEach((it, i) => {
+    const food = aiItemToFood(it, aiDraft.source);
+    const { weighed, entry } = cartEntryFor(food, it.grams, 'asis');
+    // 照片跟著第一樣存（營養師看得到這一餐的照片）
+    foodCart.push({ key: uid('c'), food, grams: it.grams, weighed, entry, photo: i === 0 ? aiDraft.photo : null });
+  });
+  showToast('已加入 ' + picked.length + ' 樣，可以改克數，再按「記到' + MEAL_META[ui.meal].label + '」');
+  swapScreen('scr-food');
+});
+
+// 語音輸入（瀏覽器支援才顯示）
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SpeechRec) {
+  $('aiMicBtn').classList.remove('hidden');
+  let rec = null;
+  $('aiMicBtn').addEventListener('click', () => {
+    if (rec) { rec.stop(); return; }
+    rec = new SpeechRec();
+    rec.lang = 'zh-TW';
+    rec.interimResults = false;
+    rec.onresult = (ev) => {
+      const said = Array.from(ev.results).map(r => r[0].transcript).join('');
+      $('aiText').value = ($('aiText').value ? $('aiText').value + '、' : '') + said;
+      clearAiResults();
+    };
+    rec.onend = () => { rec = null; $('aiMicBtn').textContent = '🎤 按一下開始說話'; };
+    rec.onerror = () => showToast('沒聽清楚，請再說一次，或直接打字');
+    $('aiMicBtn').textContent = '⏹ 說完了，按這裡';
+    rec.start();
+  });
+}
+
+// 拍營養標示 → 填進「自己輸入」
+$('aiLabelBtn').addEventListener('click', () => $('aiLabelInput').click());
+$('aiLabelInput').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const btn = $('aiLabelBtn');
+  btn.disabled = true; btn.textContent = 'AI 讀取中…';
+  try {
+    const photo = await compressImage(file, 1280);   // 標示的字小，解析度高一點
+    const lb = normalizeLabel(await callGemini({ key: aiKey(), request: buildRequest({ prompt: LABEL_PROMPT, imageDataUrl: photo, schema: LABEL_SCHEMA }) }));
+    if (!lb) { setBox('aiLabelNote', 'err', '找不到營養標示。請把「營養標示」的表格拍清楚、拍正一點再試。'); return; }
+    if (!$('foodNameInput').value.trim() && lb.name) $('foodNameInput').value = lb.name;
+    $('foodKcalInput').value = lb.kcal;
+    $('addNutrDetails').open = true;
+    writeNutrFields('add', { p: lb.p, c: lb.c, f: lb.f, ex: null });
+    const per = lb.servingG ? '每份 ' + lb.servingG + ' 公克' + (lb.servings ? '、這包有 ' + lb.servings + ' 份' : '') + '。' : '';
+    setBox('aiLabelNote', 'info', 'AI 讀到：' + per + '每份 ' + lb.kcal + ' 大卡。已填好，請對照包裝確認；吃了幾份在下面選。');
+  } catch (err) {
+    setBox('aiLabelNote', 'err', aiErrorText(err));
+  } finally {
+    btn.disabled = false; btn.textContent = '📷 拍營養標示，AI 幫我填';
+  }
+});
+
 /* ---------------- 小芽週報 ---------------- */
 function weeklyData() {
   const wk = lastWeek(todayStr());
@@ -1759,6 +1963,7 @@ function renderBanners() {
 }
 function renderAll() {
   renderSummary();
+  renderAiUi();
   renderWeeklyCard();
   renderMealSelector();
   renderQuickStrip();
@@ -2823,4 +3028,4 @@ document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click',
 })();
 
 // 方便除錯
-window.__dietApp = { state, ui, dayTotals, lastReportText: () => lastReport && lastReport.text };
+window.__dietApp = { state, ui, dayTotals, lastReportText: () => lastReport && lastReport.text, exportPayload: () => buildPayload() };

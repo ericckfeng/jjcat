@@ -81,6 +81,7 @@
 | `updatedAt` | 最後修改時間（舊資料可能沒有，視為 0） |
 | `grams` | （選填，v11 起）從「查食物」記錄時輸入的公克數 |
 | `foodId` | （選填，v11 起）食物資料庫的 id（`tfda_foods.json` 的 TFDA 整合編號） |
+| `ai` | （選填，v27 起）這筆是 AI 估算的：`'photo'` 拍照、`'text'` 用說的／打字。沒有 `foodId` |
 | `weighed` | （選填，v11 起）`'cooked'`＝輸入的是熟重，已換算回生重計算 |
 | `groupId` | （選填，v12 起）同一次一起記的一餐（`grp_xxxx`）：查食物的購物車一次記 2 樣以上時加上。複製時換成新的 groupId，同組仍同組 |
 
@@ -117,7 +118,7 @@
 
 ### meta（只存在這台裝置）
 
-`deviceId`、`welcomed`（true＝這台裝置已經選過歡迎畫面的開始方式）、`weeklySeen`（已看過的小芽週報，值是那週週一的日期）、`fontSize`（`m`/`l`/`xl`）、`mascot`（false＝關閉小芽）、`lastCheer`、`installHintDismissed`、`lastBackup`、`photoVer`（`{ entryId: 本機照片的 photoKey }`）、`cloud: { linked, email, auto, lastSync, lastBackup, knownModified, dirty, needAuth }`。
+`deviceId`、`welcomed`（true＝這台裝置已經選過歡迎畫面的開始方式）、`ai: { key, at }`（使用者自己的 Gemini API Key；**只存在這台裝置，絕不能放進同步檔或備份檔**，有 e2e 測試檢查）、`weeklySeen`（已看過的小芽週報，值是那週週一的日期）、`fontSize`（`m`/`l`/`xl`）、`mascot`（false＝關閉小芽）、`lastCheer`、`installHintDismissed`、`lastBackup`、`photoVer`（`{ entryId: 本機照片的 photoKey }`）、`cloud: { linked, email, auto, lastSync, lastBackup, knownModified, dirty, needAuth }`。
 
 ## 匯出／同步檔案格式
 
@@ -145,3 +146,4 @@
 | v3（App v24） | 2026-11-19 | 每日欄位新增 `vfl`、`pa`、`ecw`。每日 CSV 最後加三欄。 |
 | v3（App v25） | 2026-11-19 | 每日欄位新增 `vfa`（內臟脂肪面積）。每日 CSV 最後加一欄。 |
 | v3（App v26） | 2026-11-19 | 每日欄位新增 `asm`（四肢肌肉量，算 SMI）。每日 CSV 最後加兩欄（四肢肌肉量、SMI）。 |
+| v3（App v27） | 2026-11-19 | AI 辨識：飲食記錄新增選填欄位 `ai`；`meta.ai`（只存本機）。 |

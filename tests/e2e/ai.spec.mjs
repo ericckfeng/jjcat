@@ -1,0 +1,163 @@
+// AI 辨識：Gemini API 用假的回應（不連真的網路、不用真的 Key）
+import { test, expect } from '@playwright/test';
+import { openApp, appState } from './helpers.mjs';
+
+// 2×2 的 PNG
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAAMBgEB1JqCEwAAAABJRU5ErkJggg==', 'base64');
+const photo = { name: 'meal.png', mimeType: 'image/png', buffer: PNG };
+const KEY = 'AIzaTEST-KEY-123';
+
+const reply = (obj) => ({ status: 200, contentType: 'application/json', body: JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }] }) });
+const MEAL = { items: [
+  { name: '白飯', grams: 200, kcal: 364, protein: 6.2, carbs: 80.1, fat: 0.6, exchanges: { grain: 4 } },
+  { name: '滷雞腿', grams: 150, kcal: 330, protein: 30, carbs: 2, fat: 22, exchanges: { protein: 3.5, oil: 1 } },
+  { name: '炒高麗菜', grams: 100, kcal: 60, protein: 1.3, carbs: 5, fat: 4, exchanges: { vegetable: 1, oil: 0.8 } }
+], note: '' };
+
+async function mockGemini(page, handler) {
+  const calls = [];
+  await page.route('https://generativelanguage.googleapis.com/**', async (route) => {
+    const req = route.request();
+    const body = JSON.parse(req.postData() || '{}');
+    calls.push({ url: req.url(), headers: req.headers(), body });
+    await route.fulfill(handler(body, calls.length));
+  });
+  return calls;
+}
+async function enableAi(page) {
+  await page.click('.mobile-nav-tab[data-tab=report]');
+  await page.click('#aiSetupBtn');
+  await page.fill('#aiKeyInput', KEY);
+  await page.click('#aiKeySaveBtn');
+  await expect(page.locator('#aiKeyStatus')).toContainText('成功');
+  await page.click('#scr-aikey [data-back]');
+  await page.click('.mobile-nav-tab[data-tab=log]');
+}
+
+test('預設關閉：首頁沒有 AI，自己輸入沒有拍標示；不會連到 Gemini', async ({ page }) => {
+  const calls = await mockGemini(page, () => reply({}));
+  await openApp(page);
+  await expect(page.locator('#aiTile')).toBeHidden();
+  await page.click('[data-screen=scr-manual]');
+  await expect(page.locator('#aiLabelWrap')).toBeHidden();
+  expect(calls).toHaveLength(0);
+});
+
+test('設定：Key 不對會說明；對的 Key 開啟，只存在本機，不進備份／同步檔；可以關閉刪除', async ({ page }) => {
+  const calls = await mockGemini(page, (body, n) => n === 1
+    ? { status: 400, contentType: 'application/json', body: JSON.stringify([{ error: { code: 400, message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT', details: [{ reason: 'API_KEY_INVALID' }] } }]) }
+    : reply({ ok: true }));
+  await openApp(page);
+  await page.click('.mobile-nav-tab[data-tab=report]');
+  await page.click('#aiSetupBtn');
+  await page.fill('#aiKeyInput', 'wrong');
+  await page.click('#aiKeySaveBtn');
+  await expect(page.locator('#aiKeyStatus')).toContainText('這把 Key 不能用');
+  await page.fill('#aiKeyInput', KEY);
+  await page.click('#aiKeySaveBtn');
+  await expect(page.locator('#aiKeyStatus')).toContainText('成功');
+  expect(calls[1].headers['x-goog-api-key']).toBe(KEY);
+  expect(calls[1].url).toMatch(/gemini-flash-latest:generateContent$/);
+  // Key 在本機 meta，不在要同步／備份的資料裡
+  expect((await appState(page)).meta.ai.key).toBe(KEY);
+  const payload = await page.evaluate(() => JSON.stringify(window.__dietApp.exportPayload()));
+  expect(payload).not.toContain(KEY);
+  expect(payload).not.toContain('"meta"');
+  await page.click('#scr-aikey [data-back]');
+  await page.click('.mobile-nav-tab[data-tab=log]');
+  await expect(page.locator('#aiTile')).toBeVisible();
+  // 關閉
+  await page.click('.mobile-nav-tab[data-tab=report]');
+  await page.click('#aiSetupBtn');
+  await page.click('#aiOffBtn');
+  expect((await appState(page)).meta.ai).toBeUndefined();
+  await page.click('#scr-aikey [data-back]');
+  await page.click('.mobile-nav-tab[data-tab=log]');
+  await expect(page.locator('#aiTile')).toBeHidden();
+});
+
+test('拍一餐：AI 拆成品項，取消一樣，加入購物車改克數，記到午餐（照片跟著第一樣）', async ({ page }) => {
+  const errors = [];
+  const calls = await mockGemini(page, (body) => body.contents[0].parts[0].text.includes('{"ok": true}') ? reply({ ok: true }) : reply(MEAL));
+  await openApp(page, { errors });
+  const today = await page.evaluate(() => window.__dietApp.ui.date);
+  await enableAi(page);
+  await page.click('#aiTile');
+  await page.click('#scr-ai [data-meal=lunch]');
+  await page.setInputFiles('#aiPhotoInput', photo);
+  await expect(page.locator('#aiPhotoWrap')).toBeVisible();
+  await page.click('#aiGoBtn');
+  await expect(page.locator('#aiResults .pick-row')).toHaveCount(3);
+  const req = calls[calls.length - 1].body;
+  expect(req.contents[0].parts[1].inline_data.mime_type).toBe('image/jpeg');
+  expect(req.generationConfig.responseMimeType).toBe('application/json');
+  await expect(page.locator('#aiAddBtn')).toHaveText('加入這一餐（3 樣）');
+  await page.locator('[data-ai-item="2"]').uncheck();
+  await expect(page.locator('#aiAddBtn')).toHaveText('加入這一餐（2 樣）');
+  await page.click('#aiAddBtn');
+  await expect(page.locator('#scr-food')).toBeVisible();
+  await expect(page.locator('#scr-ai')).toBeHidden();
+  await expect(page.locator('#foodCart li')).toHaveCount(2);
+  await expect(page.locator('#foodCartSaveBtn')).toHaveText('記到午餐（2 樣）');
+  // 白飯改成 150 g：營養素和六大類等比例
+  await page.locator('#foodCart li', { hasText: '白飯' }).locator('[data-cart-edit]').click();
+  await page.fill('#gramsInput', '150');
+  await expect(page.locator('#gramsResult')).toContainText('273');
+  await page.click('#gramsSaveBtn');
+  await page.click('#foodCartSaveBtn');
+  await expect(page.locator('#scr-food')).toBeHidden();
+  const list = (await appState(page)).logs[today];
+  expect(list).toHaveLength(2);
+  const rice = list.find(x => x.name.startsWith('白飯'));
+  expect(rice).toMatchObject({ name: '白飯 150g', kcal: 273, grams: 150, ai: 'photo', meal: 'lunch', ex: { grain: 3 } });
+  expect(rice.foodId).toBeUndefined();
+  const chicken = list.find(x => x.name.startsWith('滷雞腿'));
+  expect(chicken).toMatchObject({ kcal: 330, ex: { prot: 3.5, oil: 1 } });
+  expect(list.filter(x => x.hasPhoto)).toHaveLength(1);
+  expect(list[0].groupId).toBe(list[1].groupId);
+  expect(errors).toEqual([]);
+});
+
+test('用打字：沒有照片也可以；額度用完時說明', async ({ page }) => {
+  let quota = false;
+  const calls = await mockGemini(page, (body) => {
+    if (body.contents[0].parts[0].text.includes('{"ok": true}')) return reply({ ok: true });
+    return quota ? { status: 429, contentType: 'application/json', body: JSON.stringify({ error: { code: 429, status: 'RESOURCE_EXHAUSTED' } }) } : reply({ items: [MEAL.items[0]], note: '' });
+  });
+  await openApp(page);
+  await enableAi(page);
+  await page.click('#aiTile');
+  await page.click('#aiGoBtn');
+  await expect(page.locator('#aiStatus')).toContainText('請先拍照');
+  await page.fill('#aiText', '一碗白飯');
+  await page.click('#aiGoBtn');
+  await expect(page.locator('#aiResults .pick-row')).toHaveCount(1);
+  const last = calls[calls.length - 1].body.contents[0].parts;
+  expect(last).toHaveLength(1);
+  expect(last[0].text).toContain('使用者的描述：一碗白飯');
+  quota = true;
+  await page.fill('#aiText', '一碗白飯和一顆蛋');
+  await expect(page.locator('#aiResults .pick-row')).toHaveCount(0); // 改了描述，舊結果清掉
+  await page.click('#aiGoBtn');
+  await expect(page.locator('#aiStatus')).toContainText('免費額度暫時用完了');
+});
+
+test('拍營養標示：填進自己輸入的名稱、熱量、營養素', async ({ page }) => {
+  await mockGemini(page, (body) => body.contents[0].parts[0].text.includes('{"ok": true}')
+    ? reply({ ok: true })
+    : reply({ found: true, name: '高纖蘇打餅', serving_g: 30, servings_per_package: 6, kcal: 132, protein: 2.7, fat: 4.8, carbs: 19.6, sugar: 1.2, sodium_mg: 150 }));
+  await openApp(page);
+  const today = await page.evaluate(() => window.__dietApp.ui.date);
+  await enableAi(page);
+  await page.click('[data-screen=scr-manual]');
+  await expect(page.locator('#aiLabelWrap')).toBeVisible();
+  await page.setInputFiles('#aiLabelInput', photo);
+  await expect(page.locator('#aiLabelNote')).toContainText('每份 30 公克、這包有 6 份');
+  await expect(page.locator('#foodNameInput')).toHaveValue('高纖蘇打餅');
+  await expect(page.locator('#foodKcalInput')).toHaveValue('132');
+  await expect(page.locator('#add-p')).toHaveValue('2.7');
+  await page.click('[data-portion="2"]');
+  await page.click('[form=addFoodForm][type=submit]');
+  const it = (await appState(page)).logs[today].find(x => x.name === '高纖蘇打餅');
+  expect(it).toMatchObject({ kcal: 264, p: 5.4, c: 39.2, f: 9.6 });
+});

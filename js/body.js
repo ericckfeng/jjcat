@@ -84,3 +84,23 @@ export function daySleep(day) {
   const nap = ((day && day.naps) || []).reduce((s, n) => s + (Number(n.min) || 0), 0);
   return { night, nap, total: night + nap, quality: day && day.sleepQ != null ? Number(day.sleepQ) : null };
 }
+
+// 7 日移動平均：每一天取「這天和前 6 天」有記錄的值平均（不用每天都量）。
+// 每天的體重會因為水分、鹽分上下跳 1 公斤左右，看平均比較準。
+//   days：state.days；dates：要畫的日期（YYYY-MM-DD，遞增）
+//   回傳和 dates 等長的陣列，視窗內完全沒有記錄的那天是 null
+export function rollingAverage(days, key, dates, windowDays = 7) {
+  const shift = (s, n) => {
+    const [y, m, d] = s.split('-').map(Number);
+    const t = new Date(y, m - 1, d + n);
+    return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+  };
+  return (dates || []).map(date => {
+    let sum = 0, n = 0;
+    for (let i = 0; i < windowDays; i++) {
+      const v = Number(((days || {})[shift(date, -i)] || {})[key]);
+      if (Number.isFinite(v) && v > 0) { sum += v; n++; }
+    }
+    return n ? Math.round(sum / n * 10) / 10 : null;
+  });
+}

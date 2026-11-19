@@ -6,7 +6,7 @@ import { photoDB } from './db.js';
 import { REPORT_CSS, buildReportHTML, buildReportText } from './report.js';
 import * as cloud from './cloud.js';
 import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VERSION } from './sync.js';
-import { MEASURES, MEASURE_META, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
+import { MEASURES, MEASURE_META, rollingAverage, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
 import { mascotSVG, buildMascotMessages } from './mascot.js';
 import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS } from './foods.js';
 import { sumNutr, copyEntries, mealEntries } from './meals.js';
@@ -1238,18 +1238,22 @@ function renderTrends() {
   const s = rangeStats(dates);
   const target = state.targets.kcal;
 
-  const w0 = s.weights[0];
   const w1 = s.weights[s.weights.length - 1];
-  const wDelta = s.weights.length > 1 ? r1(w1.w - w0.w) : null;
+  // 體重變化看 7 天平均的變化，不受某一天水腫影響
+  const wAvg = rollingAverage(state.days, 'weight', dates).filter(v => v != null);
+  const wDelta = s.weights.length > 1 && wAvg.length > 1 ? r1(wAvg[wAvg.length - 1] - wAvg[0]) : null;
   $('trendStats').innerHTML = [
     statTile('平均攝取', s.avgKcal != null ? fmt(s.avgKcal) + ' kcal' : '–', '目標 ' + fmt(target)),
     statTile('記錄天數', s.loggedDays + ' / ' + n, '超標 ' + s.overDays + ' 天'),
-    statTile('體重變化', wDelta != null ? (wDelta > 0 ? '+' : '') + wDelta + ' kg' : (w1 ? w1.w + ' kg' : '–'), w1 ? '最新 ' + w1.w + ' kg' : ''),
+    statTile('體重變化（平均）', wDelta != null ? (wDelta > 0 ? '+' : '') + wDelta + ' kg' : (w1 ? w1.w + ' kg' : '–'), w1 ? '最新 ' + w1.w + ' kg' : ''),
     statTile('平均喝水', s.avgWater != null ? fmt(s.avgWater) + ' ml' : '–', '運動共 ' + s.exMinTotal + ' 分')
   ].join('');
 
+  // 身體數據、睡眠的文字摘要不靠 Chart.js；圖表函式自己會檢查 Chart 在不在
+  const labels = dates.map(fmtMD);
+  renderBodyChart(dates, labels);
+  renderSleepChart(dates, labels);
   if (typeof Chart !== 'undefined') {
-    const labels = dates.map(fmtMD);
     const values = s.totals.map(t => t.kcal);
     if (kcalChart) kcalChart.destroy();
     kcalChart = new Chart($('trendChart').getContext('2d'), {
@@ -1268,8 +1272,6 @@ function renderTrends() {
       }
     });
 
-    renderBodyChart(dates, labels);
-    renderSleepChart(dates, labels);
   }
 
   const tg = state.targets;
@@ -1363,14 +1365,25 @@ function renderBodyChart(dates, labels) {
   const data = metricSeries(dates, key);
   const pts = data.filter(v => v != null);
   const has = pts.length > 0;
+  // 體重：每天的點之外，加 7 天平均線（每天會因水分、鹽分上下跳，看平均比較準）
+  const avg = key === 'weight' ? rollingAverage(state.days, 'weight', dates) : null;
+  const avgPts = avg ? avg.filter(v => v != null) : [];
   $('weightEmpty').classList.toggle('hidden', has);
   $('weightChartWrap').classList.toggle('hidden', !has);
-  $('bodyMetricSummary').textContent = has
-    ? '最新 ' + pts[pts.length - 1] + (meta.unit ? ' ' + meta.unit : '') + (pts.length > 1 ? '・期間 ' + (pts[pts.length - 1] - pts[0] > 0 ? '+' : '') + r1(pts[pts.length - 1] - pts[0]) : '')
-    : '';
+  $('weightAvgNote').classList.toggle('hidden', !(has && avg));
+  const signed = (d) => (d > 0 ? '+' : '') + r1(d);
+  $('bodyMetricSummary').textContent = !has ? ''
+    : avg
+      ? '最新 ' + pts[pts.length - 1] + ' kg・7 天平均 ' + avgPts[avgPts.length - 1] + ' kg' + (avgPts.length > 1 ? '（期間 ' + signed(avgPts[avgPts.length - 1] - avgPts[0]) + '）' : '')
+      : '最新 ' + pts[pts.length - 1] + (meta.unit ? ' ' + meta.unit : '') + (pts.length > 1 ? '・期間 ' + signed(pts[pts.length - 1] - pts[0]) : '');
   if (weightChart) { weightChart.destroy(); weightChart = null; }
   if (!has || typeof Chart === 'undefined') return;
-  const ds = [{ label: meta.label + (meta.unit ? '（' + meta.unit + '）' : ''), data, borderColor: '#0ea5e9', backgroundColor: '#0ea5e9', spanGaps: true, tension: 0.25, pointRadius: 3 }];
+  const ds = avg
+    ? [
+        { label: '7 天平均', data: avg, borderColor: '#0369a1', backgroundColor: '#0369a1', spanGaps: true, tension: 0.3, pointRadius: 0, borderWidth: 3 },
+        { label: '每天體重', data, borderColor: '#bae6fd', backgroundColor: '#0ea5e9', spanGaps: true, tension: 0.25, pointRadius: 3.5, borderWidth: 1 }
+      ]
+    : [{ label: meta.label + (meta.unit ? '（' + meta.unit + '）' : ''), data, borderColor: '#0ea5e9', backgroundColor: '#0ea5e9', spanGaps: true, tension: 0.25, pointRadius: 3 }];
   const line = (label, v, color) => ds.push({ label, data: Array(dates.length).fill(v), borderColor: color, borderDash: [5, 5], pointRadius: 0, borderWidth: 1.5 });
   if (key === 'weight' && state.targets.weight) line('目標體重', state.targets.weight, '#a8a29e');
   if (key === 'bmi') { line('健康上限 24', 24, '#f59e0b'); line('過輕 18.5', 18.5, '#7dd3fc'); }

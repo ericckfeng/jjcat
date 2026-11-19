@@ -1,7 +1,7 @@
 // BMI、身體尺寸、睡眠計算（js/body.js）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, sleepMinutes, fmtDuration, daySleep } from '../../js/body.js';
+import { calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, sleepMinutes, fmtDuration, daySleep, rollingAverage } from '../../js/body.js';
 
 test('BMI 計算', () => {
   assert.equal(calcBmi(70.6, 168), 25);
@@ -41,4 +41,33 @@ test('睡眠時數（跨午夜、凌晨才睡）', () => {
 test('一天的總睡眠＝昨晚＋補眠；欄位不存在也不會出錯', () => {
   assert.deepEqual(daySleep({ sleepMin: 450, sleepQ: 4, naps: [{ min: 30 }, { min: 20 }] }), { night: 450, nap: 50, total: 500, quality: 4 });
   assert.deepEqual(daySleep(undefined), { night: 0, nap: 0, total: 0, quality: null });
+});
+
+test('7 日移動平均：取這天和前 6 天有記錄的值，不用每天量', () => {
+  const days = {
+    '2026-11-01': { weight: 70 },
+    '2026-11-03': { weight: 69 },
+    '2026-11-04': { weight: 71.5 },
+    '2026-11-08': { weight: 68 },
+    '2026-11-10': { weight: '' }, // 清空過的欄位
+    '2026-11-20': { waist: 80 }
+  };
+  const dates = ['2026-11-01', '2026-11-02', '2026-11-04', '2026-11-07', '2026-11-08', '2026-11-10', '2026-11-12', '2026-11-20'];
+  assert.deepEqual(rollingAverage(days, 'weight', dates), [
+    70,          // 只有自己
+    70,          // 11/1
+    70.2,        // 11/1, 3, 4 → 210.5 / 3
+    70.2,        // 11/1–7 一樣三筆
+    69.5,        // 11/2–8：69, 71.5, 68
+    69.8,        // 11/4–10：71.5, 68
+    68,          // 11/6–12：68
+    null         // 11/14–20 沒有體重
+  ]);
+});
+
+test('7 日移動平均：視窗可以跨月、跨年，也可以換天數', () => {
+  const days = { '2025-12-28': { weight: 60 }, '2026-01-02': { weight: 62 } };
+  assert.deepEqual(rollingAverage(days, 'weight', ['2026-01-02', '2026-01-04']), [61, 62]);
+  assert.deepEqual(rollingAverage(days, 'weight', ['2026-01-02'], 3), [62]);
+  assert.deepEqual(rollingAverage(undefined, 'weight', ['2026-01-02']), [null]);
 });

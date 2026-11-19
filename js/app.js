@@ -10,6 +10,7 @@ import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, calcBmi, bmiCa
 import { mascotSVG, buildMascotMessages } from './mascot.js';
 import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS } from './foods.js';
 import { sumNutr, copyEntries, mealEntries } from './meals.js';
+import { buildInsights } from './insights.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
 const LEGACY_KEY = 'daily_calorie_tracker_v1';
@@ -1528,6 +1529,15 @@ function weightInfo(date) {
     measuredToday: last === date
   };
 }
+// 跨模組提醒要的資料：這天、前一天、前兩天
+function insightDay(date) {
+  const d = getDay(date, false);
+  const t = dayTotals(date);
+  return {
+    weight: num(d.weight), bowel: d.bowel == null ? null : Number(d.bowel), water: num(d.water),
+    kcal: t.kcal, count: t.count, veg: t.ex.veg, exItems: t.exItems
+  };
+}
 function renderMascot() {
   const card = $('mascotCard');
   if (state.meta.mascot === false) { card.classList.add('hidden'); return; }
@@ -1543,7 +1553,12 @@ function renderMascot() {
     meals: MEAL_KEYS.filter(k => t.meals[k] > 0).length, streak, weight: w,
     targetWeight: num(state.targets.weight), bmi, water: num(d.water) || 0,
     lastNight: daySleep(getDay(ui.date, false)),
-    exercise: d.exercise || (d.exMin ? d.exMin + ' 分鐘' : '')
+    exercise: d.exercise || (d.exMin ? d.exMin + ' 分鐘' : ''),
+    insights: buildInsights({
+      isToday, targetKcal: state.targets.kcal,
+      d: [0, -1, -2].map(n => insightDay(addDays(ui.date, n))),
+      lastNightMin: daySleep(d).night || null
+    })
   });
   mascotIdx = 0;
   showMascotMsg();

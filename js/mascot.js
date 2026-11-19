@@ -79,7 +79,8 @@ export function mascotSVG(mood = 'happy') {
     streak: { n, todayLogged },
     weight: { now, week, first, measuredToday } | null,
     targetWeight, bmi, bmiLabel,
-    water, exercise, lastNight
+    water, exercise, lastNight,
+    insights   // 跨模組提醒（js/insights.js 的 buildInsights），一起排序
   }
 */
 export function buildMascotMessages(ctx) {
@@ -129,7 +130,7 @@ export function buildMascotMessages(ctx) {
   if (ctx.isToday && sl && sl.night) {
     const h = Math.round(sl.night / 6) / 10;
     if (sl.night >= 420) add(42, 'happy', `昨晚睡了 ${h} 小時，睡飽了食慾比較好控制 😴`);
-    else if (sl.night < 360) add(44, 'calm', `昨晚只睡 ${h} 小時，今天容易嘴饞，記得多喝水、晚上早點睡喔`);
+    // 睡不到 6 小時的提醒在 insights.js
   } else if (ctx.isToday && ctx.hour >= 5 && ctx.hour < 12) {
     add(37, 'hello', '早安！昨晚睡得好嗎？點「睡眠」記一下 😴');
   }
@@ -143,6 +144,7 @@ export function buildMascotMessages(ctx) {
     add(36, 'hello', ctx.hour >= 5 && ctx.hour < 10 ? '早安！吃了早餐記得記一下 ☀️' : ctx.hour < 5 ? '夜深了，早點休息，睡飽了明天比較不會嘴饞 🌙' : '今天還沒記錄喔，點下面的「常吃的」一下就好 😊');
   }
   if (ctx.isToday && w && !w.measuredToday && ctx.hour >= 5 && ctx.hour < 11) add(15, 'hello', '早上起床、上完廁所後量體重最準喔 ⚖️');
+  (ctx.insights || []).forEach(m => add(m.pri, m.mood, m.text, m.key));
   add(1, 'calm', '我是小芽，陪你一起記錄、一起變健康 🌱', 'intro');
   return out.sort((a, b) => b.pri - a.pri);
 }

@@ -132,7 +132,8 @@ export function emptyReason(json) {
 }
 
 // 模型找不到（404）或太忙（503）就換下一個；每個模型最多等 timeoutMs，不讓畫面一直卡住
-export async function callGemini({ key, request, fetchFn = fetch, models = AI_MODELS, timeoutMs = 60000 }) {
+// info（可不給）：成功時寫入實際回答的模型 info.model，給「檢查 AI」顯示
+export async function callGemini({ key, request, fetchFn = fetch, models = AI_MODELS, timeoutMs = 60000, info = null }) {
   if (!key) throw new AiError('key');
   let last = new AiError('other');
   for (const model of models) {
@@ -156,6 +157,7 @@ export async function callGemini({ key, request, fetchFn = fetch, models = AI_MO
     if (res.ok) {
       const text = responseText(body);
       if (!text.trim()) throw new AiError('empty', '', model + ' ' + emptyReason(body));
+      if (info) info.model = model;
       return parseJsonText(text);
     }
     const kind = classifyError(res.status, body);
@@ -217,3 +219,40 @@ export const PING_REQUEST = {
   contents: [{ role: 'user', parts: [{ text: '回傳 {"ok": true}' }] }],
   generationConfig: { responseMimeType: 'application/json', responseSchema: { type: 'OBJECT', properties: { ok: { type: 'BOOLEAN' } } } }
 };
+
+/* ---------------- 檢查 AI 能不能用（設定頁） ---------------- */
+
+// 依序檢查：(1) 文字回答 (2) 讀照片（App 自己畫的一張營養標示，答案已知）。
+// 每一步回傳 { name, ok, ms, model, kind, detail, note }，畫面照著列出來，使用者截圖就能查。
+export const CHECK_KCAL = 123;
+export async function runAiCheck({ key, labelImage, fetchFn = fetch, clock = () => Date.now(), timeoutMs = 60000 }) {
+  const steps = [];
+  const step = async (name, request, verify) => {
+    const info = {};
+    const t0 = clock();
+    try {
+      const out = await callGemini({ key, request, fetchFn, timeoutMs, info });
+      const note = verify(out);
+      steps.push({ name, ok: !note, ms: clock() - t0, model: info.model || '', kind: note ? 'wrong' : '', detail: '', note: note || '' });
+    } catch (e) {
+      steps.push({ name, ok: false, ms: clock() - t0, model: '', kind: e.kind || 'other', detail: e.detail || String(e.message || ''), note: '' });
+    }
+    return steps[steps.length - 1].ok;
+  };
+  const textOk = await step('文字', PING_REQUEST, (o) => (o && o.ok === true ? '' : 'AI 回答的內容不對：' + JSON.stringify(o).slice(0, 60)));
+  // 文字都不行（Key、網路、額度），照片一定也不行，不必再等
+  if (textOk && labelImage) {
+    await step('照片', buildRequest({ prompt: LABEL_PROMPT, imageDataUrl: labelImage, schema: LABEL_SCHEMA }), (o) => {
+      const lb = normalizeLabel(o);
+      if (!lb) return 'AI 看不到測試圖上的營養標示';
+      return lb.kcal === CHECK_KCAL ? '' : 'AI 讀到 ' + lb.kcal + ' 大卡（應該是 ' + CHECK_KCAL + '）';
+    });
+  }
+  return steps;
+}
+
+// 檢查結果 → 給使用者看／複製傳給開發者的文字
+export function checkReport(steps) {
+  return steps.map(s => (s.ok ? '✓ ' : '✗ ') + s.name + '：' + (s.ok ? '正常' : '失敗') + '（' + (s.ms / 1000).toFixed(1) + ' 秒' +
+    (s.model ? '，' + s.model : '') + '）' + (s.note ? '\n  ' + s.note : '') + (s.kind && s.kind !== 'wrong' ? '\n  代碼：' + [s.kind, s.detail].filter(Boolean).join(' ') : '')).join('\n');
+}

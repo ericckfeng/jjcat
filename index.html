@@ -525,6 +525,10 @@
     <div class="scr-body">
       <div id="aiKeyOn" class="hidden rounded-2xl bg-emerald-50 border border-emerald-200 p-4 space-y-3">
         <div class="text-lg font-bold text-emerald-900">✓ 這支手機已經開啟 AI 辨識</div>
+        <button type="button" id="aiCheckBtn" class="btn-primary w-full">🔍 檢查 AI 能不能用</button>
+        <p class="text-base text-emerald-900 leading-relaxed">會試兩件事：AI 能不能回答文字、能不能讀照片（用一張測試用的營養標示）。大約 10～30 秒。</p>
+        <div id="aiCheckResult" class="hidden rounded-2xl bg-white border border-stone-200 p-3 text-base leading-relaxed whitespace-pre-line break-words"></div>
+        <button type="button" id="aiCheckCopy" class="btn-secondary w-full hidden">複製檢查結果（傳給開發者）</button>
         <button type="button" id="aiOffBtn" class="btn-secondary w-full">關閉 AI，並刪除這支手機上的 Key</button>
       </div>
       <p class="text-lg text-stone-800 leading-relaxed">開啟後，可以<b>拍一餐、說一句話</b>讓 AI 拆成一樣一樣記，也可以<b>拍包裝的營養標示</b>自動填數字。需要一把自己的 Google「API Key」，免費、不用綁信用卡。</p>

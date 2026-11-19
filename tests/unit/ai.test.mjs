@@ -113,3 +113,23 @@ test('呼叫：等太久就放棄這個模型，不讓畫面卡住', async () =>
   const hang = async (url, opt) => new Promise((_, reject) => opt.signal.addEventListener('abort', () => reject(new Error('aborted'))));
   await assert.rejects(callGemini({ key: 'K', request: {}, fetchFn: hang, timeoutMs: 20 }), (e) => e.kind === 'timeout');
 });
+
+test('檢查 AI：文字和照片都正常；文字失敗就不再試照片；讀錯數字也算失敗', async () => {
+  const { runAiCheck, checkReport, CHECK_KCAL } = await import('../../js/ai.js');
+  let t = 0;
+  const clock = () => (t += 1500);
+  const good = async (url, opt) => okRes(JSON.parse(opt.body).contents[0].parts.length > 1 ? { found: true, kcal: CHECK_KCAL } : { ok: true });
+  const ok = await runAiCheck({ key: 'K', labelImage: 'data:image/jpeg;base64,QUJD', fetchFn: good, clock });
+  assert.deepEqual(ok.map(s => [s.name, s.ok, s.model]), [['文字', true, AI_MODELS[0]], ['照片', true, AI_MODELS[0]]]);
+  assert.match(checkReport(ok), /✓ 文字：正常（1\.5 秒，gemini-flash-latest）/);
+
+  const calls = [];
+  const bad = await runAiCheck({ key: 'K', labelImage: 'data:image/jpeg;base64,QUJD', clock, fetchFn: async (u) => { calls.push(u); return errRes(429, { error: { status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded' } }); } });
+  assert.equal(bad.length, 1);
+  assert.equal(calls.length, 1);
+  assert.match(checkReport(bad), /✗ 文字：失敗[\s\S]*代碼：quota gemini-flash-latest 429 RESOURCE_EXHAUSTED Quota exceeded/);
+
+  const wrong = await runAiCheck({ key: 'K', labelImage: 'data:image/jpeg;base64,QUJD', clock, fetchFn: async (url, opt) => okRes(JSON.parse(opt.body).contents[0].parts.length > 1 ? { found: true, kcal: 12 } : { ok: true }) });
+  assert.equal(wrong[1].ok, false);
+  assert.match(checkReport(wrong), /AI 讀到 12 大卡（應該是 123）/);
+});

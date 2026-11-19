@@ -14,7 +14,7 @@ import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, sho
 import { buildInsights } from './insights.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros } from './bank.js';
-import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel } from './ai.js';
+import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
 const LEGACY_KEY = 'daily_calorie_tracker_v1';
@@ -1747,6 +1747,8 @@ function renderAiKey() {
   $('aiKeyOn').classList.toggle('hidden', !on);
   $('aiKeyInput').value = '';
   $('aiKeySaveBtn').textContent = on ? '換一把 Key' : '測試並開啟';
+  $('aiCheckResult').classList.add('hidden');
+  $('aiCheckCopy').classList.add('hidden');
   setBox('aiKeyStatus', null, '');
 }
 $('aiKeySaveBtn').addEventListener('click', async () => {
@@ -1767,6 +1769,44 @@ $('aiKeySaveBtn').addEventListener('click', async () => {
     btn.disabled = false;
     if (!aiKey()) btn.textContent = '測試並開啟';
   }
+});
+// 檢查 AI：畫一張答案已知的營養標示，請 AI 讀；每一步列出成功／失敗、秒數、模型、錯誤代碼
+function checkLabelImage() {
+  const cv = document.createElement('canvas');
+  cv.width = 480; cv.height = 360;
+  const g = cv.getContext('2d');
+  if (!g) return null;
+  g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+  g.strokeStyle = '#000'; g.lineWidth = 3; g.strokeRect(10, 10, 460, 340);
+  g.fillStyle = '#000'; g.font = 'bold 34px sans-serif';
+  g.fillText('營養標示', 30, 60);
+  g.font = '26px sans-serif';
+  [['每一份量', '30 公克'], ['本包裝含', '5 份'], ['熱量', CHECK_KCAL + ' 大卡'], ['蛋白質', '3.0 公克'], ['脂肪', '4.5 公克'], ['碳水化合物', '18.0 公克'], ['鈉', '95 毫克']]
+    .forEach(([a, b], i) => { g.fillText(a, 30, 110 + i * 34); g.fillText(b, 280, 110 + i * 34); });
+  return cv.toDataURL('image/jpeg', 0.9);
+}
+let aiCheckText = '';
+$('aiCheckBtn').addEventListener('click', async () => {
+  const btn = $('aiCheckBtn');
+  btn.disabled = true; btn.textContent = '檢查中…（最多 2 分鐘）';
+  $('aiCheckCopy').classList.add('hidden');
+  $('aiCheckResult').classList.remove('hidden');
+  $('aiCheckResult').textContent = '檢查中，請稍等…';
+  try {
+    const steps = await runAiCheck({ key: aiKey(), labelImage: checkLabelImage() });
+    const bad = steps.find(st => !st.ok);
+    const head = !bad ? (steps.length > 1 ? '✅ AI 可以正常使用（文字和照片都沒問題）' : '✅ 文字正常（這台裝置無法產生測試照片）')
+      : '❌ AI 目前不能正常使用\n' + (bad.kind === 'wrong' ? 'AI 有回答，但內容不對。' : aiErrorText({ kind: bad.kind }).split('\n')[0]);
+    aiCheckText = head + '\n\n' + checkReport(steps) + '\n\n飲控隨身記 版本 ' + APP_VERSION + '・' + new Date().toLocaleString('zh-TW') + '\n' + navigator.userAgent;
+    $('aiCheckResult').textContent = head + '\n\n' + checkReport(steps);
+    $('aiCheckCopy').classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = '🔍 檢查 AI 能不能用';
+  }
+});
+$('aiCheckCopy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(aiCheckText); showToast('已複製，可以貼到 LINE 傳給開發者'); }
+  catch (e) { showToast('這台裝置不能自動複製，請截圖'); }
 });
 $('aiOffBtn').addEventListener('click', () => {
   delete state.meta.ai;

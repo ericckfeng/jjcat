@@ -155,3 +155,29 @@ test('拍營養標示：填進自己輸入的名稱、熱量、營養素', async
   const it = (await appState(page)).logs[today].find(x => x.name === '高纖蘇打餅');
   expect(it).toMatchObject({ kcal: 264, p: 5.4, c: 39.2, f: 9.6 });
 });
+
+test('設定：檢查 AI 能不能用（文字＋照片），失敗時列出代碼，可以複製結果', async ({ page }) => {
+  let busy = false;
+  const calls = await mockGemini(page, (body) => {
+    if (busy) return { status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 503, status: 'UNAVAILABLE', message: 'The model is overloaded.' } }) };
+    const hasImage = body.contents[0].parts.some(p => p.inline_data);
+    return reply(hasImage ? { found: true, serving_g: 30, kcal: 123, protein: 3, fat: 4.5, carbs: 18 } : { ok: true });
+  });
+  await openApp(page);
+  await enableAi(page);
+  await openSettings(page, '#aiSetupBtn');
+  const n0 = calls.length;
+  await page.click('#aiCheckBtn');
+  await expect(page.locator('#aiCheckResult')).toContainText('AI 可以正常使用');
+  await expect(page.locator('#aiCheckResult')).toContainText('✓ 照片：正常');
+  await expect(page.locator('#aiCheckResult')).toContainText('gemini-flash-latest');
+  expect(calls.length - n0).toBe(2);
+  expect(calls[calls.length - 1].body.contents[0].parts[1].inline_data.mime_type).toBe('image/jpeg');
+  await expect(page.locator('#aiCheckCopy')).toBeVisible();
+  // 兩個模型都太忙
+  busy = true;
+  await page.click('#aiCheckBtn');
+  await expect(page.locator('#aiCheckResult')).toContainText('AI 目前不能正常使用');
+  await expect(page.locator('#aiCheckResult')).toContainText('太多人用');
+  await expect(page.locator('#aiCheckResult')).toContainText('代碼：busy gemini-3.5-flash-lite 503 UNAVAILABLE');
+});

@@ -13,6 +13,7 @@ import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS } fr
 import { sumNutr, copyEntries, mealEntries } from './meals.js';
 import { buildInsights } from './insights.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr } from './targets.js';
+import { calorieBank, bankMacros } from './bank.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
 const LEGACY_KEY = 'daily_calorie_tracker_v1';
@@ -481,16 +482,45 @@ async function deleteEntry(id) {
 }
 
 /* ---------------- Render：今日 ---------------- */
+// 熱量銀行（targets.bank 開啟才有）：這天的建議熱量與本週進度
+function bankFor(date) {
+  if (!state.targets.bank) return null;
+  const pr = state.profile;
+  const cw = currentWeight();
+  const inbody = latestInbodyBmr(state.days, date);
+  const bmr = (inbody && inbody.value) || calcBmr({ sex: pr.sex, weight: cw && cw.w, height: pr.height, age: ageFrom(pr.birthYear) });
+  return calorieBank({ base: state.targets.kcal > 0 ? state.targets.kcal : 1800, date, dayKcal: dayTotals, bmr });
+}
+function renderBank(bank, todayKcal) {
+  $('bankBox').classList.toggle('hidden', !bank);
+  if (!bank) return;
+  const used = bank.usedBefore + todayKcal;
+  const isToday = ui.date === todayStr();
+  $('bankWeek').textContent = '已吃 ' + used.toLocaleString() + ' / ' + bank.budget.toLocaleString() + ' kcal';
+  $('bankBar').style.width = Math.min(100, Math.round(used / bank.budget * 100)) + '%';
+  const day = isToday ? '今天' : '這天';
+  const bal = bank.balance;
+  let msg;
+  if (bank.daysLeft === 7) msg = '這週剛開始，' + day + '照平常的量吃就好。';
+  else if (Math.abs(bal) < 50) msg = '這週到目前都剛剛好，' + day + '照平常的量吃就好 👍';
+  else if (bal < 0) msg = '這週前幾天多吃了 ' + (-bal).toLocaleString() + ' kcal，平均分到剩下的 ' + bank.daysLeft + ' 天，' + day + '建議吃 ' + bank.todayTarget.toLocaleString() + ' kcal。';
+  else msg = '這週前幾天少吃了 ' + bal.toLocaleString() + ' kcal，' + day + '可以吃到 ' + bank.todayTarget.toLocaleString() + ' kcal。';
+  if (bank.floored) msg += '為了安全，一天不會低於 ' + bank.todayTarget.toLocaleString() + ' kcal，多走路、多活動也有幫助。';
+  if (bank.capped) msg += '少吃的不用一次補回來，一天最多多 300 kcal。';
+  $('bankText').textContent = msg;
+}
 function renderSummary() {
   const t = dayTotals(ui.date);
-  const target = state.targets.kcal > 0 ? state.targets.kcal : 1800;
+  const bank = bankFor(ui.date);
+  renderBank(bank, t.kcal);
+  const target = bank ? bank.todayTarget : state.targets.kcal > 0 ? state.targets.kcal : 1800;
   const remaining = target - t.kcal;
   const pct = Math.round(t.kcal / target * 100);
   const clamped = Math.min(100, Math.max(0, pct));
   $('summaryDateLabel').textContent = ui.date === todayStr() ? '今日' : fmtMD(ui.date) + ' ';
   $('totalConsumed').textContent = t.kcal.toLocaleString();
   $('summaryTarget').textContent = target.toLocaleString();
-  $('headerTargetVal').textContent = target.toLocaleString();
+  $('headerTargetVal').textContent = (state.targets.kcal > 0 ? state.targets.kcal : 1800).toLocaleString();
   $('datePicker').value = ui.date;
   const dd = parseDate(ui.date);
   $('dateLabel').textContent = (dd.getMonth() + 1) + '月' + dd.getDate() + '日（' + '日一二三四五六'[dd.getDay()] + '）';
@@ -512,7 +542,8 @@ function renderSummary() {
   $('progressPctText').textContent = pct + '%';
   MEAL_KEYS.forEach(k => { $('mealSum-' + k).textContent = t.meals[k].toLocaleString(); });
 
-  const tg = state.targets;
+  // 熱量銀行調整過今天的熱量時，營養素目標跟著調（蛋白質不變）
+  const tg = bank ? { ...state.targets, ...bankMacros(state.targets, bank.todayTarget) } : state.targets;
   const hasMacroT = MACRO_KEYS.some(k => tg[k]);
   const hasExT = EX_KEYS.some(k => tg.ex && tg.ex[k]);
   let html = '';
@@ -2132,6 +2163,7 @@ $('openTargetBtn').addEventListener('click', () => {
   $('tgt-water').value = t.water ?? '';
   $('profileName').value = state.profile.name || '';
   $('mascotToggle').checked = state.meta.mascot !== false;
+  $('bankToggle').checked = Boolean(t.bank);
   openModal('targetModal');
 });
 document.querySelectorAll('.preset-btn').forEach(btn => btn.addEventListener('click', () => { $('tgt-kcal').value = btn.getAttribute('data-preset'); }));
@@ -2158,6 +2190,7 @@ $('saveTargetBtn').addEventListener('click', () => {
   };
   // 手動改過熱量、營養素或喝水，就不再是試算的數字：拿掉試算記錄（之後不會提醒重算）
   if (['kcal', 'p', 'c', 'f', 'water'].some(k => (next[k] ?? null) !== (state.targets[k] ?? null))) delete next.calc;
+  if ($('bankToggle').checked) next.bank = true; else delete next.bank;
   state.targets = next;
   state.targetsAt = now();
   if (state.profile.name !== $('profileName').value.trim()) {

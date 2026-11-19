@@ -87,6 +87,7 @@
 | `ai` | （選填，v27 起）這筆是 AI 估算的：`'photo'` 拍照、`'text'` 用說的／打字。沒有 `foodId` |
 | `weighed` | （選填，v11 起）`'cooked'`＝輸入的是熟重，已換算回生重計算 |
 | `groupId` | （選填，v12 起）同一次一起記的一餐（`grp_xxxx`）：查食物的購物車一次記 2 樣以上時加上。複製時換成新的 groupId，同組仍同組 |
+| `party` | （選填，v37 起）吃到飽速記記的：`{ tpl, code, n, unit, kcal1, g? }`＝範本、類別代碼、吃了幾個、單位、記錄當時每個的熱量、秤重模式量到的一個幾公克。之後校正時用 `n` 重算。有秤重照時照片就是這筆的 `hasPhoto` 照片 |
 
 匯入備份檔時（`normalizeEntry`／`normalizeQuick`），記錄和常吃清單裡看不懂的欄位會保留；只去掉 v1 的 `photo`（照片改存 IndexedDB）和 `baseKcal`。
 
@@ -123,7 +124,7 @@
 
 ### meta（只存在這台裝置）
 
-`deviceId`、`welcomed`（true＝這台裝置已經選過歡迎畫面的開始方式）、`ai: { key, at }`（使用者自己的 Gemini API Key；**只存在這台裝置，絕不能放進同步檔或備份檔**，有 e2e 測試檢查）、`weeklySeen`（已看過的小芽週報，值是那週週一的日期）、`fontSize`（`m`/`l`/`xl`）、`mascot`（false＝關閉小芽）、`lastCheer`、`installHintDismissed`、`lastBackup`、`photoVer`（`{ entryId: 本機照片的 photoKey }`）、`cloud: { linked, email, auto, lastSync, lastBackup, knownModified, dirty, needAuth }`。`party: { tpl, counts: { 代碼: 數量 }, at }`（v37 起，吃到飽速記還沒記下來的數量；按「記下來」後刪除。記下來的是一般飲食記錄，每個品項一筆、同一個 `groupId`，沒有新欄位）。
+`deviceId`、`welcomed`（true＝這台裝置已經選過歡迎畫面的開始方式）、`ai: { key, at }`（使用者自己的 Gemini API Key；**只存在這台裝置，絕不能放進同步檔或備份檔**，有 e2e 測試檢查）、`weeklySeen`（已看過的小芽週報，值是那週週一的日期）、`fontSize`（`m`/`l`/`xl`）、`mascot`（false＝關閉小芽）、`lastCheer`、`installHintDismissed`、`lastBackup`、`photoVer`（`{ entryId: 本機照片的 photoKey }`）、`cloud: { linked, email, auto, lastSync, lastBackup, knownModified, dirty, needAuth }`。`party: { tpl, counts: { 代碼: 數量 }, at, weigh, photos: { 代碼: true }, grams: { 代碼: 公克 } }`（v37 起，吃到飽速記還沒記下來的數量、秤重模式開關、秤重照（暫存在 IndexedDB `party_<代碼>`）與一顆的重量；按「記下來」後全部刪除）。
 
 ## 匯出／同步檔案格式
 

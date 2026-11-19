@@ -79,7 +79,8 @@ export function mascotSVG(mood = 'happy') {
     streak: { n, todayLogged },
     weight: { now, week, first, measuredToday } | null,
     targetWeight, bmi, bmiLabel,
-    water, exercise, lastNight,
+    water, waterGoal,   // waterGoal：這天的喝水目標（沒設是 null）
+    exercise, lastNight,
     insights   // 跨模組提醒（js/insights.js 的 buildInsights），一起排序
   }
 */
@@ -134,8 +135,10 @@ export function buildMascotMessages(ctx) {
   } else if (ctx.isToday && ctx.hour >= 5 && ctx.hour < 12) {
     add(37, 'hello', '早安！昨晚睡得好嗎？點「睡眠」記一下 😴');
   }
-  if (ctx.isToday && ctx.water >= 1500) add(35, 'happy', '水喝得很夠，身體會謝謝你 💧');
-  else if (ctx.isToday && ctx.hour >= 15 && (ctx.water || 0) < 1000) add(30, 'calm', '記得多喝水喔，按「喝水」記一下 💧');
+  // 有設喝水目標就看目標，沒設就用 1500 ml
+  const wg = ctx.waterGoal || 1500;
+  if (ctx.isToday && ctx.water >= wg) add(35, 'happy', ctx.waterGoal ? '今天的喝水目標達成了，身體會謝謝你 💧' : '水喝得很夠，身體會謝謝你 💧');
+  else if (ctx.isToday && ctx.hour >= 15 && (ctx.water || 0) < Math.round(wg * 2 / 3)) add(30, 'calm', '記得多喝水喔，按「喝水」記一下 💧');
   if (ctx.bmi != null && ctx.bmi >= 18.5 && ctx.bmi < 24) add(33, 'happy', `BMI ${ctx.bmi}，在健康範圍內，維持得很好`);
   if (ctx.isToday && ctx.streak.n >= 2) {
     add(32, 'happy', ctx.streak.todayLogged ? `已經連續記錄 ${ctx.streak.n} 天了 🔥` : `已經連續記錄 ${ctx.streak.n} 天，今天也記一下吧 🔥`);

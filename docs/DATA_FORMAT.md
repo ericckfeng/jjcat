@@ -37,9 +37,9 @@
 
 ```js
 {
-  targets:   { kcal, p, c, f, ex: { grain, prot, veg, fruit, dairy, oil }, weight },
+  targets:   { kcal, p, c, f, ex: { grain, prot, veg, fruit, dairy, oil }, weight, water, calc },
   targetsAt: 0,                      // targets 的修改時間（同步用）
-  profile:   { name, height, sex },  // sex: 'm' | 'f' | null；height 公分
+  profile:   { name, height, sex, birthYear, activity },  // sex: 'm' | 'f' | null；height 公分
   profileAt: 0,
   logs:      { 'YYYY-MM-DD': [Entry, ...] },
   days:      { 'YYYY-MM-DD': Day },
@@ -49,6 +49,17 @@
   meta:      { ...只存在這台裝置，不同步... }
 }
 ```
+
+### targets 與 profile 的選填欄位（v18 起）
+
+| 欄位 | 說明 |
+|---|---|
+| `targets.water` | 每天喝水目標（ml）。沒有＝沒設目標（喝水頁不顯示目標，小芽用 1500 ml 判斷）。有運動的那天每 30 分鐘 +250 ml（顯示時計算，不存） |
+| `targets.calc` | 目前的目標是「依體重試算」來的：`{ at, weight, activity, goal, protein }`（`weight`＝試算時用的體重）。7 天平均體重和它差 2 公斤以上會提醒重算。**沒有＝手動設定（營養師的數字）**；在「每日目標」手動改熱量、營養素或喝水就會刪掉 |
+| `profile.birthYear` | 出生年（西元），用來算年齡 |
+| `profile.activity` | 活動量 `low`／`light`／`active`（係數 1.2／1.375／1.55） |
+
+舊版 App 存「每日目標」會重建整個 `targets`，`water`、`calc` 會不見：結果是「沒有喝水目標、手動設定」，不會出錯。
 
 ### Entry（一筆飲食記錄）
 
@@ -120,3 +131,4 @@
 | v3（App v9） | 2026-11-18 | 資料格式不變（`SYNC_VERSION` 仍是 3）。同步、匯入、匯出、本機儲存都會保留看不懂的最上層資料，為之後的自訂食物庫、套餐等新功能做準備。樣本：`backup-v3-extra-keys.json`。 |
 | v3（App v11） | 2026-11-19 | 飲食記錄新增選填欄位 `grams`、`foodId`、`weighed`（查食物・秤克數）。匯入時保留記錄與常吃清單的未知欄位（之前匯入會丟掉）。 |
 | v3（App v12） | 2026-11-19 | 飲食記錄新增選填欄位 `groupId`（查食物的購物車）。 |
+| v3（App v18） | 2026-11-19 | 依體重試算目標：`targets.water`、`targets.calc`、`profile.birthYear`、`profile.activity`。 |

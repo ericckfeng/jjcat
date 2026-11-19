@@ -88,6 +88,12 @@ textarea.field { min-height: 0; resize: vertical; }
 .meal-btn.is-active, .toggle-btn.is-active, .range-btn.is-active, .preset-btn.is-active {
   background: var(--emerald); border-color: var(--emerald); color: #fff;
 }
+/* 大的選項鈕（標題＋說明），一次選一個 */
+.choice-btn { width: 100%; display: block; text-align: left; padding: .7rem .9rem; border-radius: 1rem; border: 2px solid var(--stone-200); background: #fff; }
+.choice-btn .c-t { display: block; font-size: 1.0625rem; font-weight: 700; color: var(--stone-800); }
+.choice-btn .c-s { display: block; font-size: .9375rem; color: var(--stone-500); }
+.choice-btn.is-active { border-color: var(--emerald); background: #ecfdf5; }
+.choice-btn.is-active .c-t { color: #047857; }
 .toggle-btn.mood { font-size: 1.6rem; padding: .25rem; min-height: 3.25rem; }
 
 .cat-chip { padding: .45rem .9rem; border-radius: 999px; font-size: .875rem; font-weight: 600; background: var(--stone-100); color: var(--stone-600); }

@@ -64,3 +64,11 @@ test('只有一天沒排便、或有排便：不說', () => {
   assert.deepEqual(keys({ d: [day({ bowel: 1 }), day({ bowel: 0 }), day({ bowel: 0 })] }), [], '今天有排便就不提');
   assert.deepEqual(keys({ d: [day({ bowel: 0 }), day(), day({ bowel: 0 })] }), []);
 });
+
+/* ---- 重新試算 ---- */
+test('體重和上次試算差 2 公斤以上：提醒重新試算', () => {
+  assert.deepEqual(keys({ d: [day(), day(), day()], recalcKg: -2.3 }), ['recalc']);
+  assert.match(text({ d: [day(), day(), day()], recalcKg: -2.3 }, 'recalc'), /少了 2.3 公斤.*重新試算/);
+  assert.match(text({ d: [day(), day(), day()], recalcKg: 2 }, 'recalc'), /多了 2 公斤/);
+  assert.deepEqual(keys({ d: [day(), day(), day()], recalcKg: null }), []);
+});

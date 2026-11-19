@@ -11,6 +11,7 @@ import { mascotSVG, buildMascotMessages } from './mascot.js';
 import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS } from './foods.js';
 import { sumNutr, copyEntries, mealEntries } from './meals.js';
 import { buildInsights } from './insights.js';
+import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcTargets, waterGoal, recalcHint } from './targets.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
 const LEGACY_KEY = 'daily_calorie_tracker_v1';
@@ -837,6 +838,7 @@ function openScreen(id) {
   if (id === 'scr-est') renderEst();
   if (id === 'scr-weight') renderWeightHint();
   if (id === 'scr-water') renderWaterBig();
+  if (id === 'scr-calc') { initCalc(); renderCalc(); }
   if (id === 'scr-sleep') renderSleepScreen();
   if (id === 'scr-photo') resetPhotoQuick();
 }
@@ -868,7 +870,10 @@ function renderTiles() {
   $('tileSleep').textContent = parts.length ? parts.join('　') : '記一下昨晚睡多久';
   const b = calcBmi(d.weight, state.profile.height);
   $('tileWeight').textContent = d.weight != null ? d.weight + ' 公斤' + (b ? '・BMI ' + b : '') : '還沒量';
-  $('tileWater').textContent = (d.water || 0) + ' ml' + (d.water ? '（約 ' + r1(d.water / 250) + ' 杯）' : '');
+  const wg = dayWaterGoal(ui.date);
+  $('tileWater').textContent = wg
+    ? (d.water || 0) + ' / ' + wg + ' ml' + ((d.water || 0) >= wg ? ' ✓' : '')
+    : (d.water || 0) + ' ml' + (d.water ? '（約 ' + r1(d.water / 250) + ' 杯）' : '');
   $('tileExercise').textContent = d.exercise || d.exMin ? (d.exercise || '運動') + (d.exMin ? ' ' + d.exMin + ' 分' : '') : '還沒記';
   const bits = [];
   if (d.mood != null) bits.push(MOOD_OPTIONS[d.mood]);
@@ -938,10 +943,15 @@ $('sexGroup').addEventListener('click', (e) => {
 });
 ['dayWeight', 'dayWaist'].forEach(id => $(id).addEventListener('input', () => setTimeout(renderBmiCard, 0)));
 document.querySelectorAll('#moreMeasures [data-day-num]').forEach(el => el.addEventListener('input', () => setTimeout(renderBmiCard, 0)));
+// 這天的喝水目標（有設目標才有；有運動會加碼）
+function dayWaterGoal(date) { return waterGoal(state.targets.water, getDay(date, false).exMin); }
 function renderWaterBig() {
   const w = num(getDay(ui.date, false).water) || 0;
+  const goal = dayWaterGoal(ui.date);
   $('waterBig').textContent = w.toLocaleString();
-  $('waterCups').textContent = w ? '約 ' + r1(w / 250) + ' 杯' : '還沒喝';
+  const extra = goal && goal > state.targets.water ? '（含運動 +' + (goal - state.targets.water) + '）' : '';
+  $('waterCups').textContent = (w ? '約 ' + r1(w / 250) + ' 杯' : '還沒喝')
+    + (goal ? '・目標 ' + goal.toLocaleString() + ' ml' + extra + (w >= goal ? ' ✓ 達成了' : '，還差 ' + (goal - w).toLocaleString() + ' ml') : '');
 }
 $('dayWater').addEventListener('input', renderWaterBig);
 $('exercisePresets').addEventListener('click', (e) => {
@@ -1542,7 +1552,8 @@ function dayInsights(date) {
   return buildInsights({
     isToday: date === todayStr(), targetKcal: state.targets.kcal,
     d: [0, -1, -2].map(n => insightDay(addDays(date, n))),
-    lastNightMin: daySleep(getDay(date, false)).night || null
+    lastNightMin: daySleep(getDay(date, false)).night || null,
+    recalcKg: date === todayStr() ? recalcHint(state.targets.calc, rollingAverage(state.days, 'weight', [date])[0]) : null
   }).sort((a, b) => b.pri - a.pri);
 }
 // 小芽關掉時，提醒改用首頁的小卡片列出來（沒有提醒就不顯示）
@@ -1567,7 +1578,7 @@ function renderMascot() {
   mascotMsgs = buildMascotMessages({
     isToday, hour: new Date().getHours(), count: t.count, kcal: t.kcal, targetKcal: state.targets.kcal,
     meals: MEAL_KEYS.filter(k => t.meals[k] > 0).length, streak, weight: w,
-    targetWeight: num(state.targets.weight), bmi, water: num(d.water) || 0,
+    targetWeight: num(state.targets.weight), bmi, water: num(d.water) || 0, waterGoal: dayWaterGoal(ui.date),
     lastNight: daySleep(getDay(ui.date, false)),
     exercise: d.exercise || (d.exMin ? d.exMin + ' 分鐘' : ''),
     insights
@@ -1954,6 +1965,104 @@ $('libraryGrid').addEventListener('click', (e) => {
   if (add) { const it = state.quickItems.find(q => q.id === add.getAttribute('data-qid')); if (it) addFromQuick(it); }
 });
 
+/* ---------------- 依體重試算目標 ---------------- */
+const calcDraft = { sex: null, activity: 'low', goal: 'slow', protein: 1.2 };
+// 試算用的體重：最近 7 天平均；7 天內沒量就用最後一次
+function currentWeight() {
+  const avg = rollingAverage(state.days, 'weight', [todayStr()])[0];
+  if (avg != null) return { w: avg, note: '最近 7 天平均' };
+  const k = Object.keys(state.days).filter(d => num(state.days[d].weight) != null).sort().pop();
+  return k ? { w: num(state.days[k].weight), note: fmtMD(k) + ' 量的' } : null;
+}
+function choiceHTML(attr, items, active) {
+  return items.map(i => `<button type="button" ${attr}="${i.key}" class="choice-btn ${String(i.key) === String(active) ? 'is-active' : ''}"><span class="c-t">${esc(i.label)}</span><span class="c-s">${esc(i.sub || i.steps)}</span></button>`).join('');
+}
+function initCalc() {
+  const pr = state.profile;
+  const c = state.targets.calc || {};
+  calcDraft.sex = pr.sex || null;
+  calcDraft.activity = pr.activity || c.activity || 'low';
+  calcDraft.goal = c.goal || 'slow';
+  calcDraft.protein = c.protein || 1.2;
+  $('calcBirthYear').value = pr.birthYear || '';
+  $('calcHeight').value = pr.height || '';
+  const cw = currentWeight();
+  $('calcWeight').value = cw ? cw.w : '';
+  $('calcWeightNote').textContent = cw ? '體重用' + cw.note + '，可以改' : '還沒量過體重，請填目前體重';
+}
+function calcInput() {
+  return {
+    sex: calcDraft.sex, weight: num($('calcWeight').value), height: num($('calcHeight').value),
+    age: ageFrom(num($('calcBirthYear').value)),
+    activity: calcDraft.activity, goal: calcDraft.goal, protein: calcDraft.protein
+  };
+}
+function renderCalc() {
+  document.querySelectorAll('[data-calc-sex]').forEach(b => b.classList.toggle('is-active', b.getAttribute('data-calc-sex') === calcDraft.sex));
+  $('calcActivity').innerHTML = choiceHTML('data-calc-act', ACTIVITY, calcDraft.activity);
+  $('calcGoal').innerHTML = choiceHTML('data-calc-goal', GOALS, calcDraft.goal);
+  $('calcProtein').innerHTML = choiceHTML('data-calc-prot', PROTEIN, calcDraft.protein);
+  const inp = calcInput();
+  const t = calcTargets(inp);
+  $('calcApplyBtn').disabled = !t;
+  if (!t) {
+    const miss = [!inp.sex && '性別', !inp.age && '出生年', !inp.height && '身高', !inp.weight && '體重'].filter(Boolean);
+    $('calcResult').innerHTML = `<div class="text-base text-stone-500">請填${miss.join('、')}，就會算出建議</div>`;
+    return;
+  }
+  const g = GOALS.find(x => x.key === inp.goal);
+  const row = (label, v, unit) => `<div class="flex justify-between items-baseline text-lg"><span class="text-stone-600">${label}</span><span class="font-bold text-stone-900 tabular-nums">${v.toLocaleString()} ${unit}</span></div>`;
+  $('calcResult').innerHTML = `
+    <div class="text-center"><div class="text-base text-stone-500">每天建議吃</div><span class="text-4xl font-bold text-emerald-700 tabular-nums">${t.kcal.toLocaleString()}</span> <span class="text-lg text-stone-600">kcal</span></div>
+    <div class="text-sm text-stone-500 text-center">基礎代謝 ${t.bmr.toLocaleString()}・每天約消耗 ${t.tdee.toLocaleString()}${g.deficit ? '・少吃 ' + g.deficit : ''}</div>
+    ${t.floored ? `<div class="rounded-xl bg-sky-50 text-sky-900 p-2 text-sm leading-relaxed">為了安全，熱量不會低於基礎代謝和 1,200 kcal，所以用 ${t.kcal.toLocaleString()} kcal。想減得更快，可以多走路、多活動。</div>` : ''}
+    ${row('蛋白質', t.p, 'g')}${row('脂肪', t.f, 'g')}${row('碳水', t.c, 'g')}${row('喝水', t.water, 'ml')}
+    ${t.adjusted ? '<div class="text-sm text-stone-500">熱量不多，蛋白質和脂肪已調低一點，留一些碳水。</div>' : ''}
+    <div class="text-sm text-stone-500 leading-relaxed">有運動的那天，喝水每 30 分鐘多 250 ml。心臟、腎臟需要限水的人，請照醫師說的量。</div>`;
+}
+$('openCalcBtn').addEventListener('click', () => { closeModal('targetModal'); openScreen('scr-calc'); });
+$('scr-calc').addEventListener('click', (e) => {
+  const sex = e.target.closest('[data-calc-sex]');
+  const act = e.target.closest('[data-calc-act]');
+  const goal = e.target.closest('[data-calc-goal]');
+  const prot = e.target.closest('[data-calc-prot]');
+  if (sex) calcDraft.sex = sex.getAttribute('data-calc-sex');
+  else if (act) calcDraft.activity = act.getAttribute('data-calc-act');
+  else if (goal) calcDraft.goal = goal.getAttribute('data-calc-goal');
+  else if (prot) calcDraft.protein = Number(prot.getAttribute('data-calc-prot'));
+  else return;
+  renderCalc();
+});
+['calcBirthYear', 'calcHeight', 'calcWeight'].forEach(id => $(id).addEventListener('input', renderCalc));
+function applyCalc() {
+  const inp = calcInput();
+  const t = calcTargets(inp);
+  if (!t) return;
+  // 性別、出生年、身高、活動量存進個人資料（BMI 等也會用到）
+  const pr = { ...state.profile, sex: inp.sex, height: inp.height, birthYear: num($('calcBirthYear').value), activity: inp.activity };
+  if (['sex', 'height', 'birthYear', 'activity'].some(k => pr[k] !== state.profile[k])) { state.profile = pr; state.profileAt = now(); }
+  state.targets = {
+    ...state.targets, kcal: t.kcal, p: t.p, c: t.c, f: t.f, water: t.water,
+    calc: { at: now(), weight: inp.weight, activity: inp.activity, goal: inp.goal, protein: inp.protein }
+  };
+  state.targetsAt = now();
+  persist();
+  renderAll();
+  closeScreen();
+  showToast('已設定目標：每天 ' + t.kcal.toLocaleString() + ' kcal');
+}
+$('calcApplyBtn').addEventListener('click', () => {
+  const t = calcTargets(calcInput());
+  if (!t) return;
+  const cur = state.targets;
+  // 原本已經有目標（可能是營養師給的）：先確認
+  if (state.targetsAt && cur.kcal && cur.kcal !== t.kcal && !cur.calc) {
+    openConfirm('換成試算的目標？', '目前的目標是每天 ' + cur.kcal.toLocaleString() + ' kcal。如果這是營養師給的數字，建議保留。', applyCalc, '換成 ' + t.kcal.toLocaleString() + ' kcal', null, '保留原本的');
+    return;
+  }
+  applyCalc();
+});
+
 /* ---------------- 事件：目標設定 ---------------- */
 $('openTargetBtn').addEventListener('click', () => {
   const t = state.targets;
@@ -1961,6 +2070,7 @@ $('openTargetBtn').addEventListener('click', () => {
   MACRO_KEYS.forEach(k => { $('tgt-' + k).value = t[k] ?? ''; });
   EX_KEYS.forEach(k => { $('tgt-ex-' + k).value = (t.ex && t.ex[k]) ?? ''; });
   $('tgt-weight').value = t.weight ?? '';
+  $('tgt-water').value = t.water ?? '';
   $('profileName').value = state.profile.name || '';
   $('mascotToggle').checked = state.meta.mascot !== false;
   openModal('targetModal');
@@ -1980,11 +2090,16 @@ $('saveTargetBtn').addEventListener('click', () => {
   if (!Number.isFinite(kcal) || kcal < 800 || kcal > 6000) { showToast('熱量目標請填 800–6000'); return; }
   const ex = {};
   EX_KEYS.forEach(k => { const v = num($('tgt-ex-' + k).value); if (v) ex[k] = v; });
-  state.targets = {
+  const water = num($('tgt-water').value);
+  const next = {
+    ...state.targets,   // 保留新版 App 加的欄位（例如試算記錄 calc）
     kcal: Math.round(kcal),
     p: num($('tgt-p').value), c: num($('tgt-c').value), f: num($('tgt-f').value),
-    ex, weight: num($('tgt-weight').value)
+    ex, weight: num($('tgt-weight').value), water: water > 0 ? Math.round(water) : null
   };
+  // 手動改過熱量、營養素或喝水，就不再是試算的數字：拿掉試算記錄（之後不會提醒重算）
+  if (['kcal', 'p', 'c', 'f', 'water'].some(k => (next[k] ?? null) !== (state.targets[k] ?? null))) delete next.calc;
+  state.targets = next;
   state.targetsAt = now();
   if (state.profile.name !== $('profileName').value.trim()) {
     state.profile.name = $('profileName').value.trim();

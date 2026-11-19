@@ -20,7 +20,8 @@ export const WATER_ENOUGH = 1500;     // ml
     //   weight／bowel／water 沒記是 null；count 是飲食記錄筆數；
     //   veg 是蔬菜份數合計；exItems 是有填六大類份數的記錄筆數（0 就表示蔬菜份數不明）
     d: [day0, day1, day2],
-    lastNightMin   // 昨晚睡眠分鐘數（記在這天），沒記是 null
+    lastNightMin,  // 昨晚睡眠分鐘數（記在這天），沒記是 null
+    recalcKg       // 7 天平均體重和上次試算時差幾公斤（targets.js 的 recalcHint），不用提醒是 null
   }
 */
 export function buildInsights(ctx) {
@@ -64,6 +65,13 @@ export function buildInsights(ctx) {
     }
     if (!tips.length) tips.push('多吃青菜水果、多喝水、走一走');
     add(64, 'calm', `兩天沒排便了。${tips.join('；')} 🌿`, 'constipation');
+  }
+
+  // 4. 體重和上次試算時差 2 公斤以上：提醒重新試算目標
+  if (ctx.recalcKg) {
+    add(48, 'calm',
+      `體重比上次試算時${ctx.recalcKg < 0 ? '少' : '多'}了 ${Math.abs(ctx.recalcKg)} 公斤，可以點上面的「目標」重新試算 ⚖️`,
+      'recalc');
   }
 
   return out;

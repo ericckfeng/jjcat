@@ -1,6 +1,8 @@
 // 給營養師的報告：HTML（畫面／列印／分享檔共用）與 LINE 文字摘要
 import { MEAL_KEYS, MEAL_META, MACRO_KEYS, MACRO_META, EX_KEYS, EX_META, HUNGER_LABELS, MOOD_OPTIONS, BOWEL_LABELS } from './nutrition.js';
 import { MEASURES, bmiCategory, weightAvgChange, daySleep, fmtDuration, sleepQualityLabel } from './body.js';
+import { waterGoal } from './targets.js';
+import { buildHighlights } from './highlights.js';
 const EXTRA_MEASURES = MEASURES.filter(m => m.key !== 'weight' && m.key !== 'waist');
 
 const WEEK = '日一二三四五六';
@@ -11,6 +13,14 @@ export const REPORT_CSS = `
 .rpt h1{font-size:19px;margin:0;font-weight:700}
 .rpt h2{font-size:14px;margin:20px 0 8px;font-weight:700;border-left:4px solid #059669;padding-left:8px}
 .rpt .muted{color:#78716c;font-size:11.5px}
+.rpt .hl{list-style:none;margin:0;padding:0;display:grid;gap:5px}
+.rpt .hl li{padding:7px 10px;border-radius:8px;background:#f5f5f4;font-size:13.5px}
+.rpt .hl li.good{background:#ecfdf5}
+.rpt .hl li.warn{background:#fffbeb}
+.rpt .hl li::before{margin-right:6px}
+.rpt .hl li.good::before{content:'✓';color:#047857;font-weight:700}
+.rpt .hl li.warn::before{content:'!';color:#b45309;font-weight:700}
+.rpt .hl li.info::before{content:'•';color:#78716c}
 .rpt .head{display:flex;justify-content:space-between;align-items:flex-end;gap:8px;border-bottom:2px solid #059669;padding-bottom:8px;flex-wrap:wrap}
 .rpt .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 @media (max-width:520px){.rpt .stats{grid-template-columns:repeat(2,1fr)}}
@@ -57,6 +67,43 @@ function inject() {
   document.head.appendChild(st);
 }
 
+// 本週重點要的資料（js/highlights.js）
+function highlightsFor(ctx, dates, s) {
+  const { state, dayTotals } = ctx;
+  const days = state.days;
+  const tg = state.targets;
+  const dd = (d) => days[d] || {};
+  const rows = dates.map(d => daySleep(dd(d)));
+  const slept = rows.filter(r => r.total > 0);
+  // 睡眠和當天飲食：今天還沒吃完不算，各組至少 2 天
+  const now = new Date();
+  const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+  const good = [], bad = [];
+  dates.forEach((d, i) => {
+    const r = rows[i];
+    if (!r.night || d >= today) return;
+    const t = dayTotals(d);
+    if (!t.count) return;
+    if (r.night >= 420) good.push(t.kcal); else if (r.night < 360) bad.push(t.kcal);
+  });
+  const mean = (a) => (a.length >= 2 ? a.reduce((x, y) => x + y, 0) / a.length : null);
+  const waterDays = dates.filter(d => dd(d).water != null && dd(d).water !== '');
+  const goals = waterDays.map(d => waterGoal(tg.water, dd(d).exMin)).filter(Boolean);
+  return buildHighlights({
+    days: dates.length, loggedDays: s.loggedDays, pending: s.pending,
+    avgKcal: s.avgKcal, targetKcal: tg.kcal, overDays: s.overDays,
+    weight: weightAvgChange(days, dates), targetWeight: Number(tg.weight) || null,
+    macroDays: s.macroDays, avgP: s.avgMacro.p, targetP: Number(tg.p) || null,
+    exDays: s.exDays, avgEx: s.avgEx, targetEx: tg.ex || {},
+    sleep: slept.length ? { avgMin: slept.reduce((a, r) => a + r.total, 0) / slept.length, days: slept.length, shortDays: slept.filter(r => r.total < 360).length, kcalShort: mean(bad), kcalGood: mean(good) } : null,
+    water: s.avgWater != null ? { avg: s.avgWater, goal: goals.length ? goals.reduce((a, b) => a + b, 0) / goals.length : null } : null,
+    exercise: { totalMin: s.exMinTotal, days: dates.filter(d => Number(dd(d).exMin) > 0 || dd(d).exercise).length },
+    questions: dates.filter(d => String(dd(d).question || '').trim()).length,
+    noBowelDays: dates.filter(d => dd(d).bowel != null && Number(dd(d).bowel) === 0).length
+  });
+}
+const hlTitle = (n) => (n === 7 ? '本週重點' : '本期重點');
+
 export async function buildReportHTML(ctx, opts) {
   inject();
   const { state, dayTotals, rangeStats, datesBetween, esc, fmt, r1, num, fmtMD, parseDate, getPhoto, calcBmi } = ctx;
@@ -83,6 +130,10 @@ export async function buildReportHTML(ctx, opts) {
   h += `<div class="head"><div><h1>飲食記錄報告${state.profile.name ? '－' + esc(state.profile.name) : ''}</h1>
     <div class="muted">期間 ${esc(opts.from)} ～ ${esc(opts.to)}（共 ${dates.length} 天）</div></div>
     <div class="muted">產生於 ${new Date().toLocaleString('zh-TW', { hour12: false })}</div></div>`;
+
+  // 本週重點
+  const hl = highlightsFor(ctx, dates, s);
+  if (hl.length) h += `<h2>${hlTitle(dates.length)}</h2><ul class="hl">${hl.map(x => `<li class="${x.tone}">${esc(x.text)}</li>`).join('')}</ul>`;
 
   // 摘要
   const w = s.weights;
@@ -249,6 +300,12 @@ export function buildReportText(ctx, opts) {
   const tg = state.targets;
   const lines = [];
   lines.push('【飲食記錄摘要】' + (state.profile.name ? state.profile.name + ' ' : '') + fmtMD(opts.from) + '～' + fmtMD(opts.to) + '（' + dates.length + ' 天）');
+  const hl = highlightsFor(ctx, dates, s);
+  if (hl.length) {
+    lines.push('〔' + hlTitle(dates.length) + '〕');
+    hl.forEach(x => lines.push((x.tone === 'good' ? '✓ ' : x.tone === 'warn' ? '！' : '・') + x.text));
+    lines.push('〔明細〕');
+  }
   lines.push('記錄 ' + s.loggedDays + ' 天｜平均 ' + (s.avgKcal != null ? fmt(s.avgKcal) : '–') + ' kcal（目標 ' + fmt(tg.kcal) + '），超標 ' + s.overDays + ' 天');
   if (s.macroDays) {
     lines.push('三大營養素平均：' + MACRO_KEYS.map(k => MACRO_META[k].label + ' ' + fmt(s.avgMacro[k], 1) + (tg[k] ? '/' + fmt(tg[k], 1) : '') + 'g').join('、'));

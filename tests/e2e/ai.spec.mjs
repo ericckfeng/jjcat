@@ -156,6 +156,17 @@ test('拍營養標示：填進自己輸入的名稱、熱量、營養素', async
   expect(it).toMatchObject({ kcal: 264, p: 5.4, c: 39.2, f: 9.6 });
 });
 
+test('拍營養標示：只有千焦耳的，換成大卡', async ({ page }) => {
+  await mockGemini(page, () => reply({ found: true, name: '進口餅乾', serving_g: 100, kj: 1650, protein: 8, fat: 15, carbs: 60 }));
+  await openApp(page);
+  await enableAi(page);
+  await page.click('[data-screen=scr-manual]');
+  await page.setInputFiles('#aiLabelInput', photo);
+  await expect(page.locator('#aiLabelNote')).toContainText('1650 千焦耳');
+  await expect(page.locator('#foodKcalInput')).toHaveValue('394');
+  await expect(page.locator('#foodKjInput')).toHaveValue('1650');
+});
+
 test('設定：檢查 AI 能不能用（文字＋照片），失敗時列出代碼，可以複製結果', async ({ page }) => {
   let busy = false;
   const calls = await mockGemini(page, (body) => {

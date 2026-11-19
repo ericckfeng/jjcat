@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/app.css?v=37" />
+  <link rel="stylesheet" href="css/app.css?v=38" />
 </head>
 <body class="bg-stone-50 text-stone-800 min-h-screen pb-24 sm:pb-10">
   <!-- Header -->
@@ -476,6 +476,15 @@
             <button type="button" data-kcal-add="250" class="kcal-step-btn chip-btn chip-lg">+250</button>
             <button type="button" id="kcalResetStepBtn" class="px-3 py-2 rounded-lg text-sm text-stone-500 underline">歸零</button>
           </div>
+          <details id="kjDetails" class="mt-3">
+            <summary class="text-base text-stone-600 underline cursor-pointer py-1">包裝寫的是千焦耳（kJ）？點這裡換算</summary>
+            <div class="flex items-center gap-2 mt-2 flex-wrap text-lg text-stone-700">
+              <input id="foodKjInput" type="number" inputmode="decimal" step="any" min="0" max="20000" placeholder="例如：552" aria-label="千焦耳" class="field tabular-nums text-xl" style="width:8rem" />
+              <span>千焦耳</span>
+              <span id="kjResult" class="font-semibold text-emerald-800"></span>
+            </div>
+            <p class="text-sm text-stone-500 mt-1">會自動換成大卡，填到上面的熱量（1 大卡 ＝ 4.184 千焦耳）。</p>
+          </details>
         </div>
         <div>
           <span class="scr-label">吃了幾份</span>
@@ -1137,6 +1146,6 @@
     <button id="toastAction" type="button" class="hidden font-bold text-emerald-300 hover:text-emerald-200 shrink-0"></button>
   </div>
 
-  <script type="module" src="js/app.js?v=37"></script>
+  <script type="module" src="js/app.js?v=38"></script>
 </body>
 </html>

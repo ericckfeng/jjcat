@@ -9,7 +9,7 @@ import * as cloud from './cloud.js';
 import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VERSION } from './sync.js';
 import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, muscleChange, sumLimbs, calcSmi, smiLow, latestSmi, SMI_CUTOFF, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
 import { mascotSVG, buildMascotMessages } from './mascot.js';
-import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS, energyDensity, isGlutinous } from './foods.js';
+import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS, energyDensity, isGlutinous, kjToKcal } from './foods.js';
 import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, shouldAskWhen, eatenAt, MEAL_TIME_CHIPS } from './meals.js';
 import { buildInsights } from './insights.js';
 import { partyTemplate, startCounts, parsePartyText, partyMemo, partyEntries, partyTotals, cleanGrams } from './party.js';
@@ -1946,10 +1946,13 @@ $('aiLabelInput').addEventListener('change', async (e) => {
     if (!lb) { setBox('aiLabelNote', 'err', '找不到營養標示。請把「營養標示」的表格拍清楚、拍正一點再試。'); return; }
     if (!$('foodNameInput').value.trim() && lb.name) $('foodNameInput').value = lb.name;
     $('foodKcalInput').value = lb.kcal;
+    if (lb.kj) { $('foodKjInput').value = lb.kj; $('kjResult').textContent = '＝ ' + lb.kcal + ' 大卡'; $('kjDetails').open = true; }
+    else { $('foodKjInput').value = ''; $('kjResult').textContent = ''; }
     $('addNutrDetails').open = true;
     writeNutrFields('add', { p: lb.p, c: lb.c, f: lb.f, ex: null });
     const per = lb.servingG ? '每份 ' + lb.servingG + ' 公克' + (lb.servings ? '、這包有 ' + lb.servings + ' 份' : '') + '。' : '';
-    setBox('aiLabelNote', 'info', 'AI 讀到：' + per + '每份 ' + lb.kcal + ' 大卡。已填好，請對照包裝確認；吃了幾份在下面選。');
+    const kj = lb.kj ? '（標示是 ' + lb.kj + ' 千焦耳，已換成大卡）' : '';
+    setBox('aiLabelNote', 'info', 'AI 讀到：' + per + '每份 ' + lb.kcal + ' 大卡' + kj + '。已填好，請對照包裝確認；吃了幾份在下面選。');
   } catch (err) {
     setBox('aiLabelNote', 'err', aiErrorText(err));
   } finally {
@@ -2180,6 +2183,13 @@ $('kcalStepperGroup').addEventListener('click', (e) => {
   el.value = Math.min(5000, (Number(el.value) || 0) + Number(btn.getAttribute('data-kcal-add')));
 });
 $('kcalResetStepBtn').addEventListener('click', () => { $('foodKcalInput').value = ''; });
+// 千焦耳 → 大卡：一邊打一邊換算，填到熱量欄
+$('foodKjInput').addEventListener('input', (e) => {
+  const kj = Number(e.target.value);
+  const ok = e.target.value.trim() !== '' && Number.isFinite(kj) && kj >= 0 && kj <= 20000;
+  $('kjResult').textContent = ok ? '＝ ' + kjToKcal(kj) + ' 大卡' : '';
+  if (ok) $('foodKcalInput').value = kjToKcal(kj);
+});
 
 let draftPhoto = null;
 function updateDraftPhotoUI() {
@@ -2224,6 +2234,8 @@ $('addFoodForm').addEventListener('submit', async (e) => {
   document.querySelectorAll('#portionGroup [data-portion]').forEach(x => x.classList.toggle('is-active', x.getAttribute('data-portion') === '1'));
   writeNutrFields('add', null);
   $('addNutrDetails').open = false;
+  $('kjDetails').open = false;
+  $('kjResult').textContent = '';
   draftPhoto = null;
   updateDraftPhotoUI();
   closeScreen();

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   nutrientsFor, baseGrams, cookConversion, exchangeGroup, exchangesFor,
-  normalize, expandQuery, baseName, searchFoods, isBreakfastTime, energyDensity, densityApplies, isGlutinous
+  normalize, expandQuery, baseName, searchFoods, isBreakfastTime, energyDensity, densityApplies, isGlutinous, kjToKcal
 } from '../../js/foods.js';
 
 const foods = JSON.parse(readFileSync(new URL('../../tfda_foods.json', import.meta.url), 'utf8')).foods;
@@ -162,4 +162,10 @@ test('糯米類：書上和 AI 的小吃名稱', () => {
     assert.equal(isGlutinous({ name: n }), false, n);
   }
   assert.equal(isGlutinous(null), false);
+});
+
+test('千焦耳換成大卡', () => {
+  assert.equal(kjToKcal(4184), 1000);
+  assert.equal(kjToKcal(552), 132);
+  assert.equal(kjToKcal(0), 0);
 });

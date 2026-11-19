@@ -8,6 +8,8 @@
 // （新的 interactions API 要求的 Api-Revision 標頭會被 CORS 擋掉，網頁無法使用）。
 // 模型用 -latest 別名，舊版下架時不必改程式；找不到模型（404）才換下一個。
 
+import { kjToKcal } from './foods.js';
+
 export const AI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/';
 export const AI_MODELS = ['gemini-flash-latest', 'gemini-3.5-flash-lite'];
 
@@ -46,7 +48,7 @@ export const LABEL_SCHEMA = {
     name: { type: 'STRING' },
     serving_g: { type: 'NUMBER' },
     servings_per_package: { type: 'NUMBER' },
-    kcal: { type: 'NUMBER' }, protein: { type: 'NUMBER' }, fat: { type: 'NUMBER' }, carbs: { type: 'NUMBER' },
+    kcal: { type: 'NUMBER' }, kj: { type: 'NUMBER' }, protein: { type: 'NUMBER' }, fat: { type: 'NUMBER' }, carbs: { type: 'NUMBER' },
     sugar: { type: 'NUMBER' }, sodium_mg: { type: 'NUMBER' }
   },
   required: ['found']
@@ -65,7 +67,8 @@ export function mealPrompt(text) {
 export const LABEL_PROMPT = [
   '這是台灣食品包裝上的「營養標示」。請讀出每一份的數值。',
   '如果標示只有「每 100 公克（毫升）」，serving_g 填 100，數值照每 100 公克填。',
-  'name 填產品名稱（看不到就留空）。kcal 是熱量（大卡），protein 蛋白質、fat 脂肪、carbs 碳水化合物、sugar 糖（公克），sodium_mg 鈉（毫克）。',
+  'name 填產品名稱（看不到就留空）。kcal 是熱量（大卡、kcal）。標示上有千焦耳（kJ）的，照原數字填在 kj，不要自己換算；只有千焦耳、沒有大卡時 kcal 留空。',
+  'protein 蛋白質、fat 脂肪、carbs 碳水化合物、sugar 糖（公克），sodium_mg 鈉（毫克）。',
   '照片裡找不到營養標示，found 回傳 false。'
 ].join('\n');
 
@@ -201,15 +204,19 @@ export function aiItemToFood(item, source) {
 }
 
 // (B) → { name, servingG, servings, kcal, p, c, f, sugar, na } 或 null（找不到標示）
+// 只有千焦耳（kJ）的標示由程式換成大卡（不讓 AI 自己算）；kj 有值＝標示上有千焦耳
 export function normalizeLabel(obj) {
   if (!obj || obj.found === false) return null;
-  const kcal = numOr(obj.kcal);
+  const kj = numOr(obj.kj);
+  let kcal = numOr(obj.kcal);
+  // 沒有大卡，或 AI 把千焦耳的數字也填進大卡（兩個一樣）→ 用千焦耳換算
+  if (kj != null && kj > 0 && (kcal == null || Math.abs(kcal - kj) < 1)) kcal = kjToKcal(kj);
   if (kcal == null || kcal > 5000) return null;
   const m = (v) => { const n = numOr(v); return n == null ? null : r1(n); };
   return {
     name: String(obj.name || '').trim().slice(0, 40),
     servingG: m(obj.serving_g), servings: m(obj.servings_per_package),
-    kcal: Math.round(kcal), p: m(obj.protein), c: m(obj.carbs), f: m(obj.fat), sugar: m(obj.sugar),
+    kcal: Math.round(kcal), kj: kj == null ? null : Math.round(kj), p: m(obj.protein), c: m(obj.carbs), f: m(obj.fat), sugar: m(obj.sugar),
     na: numOr(obj.sodium_mg) == null ? null : Math.round(obj.sodium_mg)
   };
 }

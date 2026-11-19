@@ -52,7 +52,7 @@ async function addManual(page, meal, name, kcal) {
 
 test('晚上記的會問是不是現在吃的；不是就選大約幾點，記錄時間改成吃的時間', async ({ page }) => {
   await page.clock.install({ time: new Date(2026, 10, 19, 23, 15) });
-  await openApp(page);
+  await openApp(page, { ownClock: true });
   await addManual(page, 'dinner', '雞腿便當', 750);
   await expect(page.locator('#whenModal')).toBeVisible();
   await expect(page.locator('#whenMsg')).toContainText('晚餐・雞腿便當（現在 23:15）');
@@ -81,7 +81,7 @@ test('晚上記的會問是不是現在吃的；不是就選大約幾點，記�
 
 test('過了午夜補記前一天的晚餐：選了晚上的時間就搬回前一天', async ({ page }) => {
   await page.clock.install({ time: new Date(2026, 10, 20, 0, 30) });
-  await openApp(page);
+  await openApp(page, { ownClock: true });
   await addManual(page, 'dinner', '滷肉飯', 600);
   await page.click('#whenEarlierBtn');
   await page.fill('#whenTime', '19:30');
@@ -94,7 +94,7 @@ test('過了午夜補記前一天的晚餐：選了晚上的時間就搬回前�
 
 test('白天記的不問', async ({ page }) => {
   await page.clock.install({ time: new Date(2026, 10, 19, 12, 30) });
-  await openApp(page);
+  await openApp(page, { ownClock: true });
   await addManual(page, 'lunch', '便當', 700);
   await expect(page.locator('#whenModal')).toBeHidden();
 });

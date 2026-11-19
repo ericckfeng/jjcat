@@ -11,7 +11,13 @@ export async function stubCdn(page) {
 }
 
 // keepWelcome：保留新裝置的歡迎畫面（預設會按「直接開始」關掉，方便測其他流程）
-export async function openApp(page, { errors, keepWelcome = false } = {}) {
+// 時鐘固定從今天中午 12 點開始走：晚上 10 點後記錄會問「這是現在吃的嗎？」，
+// 不固定的話測試結果會跟著跑測試的時間變。自己 page.clock.install 的測試傳 ownClock: true。
+export async function openApp(page, { errors, keepWelcome = false, ownClock = false } = {}) {
+  if (!ownClock) {
+    const noon = new Date(); noon.setHours(12, 0, 0, 0);
+    await page.clock.install({ time: noon });
+  }
   await stubCdn(page);
   if (errors) {
     page.on('pageerror', e => errors.push(String(e)));

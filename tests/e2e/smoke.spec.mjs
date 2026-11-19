@@ -10,7 +10,10 @@ test('記錄吃的、身體、睡眠，並產生報告', async ({ page }) => {
   await page.click('[data-screen=scr-manual]');
   await page.click('#scr-manual [data-meal=lunch]');
   await page.fill('#foodNameInput', '雞腿便當');
-  await page.fill('#foodKcalInput', '400');
+  await page.click('#kjDetails summary');
+  await page.fill('#foodKjInput', '1674');                 // 千焦耳 → 400 大卡
+  await expect(page.locator('#kjResult')).toHaveText('＝ 400 大卡');
+  await expect(page.locator('#foodKcalInput')).toHaveValue('400');
   await page.click('[data-portion="2"]');
   await page.click('#scr-manual .scr-foot button');
 

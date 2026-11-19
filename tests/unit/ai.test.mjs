@@ -88,9 +88,20 @@ test('AI 品項變成「食物」：改克數時營養素和六大類等比例�
 
 test('整理營養標示', () => {
   assert.deepEqual(normalizeLabel({ found: true, name: '高纖蘇打餅', serving_g: 30, servings_per_package: 6, kcal: 132.4, protein: 2.7, fat: 4.8, carbs: 19.6, sugar: 1.2, sodium_mg: 150.6 }),
-    { name: '高纖蘇打餅', servingG: 30, servings: 6, kcal: 132, p: 2.7, c: 19.6, f: 4.8, sugar: 1.2, na: 151 });
+    { name: '高纖蘇打餅', servingG: 30, servings: 6, kcal: 132, kj: null, p: 2.7, c: 19.6, f: 4.8, sugar: 1.2, na: 151 });
   assert.equal(normalizeLabel({ found: false }), null);
   assert.equal(normalizeLabel({ found: true }), null, '沒有熱量不算');
+});
+
+test('營養標示只有千焦耳：程式換成大卡', () => {
+  const a = normalizeLabel({ found: true, serving_g: 100, kj: 1650, protein: 8, fat: 15, carbs: 60 });
+  assert.equal(a.kcal, 394, '1650 ÷ 4.184');
+  assert.equal(a.kj, 1650);
+  const b = normalizeLabel({ found: true, kj: 552, kcal: 552 });
+  assert.equal(b.kcal, 132, 'AI 把千焦耳也填進大卡，用千焦耳換算');
+  const c = normalizeLabel({ found: true, kj: 552, kcal: 132 });
+  assert.equal(c.kcal, 132, '兩個都有就用標示上的大卡');
+  assert.equal(normalizeLabel({ found: true, kj: 30000 }), null, '換算後太大不算');
 });
 
 test('呼叫：模型太忙（503）換下一個；都失敗時保留原始原因給使用者截圖', async () => {

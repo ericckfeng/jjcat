@@ -12,6 +12,7 @@ import { mascotSVG, buildMascotMessages } from './mascot.js';
 import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS, energyDensity, isGlutinous, kjToKcal } from './foods.js';
 import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, shouldAskWhen, eatenAt, MEAL_TIME_CHIPS } from './meals.js';
 import { buildInsights } from './insights.js';
+import { APP_REV, APP_LABEL, parseLatest, requiredRev, minRevToWrite, deviceName, deviceRecord, upsertDevice, deviceRows } from './version.js';
 import { partyTemplate, startCounts, parsePartyText, partyMemo, partyEntries, partyTotals, cleanGrams } from './party.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros } from './bank.js';
@@ -909,7 +910,8 @@ function openScreen(id) {
   if (id === 'scr-profile') renderProfileScreen();
   if (id === 'scr-targets') fillTargetFields();
   if (id === 'scr-features') renderFeatures();
-  if (id === 'scr-about') $('appVersionText').textContent = '版本 ' + APP_VERSION;
+  if (id === 'scr-about') { renderAbout(); checkLatest(true); }
+  if (id === 'scr-data') { renderCloud(); renderBackupInfo(); }   // 關掉自動同步的人也要看得到雲端區塊
   if (id === 'scr-weekly') renderWeekly();
   if (id === 'scr-ai') resetAi();
   if (id === 'scr-manual') setBox('aiLabelNote', null, '');
@@ -1960,6 +1962,96 @@ $('aiLabelInput').addEventListener('change', async (e) => {
   }
 });
 
+/* ---------------- 版本：有沒有新版、我的裝置 ---------------- */
+// 網站上的 version.json 是目前最新版；比這一版新就在首頁提示更新
+let latest = null;
+let latestCheckedAt = 0;
+async function checkLatest(force = false) {
+  if (location.protocol === 'file:') return;
+  if (!force && Date.now() - latestCheckedAt < 30 * 60 * 1000) return;
+  latestCheckedAt = Date.now();
+  try {
+    const res = await fetch('version.json', { cache: 'no-store' });
+    if (res.ok) latest = parseLatest(await res.json());
+  } catch (e) { /* 離線：當作沒檢查到 */ }
+  renderUpdateBanner();
+  if (screenStack.includes('scr-about')) renderAbout();
+}
+const hasNewer = () => Boolean(latest && latest.rev > APP_REV);
+const syncBlocked = () => (Number(state.meta.cloud.blockedRev) || 0) > APP_REV;
+function renderUpdateBanner() {
+  const show = hasNewer() || syncBlocked();
+  $('updateBanner').classList.toggle('hidden', !show);
+  if (!show) return;
+  $('updateBannerText').textContent = syncBlocked()
+    ? '雲端的資料是新版 App 存的，這台要更新才能繼續同步（資料都還在）。'
+    : '有新版本（' + (latest.ver || 'Rev. ' + latest.rev) + '），按「更新」就好，記的資料不會不見。';
+}
+async function updateApp() {
+  try {
+    const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+    if (reg) await reg.update();
+  } catch (e) { /* ignore */ }
+  location.reload();
+}
+document.addEventListener('click', (e) => { if (e.target.closest('[data-update-app]')) updateApp(); });
+
+const myDeviceName = () => state.meta.deviceName || deviceName(navigator.userAgent);
+// 雲端記錄這台的版本（同步時順便更新；版本、名字沒變就一天最多一次）
+function refreshDevice() {
+  let changed = false;
+  const rec = deviceRecord(state.devices, { id: state.meta.deviceId, name: myDeviceName() });
+  if (rec) { state.devices = upsertDevice(state.devices, rec); changed = true; }
+  const mr = minRevToWrite(state.minRev);
+  if (mr) { state.minRev = mr; changed = true; }
+  return changed;
+}
+function renderAbout() {
+  $('appVersionText').textContent = '版本 ' + APP_VERSION;
+  const el = $('appLatestText');
+  el.className = 'text-lg font-semibold ' + (hasNewer() || syncBlocked() ? 'text-amber-700' : latest ? 'text-emerald-700' : 'text-stone-500');
+  el.textContent = syncBlocked() ? '⚠ 雲端資料需要 Rev. ' + state.meta.cloud.blockedRev + ' 以上，請更新'
+    : hasNewer() ? '⚠ 有新版本：' + (latest.ver ? latest.ver + '（Rev. ' + latest.rev + '）' : 'Rev. ' + latest.rev)
+    : latest ? '✓ 已經是最新版'
+    : navigator.onLine === false ? '沒有網路，等連上網再檢查有沒有新版' : '正在檢查有沒有新版…';
+  $('aboutUpdateBtn').classList.toggle('hidden', !(hasNewer() || syncBlocked()));
+  const linked = cloud.isConfigured() && state.meta.cloud.linked;
+  const rows = linked ? deviceRows(state.devices, { myId: state.meta.deviceId, latestRev: latest && latest.rev, now: now() }) : [];
+  rows.forEach(r => { if (r.mine) r.name = myDeviceName(); });   // 剛改的名字馬上顯示（雲端下次同步才更新）
+  $('devicesNote').textContent = linked
+    ? '每一台同步時會記下自己的版本。沒出現在這裡的裝置，代表還沒更新到 Rev. 39 以後的版本，或還沒同步過：請在那台連網打開 App。'
+    : '連結 Google 雲端同步後，這裡會列出每一台手機、電腦用的版本。';
+  $('devicesList').innerHTML = rows.map(r => {
+    const when = r.mine ? '這台' : r.days === 0 ? '今天同步' : r.days + ' 天前同步';
+    const st = r.state === 'ok' ? '<span class="text-emerald-700 font-bold">✓ 最新</span>'
+      : r.state === 'old' ? '<span class="text-amber-700 font-bold">⚠ 要更新</span>' : '';
+    return `<div class="rounded-xl border ${r.state === 'old' ? 'border-amber-300 bg-amber-50' : 'border-stone-200'} p-3">
+      <div class="flex items-center gap-2 flex-wrap"><span class="text-lg font-bold text-stone-900 break-all">${esc(r.name)}</span><span class="text-base text-stone-500">${when}</span><span class="ml-auto">${st}</span></div>
+      <div class="flex items-center gap-2"><span class="text-base text-stone-700 tabular-nums">${esc(r.ver ? r.ver + '（Rev. ' + r.rev + '）' : 'Rev. ' + r.rev)}</span>${r.mine ? '' : `<button type="button" data-remove-device="${esc(r.id)}" class="ml-auto px-3 py-1 rounded-lg text-base text-stone-500 underline">移除</button>`}</div>
+    </div>`;
+  }).join('');
+  $('deviceNameInput').value = state.meta.deviceName || '';
+  $('deviceNameInput').placeholder = deviceName(navigator.userAgent);
+}
+$('deviceNameInput').addEventListener('change', (e) => {
+  const v = e.target.value.trim().slice(0, 20);
+  if (v) state.meta.deviceName = v; else delete state.meta.deviceName;
+  persist();   // 下次同步時更新雲端上這台的名字
+  renderAbout();
+});
+$('devicesList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-remove-device]');
+  if (!b) return;
+  const id = b.getAttribute('data-remove-device');
+  const d = (state.devices || []).find(x => x.id === id);
+  openConfirm('移除這台裝置', '「' + (d ? d.name : '裝置') + '」不再用了才移除（例如換手機）。那台如果之後又同步，會自動回到清單。不會刪除任何飲食記錄。', () => {
+    state.devices = (state.devices || []).filter(x => x.id !== id);
+    tombstone('devices:' + id);
+    persist();
+    renderAbout();
+  }, '移除');
+});
+
 /* ---------------- 小芽週報 ---------------- */
 function weeklyData() {
   const wk = lastWeek(todayStr());
@@ -2066,6 +2158,7 @@ function switchTab(tab) {
   window.scrollTo({ top: 0 });
 }
 function renderBanners() {
+  renderUpdateBanner();
   const show = !isStandalone() && !state.meta.installHintDismissed;
   $('installBanner').classList.toggle('hidden', !show);
   const hasData = Object.values(state.logs).some(l => l && l.length);
@@ -2482,7 +2575,7 @@ $('whenOkBtn').addEventListener('click', () => {
 
 /* ---------------- ⚙️ 設定 ---------------- */
 // 版本號取自 index.html 載入 app.js 的 ?v=N（發佈時本來就要加 1，不用另外改）
-const APP_VERSION = 'v' + (new URL(import.meta.url).searchParams.get('v') || '?');
+const APP_VERSION = APP_LABEL;
 function renderSettings() {
   const pr = state.profile;
   const age = ageFrom(pr.birthYear);
@@ -3217,6 +3310,7 @@ $('importJsonInput').addEventListener('change', async (e) => {
   if (!file) return;
   let data;
   try { data = JSON.parse(await file.text()); } catch (err) { showToast('檔案無法讀取，請確認是 JSON 備份檔'); return; }
+  if (requiredRev(data)) { showToast('這個備份檔是較新版的 App 做的，請先更新 App（設定 → 關於）再匯入'); return; }
   openConfirm('匯入備份', '會把「' + file.name + '」合併到目前資料，相同的記錄不會重複；目標設定會改成備份檔裡的設定。', async () => {
     try {
       const r = await mergeImport(data);
@@ -3390,6 +3484,7 @@ function photoKeyOf(it) { return it.photoKey || it.id; }
 
 async function doSync({ auto, first }) {
   const c = state.meta.cloud;
+  if (refreshDevice()) { c.dirty = true; persistLocal(); }
   if (!auto) setCloudStatus('同步中…', 'busy');
   const info = await cloud.getInfo();
   const remoteChanged = info.exists && info.modifiedTime !== c.knownModified;
@@ -3403,6 +3498,15 @@ async function doSync({ auto, first }) {
   const local = syncShape(syncData());
   const localStr = stableStringify(local);
   const remote = info.exists ? syncShape(await cloud.downloadData(info.fileId)) : null;
+  // 雲端資料是更新版的 App 寫的、這一版看不懂：先暫停同步（不合併、不上傳），提示更新；兩邊資料都不動
+  const need = Math.max(requiredRev(remote), requiredRev(local));
+  if (need) {
+    c.blockedRev = need;
+    persistLocal();
+    setCloudStatus('雲端的資料需要較新版的 App（Rev. ' + need + ' 以上）。更新前先暫停同步，這台的資料都還在。', 'warn');
+    return;
+  }
+  if (c.blockedRev) { delete c.blockedRev; persistLocal(); }
   const merged = mergeData(local, remote);
 
   // 照片：本機是最新版本、雲端沒有 → 上傳；本機沒有或是舊版本、雲端有 → 下載
@@ -3573,6 +3677,7 @@ function openFromUrl() {
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
+  setTimeout(() => checkLatest(), 2000);
   // 跨日後回到 App 時自動跳到今天
   let lastToday = todayStr();
   document.addEventListener('visibilitychange', () => {
@@ -3580,6 +3685,7 @@ function openFromUrl() {
       if (state.meta.cloud.dirty && cloud.getToken()) cloudRun('sync', { auto: true });
       return;
     }
+    checkLatest();
     if (state.meta.cloud.linked && state.meta.cloud.auto !== false) {
       if (cloud.getToken()) cloudRun('sync', { auto: true });
       else if (!state.meta.cloud.needAuth) { state.meta.cloud.needAuth = true; persistLocal(); renderBanners(); renderSyncChip(); }

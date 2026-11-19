@@ -19,6 +19,8 @@
 6. **需要搬移資料時**：寫成「讀取時轉換」或一次性搬移，並在 `meta` 記一個旗標避免重複執行。要考慮同步：兩台裝置可能都各自搬移一次，搬移結果必須相同（冪等），不能因為重複搬移而錯位。
 7. **時間戳**：所有 `updatedAt`、`_t`、`tomb` 的值都是毫秒（`Date.now()`）。合併時數字大的勝出。
 8. **SYNC_VERSION** 只在資料結構有不相容變化時才加 1，並在下方「版本沿革」記錄。目前沒有任何地方因版本號拒絕資料，請維持這樣。
+9. **最低需要版本 `minRev`**（Rev. 39 起）：新功能會寫入「舊版看不懂、同步時會弄壞」的資料時，把 `js/version.js` 的 `DATA_MIN_REV` 調成那個功能發佈的 Rev.，App 會把 `minRev: { rev, updatedAt }` 寫進同步檔。低於這一版的 App（Rev. 39 以後的才看得懂這個欄位）會**暫停同步**：不合併、不上傳，首頁提示更新，兩邊的資料都不動；也不匯入這種備份檔。這不是「拒絕資料」，更新後一切照常。
+   - Rev. 39 以前的 App 不認得 `minRev`，所以第一次調高前，仍要先用「⚙️ 設定 → 關於 → 我的裝置」確認每一台都已經是 Rev. 39 以後。
 
 ## 儲存位置
 
@@ -124,13 +126,16 @@
 
 ### meta（只存在這台裝置）
 
-`deviceId`、`welcomed`（true＝這台裝置已經選過歡迎畫面的開始方式）、`ai: { key, at }`（使用者自己的 Gemini API Key；**只存在這台裝置，絕不能放進同步檔或備份檔**，有 e2e 測試檢查）、`weeklySeen`（已看過的小芽週報，值是那週週一的日期）、`fontSize`（`m`/`l`/`xl`）、`mascot`（false＝關閉小芽）、`lastCheer`、`installHintDismissed`、`lastBackup`、`photoVer`（`{ entryId: 本機照片的 photoKey }`）、`cloud: { linked, email, auto, lastSync, lastBackup, knownModified, dirty, needAuth }`。`party: { tpl, counts: { 代碼: 數量 }, at, weigh, photos: { 代碼: true }, grams: { 代碼: 公克 } }`（v37 起，吃到飽速記還沒記下來的數量、秤重模式開關、秤重照（暫存在 IndexedDB `party_<代碼>`）與一顆的重量；按「記下來」後全部刪除）。
+`deviceId`、`welcomed`（true＝這台裝置已經選過歡迎畫面的開始方式）、`ai: { key, at }`（使用者自己的 Gemini API Key；**只存在這台裝置，絕不能放進同步檔或備份檔**，有 e2e 測試檢查）、`weeklySeen`（已看過的小芽週報，值是那週週一的日期）、`fontSize`（`m`/`l`/`xl`）、`mascot`（false＝關閉小芽）、`lastCheer`、`installHintDismissed`、`lastBackup`、`photoVer`（`{ entryId: 本機照片的 photoKey }`）、`cloud: { linked, email, auto, lastSync, lastBackup, knownModified, dirty, needAuth, blockedRev }`（`blockedRev`：Rev. 39 起，雲端資料要求的最低版本比這台新，暫停同步中）。`deviceName`（Rev. 39 起，使用者幫這台取的名字，空的就用「iPhone」「Mac 電腦」等）。`party: { tpl, counts: { 代碼: 數量 }, at, weigh, photos: { 代碼: true }, grams: { 代碼: 公克 } }`（v37 起，吃到飽速記還沒記下來的數量、秤重模式開關、秤重照（暫存在 IndexedDB `party_<代碼>`）與一顆的重量；按「記下來」後全部刪除）。
 
 ## 匯出／同步檔案格式
 
 - **雲端同步檔**（`飲控隨身記備份.json`）：`{ app: 'diet-tracker', version, targets, targetsAt, profile, profileAt, logs, days, quickItems, tomb }`，不含照片。
 - **下載的完整備份**：同上，另加 `exportedAt` 和 `photos: { entryId: dataURL }`。
 - 兩種檔案都會帶著其他最上層資料（相容性規則 5）。
+- **最上層 `devices`**（Rev. 39 起）：`[{ id: deviceId, rev, ver, name, updatedAt }]`，每台裝置用的版本，給「關於 → 我的裝置」看。清單形狀，照規則 5 合併；移除用 `tomb['devices:<id>']`。每台只在版本、名字變了或超過 20 小時才更新自己那一筆（避免每次同步都改到資料、兩台來回上傳）。
+  - 這是第一個最上層新資料，但**只是資訊**：v9 以前的 App 同步時會丟掉它，不影響任何記錄，新版裝置下次同步會再寫回去，所以不用等 11/26。
+- **最上層 `minRev`**（Rev. 39 起）：`{ rev, updatedAt }`，見相容性規則 9。目前沒有寫入（`DATA_MIN_REV = 0`）。
 - **匯入**（`mergeImport()`）接受以上所有版本；其他最上層資料只從本 App 的檔案（`app: 'diet-tracker'`）照同步規則合併，最早的 v1 檔不會帶入，以及最早的 v1 格式，一律「合併」，相同 `id` 不重複。
 
 ## 版本沿革
@@ -148,6 +153,7 @@
 | v3（App v18） | 2026-11-19 | 依體重試算目標：`targets.water`、`targets.calc`、`profile.birthYear`、`profile.activity`。 |
 | v3（App v19） | 2026-11-19 | 每日欄位新增 `bmr`（InBody 基礎代謝）。每日 CSV 最後加一欄。 |
 | v3（App v22） | 2026-11-19 | `targets.bank`（熱量銀行開關）。 |
+| v3（Rev. 39） | 2026-11-19 | 版本改成「日期-序號（Rev.）」。最上層新增 `devices`、`minRev`（見上方）；`meta.deviceName`、`meta.cloud.blockedRev`。 |
 | v3（App v23） | 2026-11-19 | 每日欄位新增 `smm`（骨骼肌）；`targets.bodyFat`（目標體脂率）；`targets.calc.bmrSource` 可為 `ffm`。每日 CSV 最後再加一欄骨骼肌。 |
 | v3（App v24） | 2026-11-19 | 每日欄位新增 `vfl`、`pa`、`ecw`。每日 CSV 最後加三欄。 |
 | v3（App v25） | 2026-11-19 | 每日欄位新增 `vfa`（內臟脂肪面積）。每日 CSV 最後加一欄。 |

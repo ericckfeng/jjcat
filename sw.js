@@ -1,6 +1,6 @@
 // Service Worker：讓 App 可以離線開啟
 // 自己的檔案「先上網抓最新版，失敗才用快取」；CDN 檔案「有快取就用快取」
-const CACHE = 'diet-tracker-v38';
+const CACHE = 'diet-tracker-v39';
 const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 const CORE = [
   './',
@@ -23,6 +23,7 @@ const CORE = [
   './js/bank.js',
   './js/ai.js',
   './js/party.js',
+  './js/version.js',
   './tfda_foods.json',
   './privacy.html',
   './manifest.webmanifest',
@@ -50,6 +51,8 @@ self.addEventListener('fetch', (event) => {
   if (!url.protocol.startsWith('http')) return;
 
   if (url.origin === self.location.origin) {
+    // 網站上的「目前最新版」：一定要問伺服器，不放快取（離線就讓它失敗，App 會當作沒檢查到）
+    if (url.pathname.endsWith('/version.json')) return;
     // 一律向伺服器確認是不是最新版（避免瀏覽器快取造成新舊檔案混用），離線時才用快取
     const fresh = req.mode === 'navigate'
       ? fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })

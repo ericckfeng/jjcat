@@ -49,11 +49,13 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/bank.js` | **純函式**：熱量銀行（一週總量控管、今天的建議熱量、營養素調整）（有單元測試） |
 | `js/ai.js` | AI 辨識：呼叫 Gemini（使用者自己的 Key，存 `meta.ai`）、整理回傳資料（純函式有單元測試）。只能用 CORS 允許的 `content-type`、`x-goog-api-key` 標頭 |
 | `js/party.js` | **純函式**：吃到飽・聚餐速記的範本（目前只有港式點心）、備忘錄文字解析、合計（有單元測試）。新增範本＝在 `PARTY_TEMPLATES` 加一組 |
+| `js/version.js` | **純函式**：版本號（由 `scripts/bump.py` 改）、有沒有新版、雲端要求的最低版本 `DATA_MIN_REV`、「我的裝置」清單（有單元測試） |
 | `js/nutrition.js` | 餐別、營養素、六大類代換表、預設快選 |
 | `js/config.js` | Google OAuth 用戶端 ID（公開值，可以放程式碼裡） |
 | `sw.js` | Service worker：自己的檔案一律向伺服器確認最新版（`cache: 'no-cache'`），離線才用快取 |
 | `privacy.html` | 隱私權政策（Google 同意畫面有連到，不要刪） |
 | `tfda_foods.json` | 衛福部 TFDA 食品營養成分資料（每 100g），由 `scripts/build_foods.py` 產生，**不要手改** |
+| `scripts/bump.py` | 發佈前跑：版本號加 1（見「發佈」） |
 | `scripts/build_foods.py` | TFDA xlsx → `tfda_foods.json` 轉換程式（只用 Python 內建模組） |
 | `docs/DATA_FORMAT.md` | 資料格式、版本沿革、相容性規則 |
 | `docs/ROADMAP.md` | 改進構想與優先順序（討論用；新想法補在「使用者的想法」） |
@@ -72,10 +74,9 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 每次發佈前：
 
 1. `npm test`，有改到流程就再跑 `npm run test:e2e`。
-2. **一起把版本號加 1**（避免使用者手機新舊檔案混用）：
-   - `sw.js` 的 `const CACHE = 'diet-tracker-vN'`
-   - `index.html` 裡 `js/app.js?v=N` 和 `css/app.css?v=N`（「關於」頁顯示的版本號就是從 `app.js?v=N` 讀的，不用另外改）
+2. **`python3 scripts/bump.py`**：版本號加 1（避免使用者手機新舊檔案混用）。版本＝「發佈日期-當天第幾次（Rev. 第幾次發佈）」，例如 `2026.11.20-1（Rev. 40）`，日期用台灣時間；比較新舊只看 Rev.。它會一起改 `js/version.js`、`version.json`（App 打開時讀它，比自己新就在首頁提示「更新」）、`sw.js` 的快取名稱、`index.html` 的 `?v=`。**不要手改這幾處。**
    - 新增 JS 檔時，也要加進 `sw.js` 的 `CORE` 清單
+   - 新功能會寫入舊版看不懂、會弄壞的資料時，另外把 `js/version.js` 的 `DATA_MIN_REV` 調成這次的 Rev.（見 `docs/DATA_FORMAT.md` 相容性規則 9）
 3. commit（英文 conventional commits），push 到 `main`。GitHub Pages 約 1 分鐘更新；GitHub 會讓檔案快取最多 10 分鐘。
 
 ## 更新 TFDA 食品資料（TFDA 發佈新版 xlsx 時）
@@ -83,7 +84,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 1. 把新的 xlsx 放進專案（例如 `docs/`）。
 2. `python3 scripts/build_foods.py <xlsx>`：會列出和上一版的差異（新增／刪除／數值變更），先加 `--dry-run` 只看差異。
 3. 給使用者看差異摘要，確認沒問題再繼續。
-4. `npm test`（含 `tfda_foods.json` 格式檢查）、版本號加 1、commit、push。
+4. `npm test`（含 `tfda_foods.json` 格式檢查）、`python3 scripts/bump.py`、commit、push。
 
 規則：
 - 食物 id 就是 TFDA「整合編號」，不能改。TFDA 刪掉的品項，程式會自動保留並標記 `removed`（舊記錄、套餐還找得到），不要手動刪掉。

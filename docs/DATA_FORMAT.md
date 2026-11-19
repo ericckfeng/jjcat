@@ -60,6 +60,7 @@
 | `targets.mealEx` | （v29 起）營養師給的每餐份數：`{ breakfast: { grain, prot, veg, fruit, dairy, oil }, lunch, dinner, snack }`，只存有填的餐別和類別。用來顯示「這一餐還差什麼」。沒有＝沒設（不顯示）。舊版 App 存目標時會把它弄掉 |
 | `targets.bank` | （v22 起）`true`＝開啟熱量銀行（一週總量控管）。沒有＝關閉（預設）。舊版 App 存目標時會把它弄掉，結果是關閉 |
 | `profile.birthYear` | 出生年（西元），用來算年齡 |
+| `profile.sugarCare` | （v31 起）`true`＝「我在控制血糖」：選到糯米類食物時提醒。沒有＝關 |
 | `profile.activity` | 活動量 `low`／`light`／`active`（係數 1.2／1.375／1.55） |
 
 舊版 App 存「每日目標」會重建整個 `targets`，`water`、`calc` 會不見：結果是「沒有喝水目標、手動設定」，不會出錯。
@@ -151,3 +152,4 @@
 | v3（App v26） | 2026-11-19 | 每日欄位新增 `asm`（四肢肌肉量，算 SMI）。每日 CSV 最後加兩欄（四肢肌肉量、SMI）。 |
 | v3（App v27） | 2026-11-19 | AI 辨識：飲食記錄新增選填欄位 `ai`；`meta.ai`（只存本機）。 |
 | v3（App v29） | 2026-11-19 | `targets.mealEx`（每餐份數分配）。 |
+| v3（App v31） | 2026-11-19 | `profile.sugarCare`（我在控制血糖）。 |

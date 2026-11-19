@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   nutrientsFor, baseGrams, cookConversion, exchangeGroup, exchangesFor,
-  normalize, expandQuery, baseName, searchFoods, isBreakfastTime, energyDensity, densityApplies
+  normalize, expandQuery, baseName, searchFoods, isBreakfastTime, energyDensity, densityApplies, isGlutinous
 } from '../../js/foods.js';
 
 const foods = JSON.parse(readFileSync(new URL('../../tfda_foods.json', import.meta.url), 'utf8')).foods;
@@ -143,4 +143,23 @@ test('熱量密度用實際吃的重量算；AI 估的品項（沒有分類）�
   assert.equal(energyDensity(ai).high, true);
   assert.deepEqual(energyDensity(ai, 1.5), { perG: 1.5, high: false });
   assert.equal(energyDensity({ name: 'x', per100g: { kcal: 0 } }), null);
+});
+
+/* ---- 糯米類 ---- */
+test('糯米類：衛福部資料（名稱、別名、備註）', () => {
+  for (const n of ['肉粽', '鹼粽', '筒仔米糕', '豬血糕', '鹹麻糬', '冷凍芝麻湯圓', '冷藏甜年糕', '黑秈糯糙米', '糯米飯糰', '糯米漿', '芝麻糊沖泡包', '糯玉米(紫色)']) {
+    assert.equal(isGlutinous(byName(n)), true, n);
+  }
+  for (const n of ['糯米椒', '糯米醋', '冷藏寧波年糕', '冷藏廣式蘿蔔糕', '冷藏廣式芋頭粿', '粉粿', '米粄條', '粿仔條', '白飯']) {
+    assert.equal(isGlutinous(byName(n)), false, n);
+  }
+});
+test('糯米類：書上和 AI 的小吃名稱', () => {
+  for (const n of ['蓮子肉粽', '粿粽', '油飯', '草仔粿', '紅龜粿', '客家湯圓', '艾草粄', '紅豆粄', '草莓大福', '黑糖米糕', '紅豆麻糬', '甜粿']) {
+    assert.equal(isGlutinous({ name: n }), true, n);
+  }
+  for (const n of ['碗粿', '鼎邊銼', '客家粄條', '湯粄條', '蘿蔔糕', '黑糖發糕', '紅豆芋圓', '滷肉飯']) {
+    assert.equal(isGlutinous({ name: n }), false, n);
+  }
+  assert.equal(isGlutinous(null), false);
 });

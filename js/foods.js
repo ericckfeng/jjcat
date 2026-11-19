@@ -272,3 +272,17 @@ export function energyDensity(food, kcalPerG = null) {
   const perG = Math.round(v * 10) / 10;
   return { perG, high: v >= DENSITY_HIGH };
 }
+
+/* ---------------- 糯米類（支鏈澱粉多，血糖上升比較快） ---------------- */
+// 糖尿病衛教學會《臺灣小吃營養大解析》：粽子、米糕等糯米類支鏈澱粉多，比蓬萊米、在來米的升糖指數高。
+// 用名稱、別名、備註判斷（備註寫「糯米」的也算，例如米漿、芝麻糊沖泡包）。
+// 不算：糯米椒（辣椒）、糯米醋、寧波年糕（蓬萊米）、蘿蔔糕／芋頭粿／碗粿／粿仔條／粄條（在來米）、粉粿（澱粉）。
+const GLUTINOUS = /糯(?!米椒|米醋)|粽|米糕|米血|油飯|麻糬|湯圓|元宵|年糕|甜粿|草仔粿|紅龜粿|鼠麴粿|紫米|大福|艾草粄|紅豆粄|客家菜包|粢粑|糍粑|八寶飯/;
+const NOT_GLUTINOUS = /寧波年糕|糯米椒|糯米醋/;
+export function isGlutinous(food) {
+  if (!food) return false;
+  const name = food.name || '';
+  if (NOT_GLUTINOUS.test(name)) return false;
+  const text = [name, ...(food.aliases || []), food.note || ''].join(' ');
+  return GLUTINOUS.test(text);
+}

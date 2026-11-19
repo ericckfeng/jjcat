@@ -170,3 +170,31 @@ test('熱量密度高的食物有標示；麵粉這類乾料不標；秤克數�
   await page.locator('#foodResults .pick-row').first().click();
   await expect(page.locator('#gramsResult [data-density]')).toHaveCount(0);
 });
+
+test('糯米類提醒：預設不顯示；打開「我在控制血糖」後，選到粽子會提醒，滷肉飯不會', async ({ page }) => {
+  await openApp(page);
+  await openFood(page);
+  await page.fill('#foodSearch', '肉粽');
+  await expect(page.locator('#foodResults .pick-row', { hasText: '肉粽' }).first()).toBeVisible();
+  await expect(page.locator('#foodResults [data-glutinous]')).toHaveCount(0);
+  await page.click('#scr-food .scr-foot [data-back]');
+  await page.click('#openTargetBtn');
+  await page.check('#sugarCareToggle');
+  await page.click('#saveTargetBtn');
+  expect((await appState(page)).profile.sugarCare).toBe(true);
+  await openFood(page);
+  await page.fill('#foodSearch', '肉粽');
+  const row = page.locator('#foodResults .pick-row', { hasText: '肉粽' }).first();
+  await expect(row.locator('[data-glutinous]')).toContainText('糯米類');
+  await row.click();
+  await expect(page.locator('#gramsResult [data-glutinous]')).toContainText('血糖上升比較快');
+  await page.click('#scr-grams [data-back]');
+  await page.fill('#foodSearch', '糯米椒');
+  await expect(page.locator('#foodResults .pick-row', { hasText: '糯米椒' }).first().locator('[data-glutinous]')).toHaveCount(0);
+  // 關掉
+  await page.click('#scr-food .scr-foot [data-back]');
+  await page.click('#openTargetBtn');
+  await page.uncheck('#sugarCareToggle');
+  await page.click('#saveTargetBtn');
+  expect((await appState(page)).profile.sugarCare).toBeUndefined();
+});

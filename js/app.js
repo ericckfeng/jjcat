@@ -9,7 +9,7 @@ import * as cloud from './cloud.js';
 import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VERSION } from './sync.js';
 import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, muscleChange, sumLimbs, calcSmi, smiLow, latestSmi, SMI_CUTOFF, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
 import { mascotSVG, buildMascotMessages } from './mascot.js';
-import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS, energyDensity } from './foods.js';
+import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS, energyDensity, isGlutinous } from './foods.js';
 import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage } from './meals.js';
 import { buildInsights } from './insights.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
@@ -645,6 +645,11 @@ function loadFoodDB() {
   }
   return foodDBLoading;
 }
+// 糯米類提醒（設定「我在控制血糖」才顯示）
+const sugarCare = () => Boolean(state.profile.sugarCare);
+function glutinousBadge(food) {
+  return sugarCare() && isGlutinous(food) ? '<span data-glutinous class="inline-block mt-1 mr-1 px-2 py-0.5 rounded-md bg-sky-100 text-sky-900 text-sm font-semibold">糯米類・升糖較快</span>' : '';
+}
 // 熱量密度高的小標籤（每公克 3 大卡以上）
 function densityBadge(d) {
   return d && d.high ? `<span data-density class="inline-block mt-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 text-sm font-semibold">熱量密度高・每公克 ${d.perG} 大卡</span>` : '';
@@ -655,7 +660,7 @@ function foodRowHTML(food) {
     <span class="min-w-0 flex-1 text-left"><span class="block text-lg font-semibold text-stone-900 leading-snug break-words">${esc(food.name)}</span>
     ${food.note ? `<span class="block text-sm text-stone-500 break-words">${esc(food.note)}</span>` : ''}
     <span class="block text-base text-emerald-700 font-bold tabular-nums">每 100 g　${kcal} kcal</span>
-    ${densityBadge(energyDensity(food))}</span>
+    ${glutinousBadge(food)}${densityBadge(energyDensity(food))}</span>
     <span class="pick-add">選擇 ›</span>
   </button>`;
 }
@@ -747,6 +752,7 @@ function renderGrams() {
     ${cooked ? `<div class="text-sm text-stone-500 text-center">熟重 ${g} g ≈ ${conv.factor > 1 ? '生米' : '生重'} ${Math.round(baseGrams(food, g, 'cooked'))} g（${esc(conv.label)}）</div>` : ''}
     <div class="grid grid-cols-3 gap-2">${macro('p', '蛋白質')}${macro('f', '脂肪')}${macro('c', '碳水')}</div>
     <div class="text-base text-stone-700">${ex ? '六大類：' + ex : '<span class="text-stone-500">這類食物無法換算六大類份數</span>'}</div>
+    ${sugarCare() && isGlutinous(food) ? '<div data-glutinous class="rounded-xl bg-sky-50 text-sky-900 p-2 text-base leading-relaxed">糯米類：支鏈澱粉多，血糖上升比較快。份量少一點，搭配青菜和蛋白質一起吃。</div>' : ''}
     ${(() => { const d = energyDensity(food, n.kcal / g); return d && d.high ? `<div data-density class="rounded-xl bg-amber-50 text-amber-900 p-2 text-base leading-relaxed">熱量密度高：每公克 ${d.perG} 大卡，一小份熱量就很多，份量要留意。</div>` : ''; })()}`;
 }
 $('gramsInput').addEventListener('input', renderGrams);
@@ -1729,7 +1735,7 @@ function renderAiResults() {
   $('aiResults').innerHTML = items.map((it, i) => `<label class="pick-row cursor-pointer">
       <input type="checkbox" data-ai-item="${i}" class="big-check" ${aiDraft.checked.has(i) ? 'checked' : ''} />
       <span class="min-w-0 flex-1"><span class="block text-lg font-semibold text-stone-900 break-words">${esc(it.name)}</span>
-      <span class="block text-base text-stone-500 tabular-nums">約 ${it.grams} g</span>${densityBadge(energyDensity({ name: it.name }, it.kcal / it.grams))}</span>
+      <span class="block text-base text-stone-500 tabular-nums">約 ${it.grams} g</span>${glutinousBadge({ name: it.name })}${densityBadge(energyDensity({ name: it.name }, it.kcal / it.grams))}</span>
       <span class="text-lg font-bold text-emerald-700 tabular-nums shrink-0">${it.kcal} kcal</span></label>`).join('');
   const n = aiDraft.checked.size;
   $('aiAddBtn').textContent = '加入這一餐（' + n + ' 樣）';
@@ -2527,6 +2533,7 @@ $('openTargetBtn').addEventListener('click', () => {
   $('profileName').value = state.profile.name || '';
   $('mascotToggle').checked = state.meta.mascot !== false;
   $('bankToggle').checked = Boolean(t.bank);
+  $('sugarCareToggle').checked = Boolean(state.profile.sugarCare);
   openModal('targetModal');
 });
 document.querySelectorAll('.preset-btn').forEach(btn => btn.addEventListener('click', () => { $('tgt-kcal').value = btn.getAttribute('data-preset'); }));
@@ -2560,6 +2567,13 @@ $('saveTargetBtn').addEventListener('click', () => {
   state.targetsAt = now();
   if (state.profile.name !== $('profileName').value.trim()) {
     state.profile.name = $('profileName').value.trim();
+    state.profileAt = now();
+  }
+  // 「我在控制血糖」存在個人資料（會同步）
+  const care = $('sugarCareToggle').checked;
+  if (care !== Boolean(state.profile.sugarCare)) {
+    state.profile = { ...state.profile };
+    if (care) state.profile.sugarCare = true; else delete state.profile.sugarCare;
     state.profileAt = now();
   }
   state.meta.mascot = $('mascotToggle').checked;

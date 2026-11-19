@@ -182,9 +182,10 @@ test('內臟脂肪、相位角、細胞外水分比：可以記錄，報告和�
   await page.fill('#moreMeasures [data-day-num=vfl]', '11');
   await page.fill('#moreMeasures [data-day-num=pa]', '4.8');
   await page.fill('#moreMeasures [data-day-num=ecw]', '0.392');
+  await page.fill('#moreMeasures [data-day-num=vfa]', '261.7');
   await page.click('#scr-weight [data-back]');
   const d = (await appState(page)).days[ago(0)];
-  expect(d).toMatchObject({ vfl: 11, pa: 4.8, ecw: 0.392 });
+  expect(d).toMatchObject({ vfl: 11, pa: 4.8, ecw: 0.392, vfa: 261.7 });
   await page.click('.mobile-nav-tab[data-tab=report]');
   await page.click('[data-days="7"]');
   await page.click('#genReportBtn');
@@ -194,6 +195,6 @@ test('內臟脂肪、相位角、細胞外水分比：可以記錄，報告和�
   await expect(head).toContainText('細胞外水分比');
   await expect(page.locator('#reportArea tbody')).toContainText('0.392');
   const text = await page.evaluate(() => window.__dietApp.lastReportText());
-  expect(text).toContain('身體數據：內臟脂肪等級 11 級、相位角 4.8°、細胞外水分比 0.392');
+  expect(text).toContain('身體數據：內臟脂肪等級 11 級、內臟脂肪面積 261.7 cm²、相位角 4.8°、細胞外水分比 0.392');
   expect(errors).toEqual([]);
 });

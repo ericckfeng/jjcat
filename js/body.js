@@ -15,6 +15,8 @@ export const MEASURES = [
   { key: 'smm', label: '骨骼肌', unit: '公斤', short: 'kg', step: 0.1, min: 5, max: 80 },
   // 只記錄給營養師看（v24 起），不拿來自動改目標；各機型標準不同
   { key: 'vfl', label: '內臟脂肪等級', unit: '級', short: ' 級', step: 0.5, min: 1, max: 60 },
+  // 較早的 InBody 機型給的是面積（cm²），和等級是不同單位，分開記（v25 起）
+  { key: 'vfa', label: '內臟脂肪面積', unit: 'cm²', short: ' cm²', step: 0.1, min: 10, max: 500 },
   { key: 'pa', label: '相位角', unit: '°', short: '°', step: 0.1, min: 1, max: 15 },
   { key: 'ecw', label: '細胞外水分比', unit: '', short: '', step: 0.001, min: 0.3, max: 0.5 },
   // 體脂機量到的基礎代謝（依去脂體重計算，比公式估算更貼近個人）

@@ -81,3 +81,8 @@ test('骨骼肌：減掉的有肌肉要提醒營養師', () => {
   const g = buildHighlights({ ...base, muscle: { smm1: 24.1, smm2: 24.4, delta: 0.3, weightDelta: -1 } }, { limit: 10 }).find(h => /骨骼肌/.test(h.text));
   assert.equal(g.tone, 'good');
 });
+
+test('四肢骨骼肌指數偏低要列出來；正常不列', () => {
+  assert.ok(texts({ smi: { smi: 5.4, low: true, cutoff: 5.7 } }, { limit: 10 }).includes('四肢骨骼肌指數 5.4 kg/m²，低於肌少症參考值 5.7（AWGS 2019）'));
+  assert.ok(!texts({ smi: { smi: 10.5, low: false, cutoff: 7 } }, { limit: 10 }).some(t => /骨骼肌指數/.test(t)));
+});

@@ -14,6 +14,7 @@
 //   questions,                        // 「想問營養師」有寫的天數
 //   noBowelDays,                      // 排便記「無」的天數
 //   muscle: { smm1, smm2, delta, weightDelta } | null   // 最近兩次骨骼肌（最近一次在期間內才有）
+//   smi: { smi, low, cutoff } | null   // 最近一次四肢骨骼肌指數（180 天內）
 // }
 // 回傳 [{ tone: 'good' | 'warn' | 'info', text }]，最多 limit 條，重要的在前
 
@@ -55,6 +56,8 @@ export function buildHighlights(input, { limit = 5 } = {}) {
     if (mu.delta <= -0.5) add(82, 'warn', `骨骼肌 ${n1(mu.smm1)} → ${n1(mu.smm2)} kg（${signed(mu.delta)}）${wd}：減掉的有一部分是肌肉`);
     else add(68, mu.delta >= 0 ? 'good' : 'info', `骨骼肌 ${n1(mu.smm1)} → ${n1(mu.smm2)} kg（${signed(mu.delta)}）${wd}`);
   }
+
+  if (x.smi && x.smi.low) add(84, 'warn', `四肢骨骼肌指數 ${n1(x.smi.smi)} kg/m²，低於肌少症參考值 ${Number(x.smi.cutoff).toFixed(1)}（AWGS 2019）`);
 
   if (x.questions > 0) add(92, 'info', `有 ${x.questions} 天寫了「想問營養師」，列在下方「想和營養師討論」`);
 

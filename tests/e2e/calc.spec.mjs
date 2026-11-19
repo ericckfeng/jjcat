@@ -198,3 +198,35 @@ test('內臟脂肪、相位角、細胞外水分比：可以記錄，報告和�
   expect(text).toContain('身體數據：內臟脂肪等級 11 級、內臟脂肪面積 261.7 cm²、相位角 4.8°、細胞外水分比 0.392');
   expect(errors).toEqual([]);
 });
+
+test('四肢肌肉量：手腳四個數字幫忙加總，算出 SMI；偏低時試算頁和報告會提醒', async ({ page }) => {
+  const errors = [];
+  await seed(page, { days: { [ago(0)]: { weight: 140.6 } }, profile: { name: '', sex: 'm', height: 181 }, profileAt: 1 });
+  await openApp(page, { errors });
+  await page.click('[data-screen=scr-weight]');
+  await page.click('#moreMeasures summary');
+  await page.click('#limbHelper summary');
+  const limbs = page.locator('[data-limb]');
+  for (const [i, v] of ['4.54', '4.41', '12.9', '12.7'].entries()) await limbs.nth(i).fill(v);
+  await expect(page.locator('#dayAsm')).toHaveValue('34.55');
+  await expect(page.locator('#smiText')).toContainText('SMI 10.5 kg/m²');
+  await expect(page.locator('#smiText')).toContainText('在參考值（男性 7.0）以上');
+  expect((await appState(page)).days[ago(0)].asm).toBe(34.55);
+  // 改成偏低的數字
+  await page.fill('#dayAsm', '21');
+  await expect(page.locator('#smiText')).toContainText('SMI 6.4 kg/m²');
+  await expect(page.locator('#smiText')).toContainText('肌肉偏少');
+  await page.click('#scr-weight [data-back]');
+  await page.click('#openTargetBtn');
+  await page.click('#openCalcBtn');
+  await page.fill('#calcBirthYear', String(birthYearFor(58)));
+  await expect(page.locator('#calcResult')).toContainText('四肢骨骼肌指數 6.4 kg/m² 偏低');
+  await page.click('[data-calc-goal=keep]');
+  await expect(page.locator('#calcResult')).not.toContainText('偏低');
+  await page.click('#scr-calc [data-back]');
+  await page.click('.mobile-nav-tab[data-tab=report]');
+  await page.click('[data-days="7"]');
+  await page.click('#genReportBtn');
+  await expect(page.locator('#reportArea .hl')).toContainText('四肢骨骼肌指數 6.4 kg/m²，低於肌少症參考值 7.0（AWGS 2019）');
+  expect(errors).toEqual([]);
+});

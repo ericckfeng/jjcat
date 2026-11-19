@@ -7,7 +7,7 @@ import { REPORT_CSS, buildReportHTML, buildReportText, periodSummary } from './r
 import { buildWeekly, lastWeek, weeklyText } from './highlights.js';
 import * as cloud from './cloud.js';
 import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VERSION } from './sync.js';
-import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, muscleChange, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
+import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, muscleChange, sumLimbs, calcSmi, smiLow, latestSmi, SMI_CUTOFF, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
 import { mascotSVG, buildMascotMessages } from './mascot.js';
 import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS } from './foods.js';
 import { sumNutr, copyEntries, mealEntries } from './meals.js';
@@ -869,7 +869,7 @@ function openScreen(id) {
   if (id === 'scr-food') { $('foodSearch').value = ''; renderFoodResults(); renderFoodCart(); }
   if (id === 'scr-grams') renderGrams();
   if (id === 'scr-est') renderEst();
-  if (id === 'scr-weight') renderWeightHint();
+  if (id === 'scr-weight') { renderWeightHint(); document.querySelectorAll('[data-limb]').forEach(x => { x.value = ''; }); }
   if (id === 'scr-water') renderWaterBig();
   if (id === 'scr-calc') { initCalc(); renderCalc(); }
   if (id === 'scr-weekly') renderWeekly();
@@ -923,7 +923,34 @@ function renderWeightHint() {
   document.querySelectorAll('#sexGroup [data-sex]').forEach(b => b.classList.toggle('is-active', state.profile.sex === b.getAttribute('data-sex')));
   renderBmiCard();
 }
+// 四肢骨骼肌指數 SMI（肌少症篩檢）
+function renderSmi() {
+  const asm = num(getDay(ui.date, false).asm);
+  const h = state.profile.height;
+  const smi = calcSmi(asm, h);
+  const sex = state.profile.sex;
+  let msg = '';
+  if (asm && !h) msg = '填上身高，就會算四肢骨骼肌指數（SMI）。';
+  else if (smi != null) {
+    const low = smiLow(smi, sex);
+    msg = '四肢骨骼肌指數 SMI ' + smi + ' kg/m²'
+      + (low == null ? '（選了性別就會判斷）'
+        : low ? '：比參考值（' + (sex === 'm' ? '男性' : '女性') + ' ' + SMI_CUTOFF[sex].toFixed(1) + '）低，肌肉偏少。減重前請先和營養師、醫師討論，蛋白質要吃夠。'
+          : '：在參考值（' + (sex === 'm' ? '男性' : '女性') + ' ' + SMI_CUTOFF[sex].toFixed(1) + '）以上 👍');
+  }
+  $('smiText').textContent = msg;
+  $('smiText').classList.toggle('hidden', !msg);
+}
+document.querySelectorAll('[data-limb]').forEach(el => el.addEventListener('input', () => {
+  const sum = sumLimbs([...document.querySelectorAll('[data-limb]')].map(x => x.value));
+  if (sum == null) return;
+  $('dayAsm').value = sum;
+  setDayField('asm', sum);
+  renderSmi();
+}));
+$('dayAsm').addEventListener('input', () => setTimeout(renderSmi, 0));
 function renderBmiCard() {
+  renderSmi();
   const d = getDay(ui.date, false);
   const h = state.profile.height;
   const b = calcBmi(d.weight, h);
@@ -2115,6 +2142,11 @@ function renderCalc() {
     ${t.floored ? `<div class="rounded-xl bg-sky-50 text-sky-900 p-2 text-sm leading-relaxed">為了安全，熱量不會低於基礎代謝和 1,200 kcal，所以用 ${t.kcal.toLocaleString()} kcal。想減得更快，可以多走路、多活動。</div>` : ''}
     ${row('蛋白質', t.p, 'g')}${row('脂肪', t.f, 'g')}${row('碳水', t.c, 'g')}${row('喝水', t.water, 'ml')}
     ${t.adjusted ? '<div class="text-sm text-stone-500">熱量不多，蛋白質和脂肪已調低一點，留一些碳水。</div>' : ''}
+    ${(() => {
+      const sm = latestSmi(state.days, todayStr(), num($('calcHeight').value) || state.profile.height);
+      if (!sm || !smiLow(sm.smi, inp.sex || state.profile.sex) || inp.goal === 'keep') return '';
+      return `<div class="rounded-xl bg-amber-50 text-amber-900 p-2 text-sm leading-relaxed">${fmtMD(sm.date)} 的四肢骨骼肌指數 ${sm.smi} kg/m² 偏低（肌肉偏少）。不建議積極減重，可以先選「維持體重」、蛋白質選高一點，並和營養師、醫師討論。</div>`;
+    })()}
     <div class="text-sm text-stone-500 leading-relaxed">有運動的那天，喝水每 30 分鐘多 250 ml。心臟、腎臟需要限水的人，請照醫師說的量。</div>`;
 }
 // 用目標體脂率訂目標體重（有體重＋體脂率才顯示）
@@ -2463,12 +2495,12 @@ $('exportCsvBtn').addEventListener('click', () => {
 });
 $('exportDaysCsvBtn').addEventListener('click', () => {
   const dates = Array.from(new Set([...Object.keys(state.logs), ...Object.keys(state.days)])).sort();
-  const rows = [['日期', '總熱量', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '體重(kg)', 'BMI', '腰圍(cm)', '臀圍(cm)', '上臂圍(cm)', '大腿圍(cm)', '胸圍(cm)', '體脂率(%)', '喝水(ml)', '運動', '運動分鐘', '上床', '起床', '夜間睡眠(分)', '補眠(分)', '總睡眠(小時)', '睡眠品質(1-5)', '飢餓感(1-5)', '心情(1-5)', '排便', '備註', '想問營養師', '體脂機基礎代謝(kcal)', '骨骼肌(kg)', '內臟脂肪等級', '相位角(°)', '細胞外水分比', '內臟脂肪面積(cm²)']];
+  const rows = [['日期', '總熱量', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '體重(kg)', 'BMI', '腰圍(cm)', '臀圍(cm)', '上臂圍(cm)', '大腿圍(cm)', '胸圍(cm)', '體脂率(%)', '喝水(ml)', '運動', '運動分鐘', '上床', '起床', '夜間睡眠(分)', '補眠(分)', '總睡眠(小時)', '睡眠品質(1-5)', '飢餓感(1-5)', '心情(1-5)', '排便', '備註', '想問營養師', '體脂機基礎代謝(kcal)', '骨骼肌(kg)', '內臟脂肪等級', '相位角(°)', '細胞外水分比', '內臟脂肪面積(cm²)', '四肢肌肉量(kg)', 'SMI(kg/m²)']];
   dates.forEach(date => {
     const t = dayTotals(date);
     const d = state.days[date] || {};
     rows.push([date, t.kcal, t.macroItems ? t.p : '', t.macroItems ? t.c : '', t.macroItems ? t.f : '', ...EX_KEYS.map(k => (t.exItems ? t.ex[k] : '')),
-      d.weight, calcBmi(d.weight, state.profile.height), d.waist, d.hip, d.arm, d.thigh, d.chest, d.bodyFat, d.water, d.exercise, d.exMin, d.sleepBed, d.sleepWake, d.sleepMin, daySleep(d).nap || '', daySleep(d).total ? r1(daySleep(d).total / 60) : '', d.sleepQ, d.hunger, d.mood, d.bowel != null ? BOWEL_LABELS[d.bowel] : '', d.note, d.question, d.bmr, d.smm, d.vfl, d.pa, d.ecw, d.vfa]);
+      d.weight, calcBmi(d.weight, state.profile.height), d.waist, d.hip, d.arm, d.thigh, d.chest, d.bodyFat, d.water, d.exercise, d.exMin, d.sleepBed, d.sleepWake, d.sleepMin, daySleep(d).nap || '', daySleep(d).total ? r1(daySleep(d).total / 60) : '', d.sleepQ, d.hunger, d.mood, d.bowel != null ? BOWEL_LABELS[d.bowel] : '', d.note, d.question, d.bmr, d.smm, d.vfl, d.pa, d.ecw, d.vfa, d.asm, calcSmi(d.asm, state.profile.height)]);
   });
   downloadBlob('每日身體與備註_' + todayStr() + '.csv', toCSV(rows), 'text/csv;charset=utf-8');
   showToast('已匯出每日 CSV');

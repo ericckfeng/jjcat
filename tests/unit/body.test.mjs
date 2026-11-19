@@ -1,7 +1,7 @@
 // BMI、身體尺寸、睡眠計算（js/body.js）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, sleepMinutes, fmtDuration, daySleep, rollingAverage, weightAvgChange, muscleChange } from '../../js/body.js';
+import { calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, sleepMinutes, fmtDuration, daySleep, rollingAverage, weightAvgChange, muscleChange, sumLimbs, calcSmi, smiLow, latestSmi } from '../../js/body.js';
 
 test('BMI 計算', () => {
   assert.equal(calcBmi(70.6, 168), 25);
@@ -93,4 +93,23 @@ test('骨骼肌變化：最近兩次量的骨骼肌，體重用那兩天的 7 �
   assert.equal(muscleChange(days, '2026-11-01'), null, '只量過一次');
   assert.equal(muscleChange({ '2026-01-01': { smm: 24 }, '2026-11-10': { smm: 23 } }, '2026-11-19'), null, '間隔太久');
   assert.equal(muscleChange({ '2026-10-10': { smm: 24 }, '2026-11-10': { smm: 23 } }, '2026-11-19').weightDelta, null, '沒有體重');
+});
+
+test('四肢肌肉量加總與 SMI（用使用者的 InBody 報表驗算）', () => {
+  assert.equal(sumLimbs([4.54, 4.41, 12.9, 12.7]), 34.55);
+  assert.equal(sumLimbs([4.54, 4.41, 12.9]), null, '四個都要有');
+  assert.equal(calcSmi(34.55, 181), 10.5);
+  assert.equal(calcSmi(34.55, null), null);
+  assert.equal(smiLow(10.5, 'm'), false);
+  assert.equal(smiLow(6.9, 'm'), true);
+  assert.equal(smiLow(5.7, 'f'), false);
+  assert.equal(smiLow(5.6, 'f'), true);
+  assert.equal(smiLow(5.6, null), null);
+});
+
+test('最近一次四肢肌肉量（180 天內）', () => {
+  const days = { '2026-06-01': { asm: 15 }, '2026-11-10': { asm: 14.2 } };
+  assert.deepEqual(latestSmi(days, '2026-11-19', 158), { date: '2026-11-10', asm: 14.2, smi: 5.7 });
+  assert.equal(latestSmi({ '2026-03-01': { asm: 15 } }, '2026-11-19', 158), null);
+  assert.equal(latestSmi(days, '2026-11-19', null), null, '沒身高不能算');
 });

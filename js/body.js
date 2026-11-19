@@ -13,6 +13,8 @@ export const MEASURES = [
   { key: 'bodyFat', label: '體脂率', unit: '%', short: '%', step: 0.1, min: 3, max: 70 },
   // 骨骼肌重：InBody、健身房或家用八極（手腳一起量）體脂機都有（v23 起）
   { key: 'smm', label: '骨骼肌', unit: '公斤', short: 'kg', step: 0.1, min: 5, max: 80 },
+  // 四肢肌肉量合計（右臂＋左臂＋右腿＋左腿，InBody「肌肉平衡」的數字；v26 起）→ 算 SMI
+  { key: 'asm', label: '四肢肌肉量', unit: '公斤', short: 'kg', step: 0.01, min: 5, max: 80 },
   // 只記錄給營養師看（v24 起），不拿來自動改目標；各機型標準不同
   { key: 'vfl', label: '內臟脂肪等級', unit: '級', short: ' 級', step: 0.5, min: 1, max: 60 },
   // 較早的 InBody 機型給的是面積（cm²），和等級是不同單位，分開記（v25 起）
@@ -142,4 +144,34 @@ export function muscleChange(days, upTo, maxGapDays = 120) {
     delta: Math.round((smm2 - smm1) * 10) / 10,
     weightDelta: w1 != null && w2 != null ? Math.round((w2 - w1) * 10) / 10 : null
   };
+}
+
+/* ---------------- 四肢骨骼肌指數 SMI（肌少症篩檢） ---------------- */
+// SMI＝四肢肌肉量 ÷ 身高²（kg/m²）。
+// 亞洲肌少症工作小組 AWGS 2019（BIA 量的）：男性 < 7.0、女性 < 5.7 算偏低
+export const SMI_CUTOFF = { m: 7.0, f: 5.7 };
+
+export function sumLimbs(limbs) {
+  const vals = (limbs || []).map(Number).filter(v => v > 0);
+  return vals.length === 4 ? Math.round(vals.reduce((a, b) => a + b, 0) * 100) / 100 : null;
+}
+export function calcSmi(asm, heightCm) {
+  const a = Number(asm), h = Number(heightCm) / 100;
+  if (!(a > 0) || !(h >= 0.8 && h <= 2.5)) return null;
+  return Math.round(a / (h * h) * 10) / 10;
+}
+// true＝偏低；false＝正常；null＝不知道性別
+export function smiLow(smi, sex) {
+  const c = SMI_CUTOFF[sex];
+  return smi == null || c == null ? null : smi < c;
+}
+// 最近一次（180 天內）的四肢肌肉量 → { date, asm, smi }
+export function latestSmi(days, today, heightCm, maxDays = 180) {
+  const [y, m, d] = today.split('-').map(Number);
+  const f = new Date(y, m - 1, d - maxDays);
+  const fromStr = f.getFullYear() + '-' + String(f.getMonth() + 1).padStart(2, '0') + '-' + String(f.getDate()).padStart(2, '0');
+  const date = Object.keys(days || {}).filter(k => k <= today && k >= fromStr && Number(days[k].asm) > 0).sort().pop();
+  if (!date) return null;
+  const smi = calcSmi(days[date].asm, heightCm);
+  return smi == null ? null : { date, asm: Number(days[date].asm), smi };
 }

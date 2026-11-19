@@ -1,6 +1,6 @@
 // 給營養師的報告：HTML（畫面／列印／分享檔共用）與 LINE 文字摘要
 import { MEAL_KEYS, MEAL_META, MACRO_KEYS, MACRO_META, EX_KEYS, EX_META, HUNGER_LABELS, MOOD_OPTIONS, BOWEL_LABELS } from './nutrition.js';
-import { MEASURES, bmiCategory, weightAvgChange, muscleChange, daySleep, fmtDuration, sleepQualityLabel } from './body.js';
+import { MEASURES, bmiCategory, weightAvgChange, muscleChange, latestSmi, smiLow, SMI_CUTOFF, daySleep, fmtDuration, sleepQualityLabel } from './body.js';
 import { waterGoal } from './targets.js';
 import { buildHighlights } from './highlights.js';
 const EXTRA_MEASURES = MEASURES.filter(m => m.key !== 'weight' && m.key !== 'waist');
@@ -101,6 +101,11 @@ export function periodSummary(ctx, dates) {
     exercise: { totalMin: s.exMinTotal, days: dates.filter(d => Number(dd(d).exMin) > 0 || dd(d).exercise).length },
     questions: dates.filter(d => String(dd(d).question || '').trim()).length,
     noBowelDays: dates.filter(d => dd(d).bowel != null && Number(dd(d).bowel) === 0).length,
+    smi: (() => {
+      const sm = latestSmi(days, dates[dates.length - 1], state.profile.height);
+      const low = sm ? smiLow(sm.smi, state.profile.sex) : null;
+      return sm && low != null ? { smi: sm.smi, low, cutoff: SMI_CUTOFF[state.profile.sex] } : null;
+    })(),
     muscle: (() => { const m = muscleChange(days, dates[dates.length - 1]); return m && m.to >= dates[0] ? m : null; })(),
     goodKcalDays: tg.kcal > 0 ? s.totals.filter(t => t.count > 0 && Math.abs(t.kcal - tg.kcal) <= tg.kcal * 0.1).length : 0,
     waterMetDays: waterDays.filter(d => Number(dd(d).water) >= (waterGoal(tg.water, dd(d).exMin) || 1500)).length

@@ -1,7 +1,7 @@
 // BMI、身體尺寸、睡眠計算（js/body.js）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, sleepMinutes, fmtDuration, daySleep, rollingAverage } from '../../js/body.js';
+import { calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, sleepMinutes, fmtDuration, daySleep, rollingAverage, weightAvgChange } from '../../js/body.js';
 
 test('BMI 計算', () => {
   assert.equal(calcBmi(70.6, 168), 25);
@@ -70,4 +70,13 @@ test('7 日移動平均：視窗可以跨月、跨年，也可以換天數', () 
   assert.deepEqual(rollingAverage(days, 'weight', ['2026-01-02', '2026-01-04']), [61, 62]);
   assert.deepEqual(rollingAverage(days, 'weight', ['2026-01-02'], 3), [62]);
   assert.deepEqual(rollingAverage(undefined, 'weight', ['2026-01-02']), [null]);
+});
+
+test('期間體重變化看 7 天平均的頭尾；量不到 2 次就不算', () => {
+  const days = { '2026-11-01': { weight: 71 }, '2026-11-02': { weight: 70 }, '2026-11-05': { weight: 71.2 }, '2026-11-07': { weight: 69.4 } };
+  const dates = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07'];
+  // 11/2 平均 (71+70)/2=70.5；11/7 平均 (71+70+71.2+69.4)/4=70.4
+  assert.deepEqual(weightAvgChange(days, dates), { first: 70.5, last: 70.4, delta: -0.1 });
+  assert.equal(weightAvgChange(days, ['2026-11-07']), null);
+  assert.equal(weightAvgChange({}, dates), null);
 });

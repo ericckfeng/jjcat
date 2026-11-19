@@ -1,6 +1,6 @@
 // 給營養師的報告：HTML（畫面／列印／分享檔共用）與 LINE 文字摘要
 import { MEAL_KEYS, MEAL_META, MACRO_KEYS, MACRO_META, EX_KEYS, EX_META, HUNGER_LABELS, MOOD_OPTIONS, BOWEL_LABELS } from './nutrition.js';
-import { MEASURES, bmiCategory, daySleep, fmtDuration, sleepQualityLabel } from './body.js';
+import { MEASURES, bmiCategory, weightAvgChange, daySleep, fmtDuration, sleepQualityLabel } from './body.js';
 const EXTRA_MEASURES = MEASURES.filter(m => m.key !== 'weight' && m.key !== 'waist');
 
 const WEEK = '日一二三四五六';
@@ -86,13 +86,14 @@ export async function buildReportHTML(ctx, opts) {
 
   // 摘要
   const w = s.weights;
-  const wDelta = w.length > 1 ? r1(w[w.length - 1].w - w[0].w) : null;
+  const wc = weightAvgChange(days, dates); // 體重變化看 7 天平均
+  const signed = (v) => (v > 0 ? '+' : '') + v;
   const macroKcal = MACRO_KEYS.reduce((sum, k) => sum + (s.avgMacro[k] || 0) * MACRO_META[k].kcalPerG, 0);
   h += '<h2>期間摘要</h2><div class="stats">';
   h += stat('記錄天數', s.loggedDays + ' / ' + dates.length + ' 天', s.pending ? '暫估待修 ' + s.pending + ' 筆' : '');
   h += stat('平均攝取', s.avgKcal != null ? fmt(s.avgKcal) + ' kcal' : '–', '目標 ' + fmt(tg.kcal) + '・超標 ' + s.overDays + ' 天');
   const lastBmi = w.length ? calcBmi(w[w.length - 1].w, height) : null;
-  h += stat('體重', w.length ? w[w.length - 1].w + ' kg' : '–', (wDelta != null ? '期間 ' + (wDelta > 0 ? '+' : '') + wDelta + ' kg（' + w[0].w + '→' + w[w.length - 1].w + '）' : (tg.weight ? '目標 ' + tg.weight + ' kg' : '')) + (lastBmi ? '・BMI ' + lastBmi + ' ' + bmiCategory(lastBmi).label : ''));
+  h += stat('體重', w.length ? w[w.length - 1].w + ' kg' : '–', (wc ? '7 天平均 ' + wc.first + '→' + wc.last + ' kg（' + signed(wc.delta) + '）' : (tg.weight ? '目標 ' + tg.weight + ' kg' : '')) + (lastBmi ? '・BMI ' + lastBmi + ' ' + bmiCategory(lastBmi).label : ''));
   h += stat('喝水／運動', s.avgWater != null ? fmt(s.avgWater) + ' ml' : '–', '運動共 ' + s.exMinTotal + ' 分鐘');
   if (avgSleep != null) {
     const qs = sleepRows.filter(r => r.quality != null);
@@ -256,9 +257,9 @@ export function buildReportText(ctx, opts) {
     lines.push('六大類平均份數：' + EX_KEYS.map(k => EX_META[k].short + ' ' + fmt(s.avgEx[k], 1) + (tg.ex && tg.ex[k] ? '/' + fmt(tg.ex[k], 1) : '')).join('、'));
   }
   const w = s.weights;
-  if (w.length > 1) {
-    const dlt = r1(w[w.length - 1].w - w[0].w);
-    lines.push('體重：' + w[0].w + ' → ' + w[w.length - 1].w + ' kg（' + (dlt > 0 ? '+' : '') + dlt + '）');
+  const wc = weightAvgChange(state.days, dates);
+  if (wc) {
+    lines.push('體重（7 天平均）：' + wc.first + ' → ' + wc.last + ' kg（' + (wc.delta > 0 ? '+' : '') + wc.delta + '），最新一次 ' + w[w.length - 1].w + ' kg');
   } else if (w.length === 1) {
     lines.push('體重：' + w[0].w + ' kg');
   }

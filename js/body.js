@@ -104,3 +104,14 @@ export function rollingAverage(days, key, dates, windowDays = 7) {
     return n ? Math.round(sum / n * 10) / 10 : null;
   });
 }
+
+// 期間內體重變化，用 7 天平均的頭尾比較（不受某一天水腫影響）。
+// 期間內至少量過 2 次才算，否則回傳 null。
+export function weightAvgChange(days, dates) {
+  const weighed = (dates || []).filter(d => Number((days || {})[d] && days[d].weight) > 0).length;
+  if (weighed < 2) return null;
+  const avg = rollingAverage(days, 'weight', dates).filter(v => v != null);
+  const first = avg[0];
+  const last = avg[avg.length - 1];
+  return { first, last, delta: Math.round((last - first) * 10) / 10 };
+}

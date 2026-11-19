@@ -6,7 +6,7 @@ import { photoDB } from './db.js';
 import { REPORT_CSS, buildReportHTML, buildReportText } from './report.js';
 import * as cloud from './cloud.js';
 import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VERSION } from './sync.js';
-import { MEASURES, MEASURE_META, rollingAverage, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
+import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
 import { mascotSVG, buildMascotMessages } from './mascot.js';
 import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS } from './foods.js';
 import { sumNutr, copyEntries, mealEntries } from './meals.js';
@@ -1240,8 +1240,8 @@ function renderTrends() {
 
   const w1 = s.weights[s.weights.length - 1];
   // 體重變化看 7 天平均的變化，不受某一天水腫影響
-  const wAvg = rollingAverage(state.days, 'weight', dates).filter(v => v != null);
-  const wDelta = s.weights.length > 1 && wAvg.length > 1 ? r1(wAvg[wAvg.length - 1] - wAvg[0]) : null;
+  const wc = weightAvgChange(state.days, dates);
+  const wDelta = wc ? wc.delta : null;
   $('trendStats').innerHTML = [
     statTile('平均攝取', s.avgKcal != null ? fmt(s.avgKcal) + ' kcal' : '–', '目標 ' + fmt(target)),
     statTile('記錄天數', s.loggedDays + ' / ' + n, '超標 ' + s.overDays + ' 天'),
@@ -2525,4 +2525,4 @@ document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click',
 })();
 
 // 方便除錯
-window.__dietApp = { state, ui, dayTotals };
+window.__dietApp = { state, ui, dayTotals, lastReportText: () => lastReport && lastReport.text };

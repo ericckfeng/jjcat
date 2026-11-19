@@ -31,3 +31,24 @@ test('體重顯示 7 天平均與平均的期間變化；其他指標不顯示�
   await expect(page.locator('#weightAvgNote')).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test('營養師報告與 LINE 文字：體重變化看 7 天平均', async ({ page }) => {
+  const days = {
+    [ago(8)]: { weight: 71 },
+    [ago(6)]: { weight: 70 },
+    [ago(3)]: { weight: 71.2 },
+    [ago(1)]: { weight: 69.4 },
+    [ago(0)]: { weight: 69.6 }
+  };
+  await page.addInitScript((days) => {
+    if (localStorage.getItem('diet_tracker_v2')) return;
+    localStorage.setItem('diet_tracker_v2', JSON.stringify({ logs: {}, days, quickItems: [], tomb: {}, meta: { welcomed: true } }));
+  }, days);
+  await openApp(page);
+  await page.click('.mobile-nav-tab[data-tab=report]');
+  await page.click('[data-days="7"]');
+  await page.click('#genReportBtn');
+  await expect(page.locator('#reportArea')).toContainText('7 天平均 70.5→70.1 kg（-0.4）');
+  const text = await page.evaluate(() => window.__dietApp.lastReportText());
+  expect(text).toContain('體重（7 天平均）：70.5 → 70.1 kg（-0.4），最新一次 69.6 kg');
+});

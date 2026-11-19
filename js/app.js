@@ -2980,6 +2980,26 @@ $('fontSizeBtn').addEventListener('click', () => {
 /* ---------------- 啟動 ---------------- */
 document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click', () => { ui.trendRange = Number(b.getAttribute('data-range')); renderTrends(); }));
 
+// 桌面捷徑（manifest 的 shortcuts，Android 長按 App 圖示）與網址參數 ?go=water：直接打開那一頁
+const GO_SCREENS = {
+  quick: 'scr-quick', photo: 'scr-photo', water: 'scr-water', weight: 'scr-weight', sleep: 'scr-sleep',
+  food: 'scr-food', manual: 'scr-manual', est: 'scr-est', exercise: 'scr-exercise', note: 'scr-note',
+  ai: 'scr-ai', weekly: 'scr-weekly'
+};
+function openFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const go = params.get('go');
+  if (!go) return;
+  // 拿掉參數：重新整理不會又打開，返回鍵回到首頁
+  params.delete('go');
+  history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params : '') + location.hash);
+  const id = GO_SCREENS[go];
+  if (!id || (go === 'ai' && !aiKey())) return;
+  ui.date = todayStr();
+  renderAll();
+  openScreen(id);
+}
+
 (async function init() {
   await loadState();
   if (!state.meta.deviceId) { state.meta.deviceId = uid('dev'); persistLocal(); }
@@ -2999,6 +3019,7 @@ document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click',
   } else {
     autoSyncOnOpen();
     if (shouldWelcome()) openScreen('scr-welcome');
+    else openFromUrl();
   }
   if (navigator.storage && navigator.storage.persist) {
     try { await navigator.storage.persist(); } catch (e) { /* ignore */ }

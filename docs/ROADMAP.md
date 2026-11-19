@@ -83,6 +83,7 @@
 - **AI 辨識 (A)(B)**：照片在前端壓到長邊 1024px，`gemini-2.5-flash`＋JSON 回應；一句話可用語音輸入（Web Speech API `zh-TW`）。(B) 結果可勾選存入個人食物庫。
 - **AI 建檔小工具 (C)**：獨立程式，輸出食物 JSON。
 - **條碼掃描**：`BarcodeDetector`（iPhone 不支援）→ 先查個人食物庫 → 再查 Open Food Facts → 存入個人食物庫。台灣商品資料少，查不到時引導手動輸入營養標示（有開 AI 才提供拍標示）。
+- 進度（2026-11-19，v28）：桌面捷徑完成。manifest `shortcuts`：常吃的、拍照記、喝水、量體重（圖示 `icons/sc-*.png`，Noto Sans TC 中文字，OFL 授權）。網址參數 `?go=quick|photo|water|weight|sleep|food|manual|est|exercise|note|ai|weekly` 打開對應頁面後把參數拿掉；新裝置先顯示歡迎畫面；沒開 AI 時 `?go=ai` 不動作。iPhone 不支援 manifest 捷徑；iOS 主畫面 App 和 Safari 的資料是分開的，所以也不建議用 iOS「捷徑」App 開網址。
 - **桌面捷徑**：`manifest` shortcuts（只有 Android 支援），用網址參數（例如 `?go=water`）開對應的 `scr-*` 畫面。
 
 ### 其他（未排序）

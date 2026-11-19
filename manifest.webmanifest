@@ -9,8 +9,77 @@
   "background_color": "#fafaf9",
   "theme_color": "#059669",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "常吃的",
+      "short_name": "常吃的",
+      "description": "點一下就記好",
+      "url": "./?go=quick",
+      "icons": [
+        {
+          "src": "icons/sc-quick.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "拍照記",
+      "short_name": "拍照記",
+      "description": "先拍，熱量之後補",
+      "url": "./?go=photo",
+      "icons": [
+        {
+          "src": "icons/sc-photo.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "喝水",
+      "short_name": "喝水",
+      "description": "記一杯水",
+      "url": "./?go=water",
+      "icons": [
+        {
+          "src": "icons/sc-water.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "量體重",
+      "short_name": "體重",
+      "description": "記體重和尺寸",
+      "url": "./?go=weight",
+      "icons": [
+        {
+          "src": "icons/sc-weight.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

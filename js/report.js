@@ -334,7 +334,7 @@ export function buildReportText(ctx, opts) {
     if (!vals.length) return null;
     return m.label + ' ' + (vals.length > 1 ? vals[0] + '→' + vals[vals.length - 1] : vals[0]) + m.short;
   }).filter(Boolean);
-  if (measureLine.length) lines.push('尺寸：' + measureLine.join('、'));
+  if (measureLine.length) lines.push('身體數據：' + measureLine.join('、'));
   const extra = [];
   if (s.avgWater != null) extra.push('平均喝水 ' + fmt(s.avgWater) + ' ml');
   if (s.exMinTotal) extra.push('運動共 ' + s.exMinTotal + ' 分鐘');

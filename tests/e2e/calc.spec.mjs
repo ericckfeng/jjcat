@@ -172,3 +172,28 @@ test('骨骼肌：減重時肌肉也掉了，小提醒和營養師報告都會�
   await expect(page.locator('#reportArea .hl')).toContainText('骨骼肌 24.1 → 23.5 kg（-0.6），同期體重 -2 kg：減掉的有一部分是肌肉');
   expect(errors).toEqual([]);
 });
+
+test('內臟脂肪、相位角、細胞外水分比：可以記錄，報告和文字摘要會列出', async ({ page }) => {
+  const errors = [];
+  await seed(page, { days: {} });
+  await openApp(page, { errors });
+  await page.click('[data-screen=scr-weight]');
+  await page.click('#moreMeasures summary');
+  await page.fill('#moreMeasures [data-day-num=vfl]', '11');
+  await page.fill('#moreMeasures [data-day-num=pa]', '4.8');
+  await page.fill('#moreMeasures [data-day-num=ecw]', '0.392');
+  await page.click('#scr-weight [data-back]');
+  const d = (await appState(page)).days[ago(0)];
+  expect(d).toMatchObject({ vfl: 11, pa: 4.8, ecw: 0.392 });
+  await page.click('.mobile-nav-tab[data-tab=report]');
+  await page.click('[data-days="7"]');
+  await page.click('#genReportBtn');
+  const head = page.locator('#reportArea thead');
+  await expect(head).toContainText('內臟脂肪等級');
+  await expect(head).toContainText('相位角');
+  await expect(head).toContainText('細胞外水分比');
+  await expect(page.locator('#reportArea tbody')).toContainText('0.392');
+  const text = await page.evaluate(() => window.__dietApp.lastReportText());
+  expect(text).toContain('身體數據：內臟脂肪等級 11 級、相位角 4.8°、細胞外水分比 0.392');
+  expect(errors).toEqual([]);
+});

@@ -2463,12 +2463,12 @@ $('exportCsvBtn').addEventListener('click', () => {
 });
 $('exportDaysCsvBtn').addEventListener('click', () => {
   const dates = Array.from(new Set([...Object.keys(state.logs), ...Object.keys(state.days)])).sort();
-  const rows = [['日期', '總熱量', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '體重(kg)', 'BMI', '腰圍(cm)', '臀圍(cm)', '上臂圍(cm)', '大腿圍(cm)', '胸圍(cm)', '體脂率(%)', '喝水(ml)', '運動', '運動分鐘', '上床', '起床', '夜間睡眠(分)', '補眠(分)', '總睡眠(小時)', '睡眠品質(1-5)', '飢餓感(1-5)', '心情(1-5)', '排便', '備註', '想問營養師', '體脂機基礎代謝(kcal)', '骨骼肌(kg)']];
+  const rows = [['日期', '總熱量', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '體重(kg)', 'BMI', '腰圍(cm)', '臀圍(cm)', '上臂圍(cm)', '大腿圍(cm)', '胸圍(cm)', '體脂率(%)', '喝水(ml)', '運動', '運動分鐘', '上床', '起床', '夜間睡眠(分)', '補眠(分)', '總睡眠(小時)', '睡眠品質(1-5)', '飢餓感(1-5)', '心情(1-5)', '排便', '備註', '想問營養師', '體脂機基礎代謝(kcal)', '骨骼肌(kg)', '內臟脂肪等級', '相位角(°)', '細胞外水分比']];
   dates.forEach(date => {
     const t = dayTotals(date);
     const d = state.days[date] || {};
     rows.push([date, t.kcal, t.macroItems ? t.p : '', t.macroItems ? t.c : '', t.macroItems ? t.f : '', ...EX_KEYS.map(k => (t.exItems ? t.ex[k] : '')),
-      d.weight, calcBmi(d.weight, state.profile.height), d.waist, d.hip, d.arm, d.thigh, d.chest, d.bodyFat, d.water, d.exercise, d.exMin, d.sleepBed, d.sleepWake, d.sleepMin, daySleep(d).nap || '', daySleep(d).total ? r1(daySleep(d).total / 60) : '', d.sleepQ, d.hunger, d.mood, d.bowel != null ? BOWEL_LABELS[d.bowel] : '', d.note, d.question, d.bmr, d.smm]);
+      d.weight, calcBmi(d.weight, state.profile.height), d.waist, d.hip, d.arm, d.thigh, d.chest, d.bodyFat, d.water, d.exercise, d.exMin, d.sleepBed, d.sleepWake, d.sleepMin, daySleep(d).nap || '', daySleep(d).total ? r1(daySleep(d).total / 60) : '', d.sleepQ, d.hunger, d.mood, d.bowel != null ? BOWEL_LABELS[d.bowel] : '', d.note, d.question, d.bmr, d.smm, d.vfl, d.pa, d.ecw]);
   });
   downloadBlob('每日身體與備註_' + todayStr() + '.csv', toCSV(rows), 'text/csv;charset=utf-8');
   showToast('已匯出每日 CSV');

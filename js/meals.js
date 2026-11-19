@@ -47,3 +47,57 @@ export function mealEntries(logs, date, meal) {
     .filter(it => it.meal === meal)
     .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 }
+
+/* ---------------- 這一餐還差什麼（對照營養師給的每餐份數） ---------------- */
+
+const MEAL_EX_KEYS = ['grain', 'prot', 'veg', 'fruit', 'dairy', 'oil'];
+// 多吃要提醒的只有這三類；蔬菜多吃沒關係，水果、乳品這餐沒排也不算「多」
+const OVER_KEYS = ['grain', 'prot', 'oil'];
+const OK_TOLERANCE = 0.3;   // 份數以 0.5 為單位，差不到 0.3 份算剛好
+
+// entries：這一餐的記錄；target：這一餐的份數 { grain, prot, ... }
+// 回傳 null（這餐沒設目標）或
+//   { have, target, short: [{ k, need }], over: [{ k, extra }], unknown, done }
+//   unknown：這餐沒有份數的記錄筆數（算不進來）
+export function mealGap(entries, target) {
+  const t = {};
+  MEAL_EX_KEYS.forEach(k => { const v = Number(target && target[k]) || 0; if (v > 0) t[k] = v; });
+  if (!Object.keys(t).length) return null;
+  const have = {};
+  MEAL_EX_KEYS.forEach(k => { have[k] = 0; });
+  let unknown = 0;
+  (entries || []).forEach(e => {
+    if (!e.ex || !Object.values(e.ex).some(v => Number(v) > 0)) { unknown++; return; }
+    MEAL_EX_KEYS.forEach(k => { have[k] += Number(e.ex[k]) || 0; });
+  });
+  MEAL_EX_KEYS.forEach(k => { have[k] = r1(have[k]); });
+  const short = Object.keys(t).filter(k => t[k] - have[k] >= OK_TOLERANCE).map(k => ({ k, need: r1(t[k] - have[k]) }));
+  const over = OVER_KEYS.filter(k => t[k] != null && have[k] - t[k] >= 0.5).map(k => ({ k, extra: r1(have[k] - t[k]) }));
+  return { have, target: t, short, over, unknown, done: !short.length };
+}
+
+// 把每日份數平均分到早／午／晚三餐（以 0.5 份為單位，加起來等於每日份數；多的先給午餐、再給晚餐）
+export function splitDaily(total) {
+  const units = Math.round((Number(total) || 0) * 2);
+  if (units <= 0) return [0, 0, 0];
+  const base = Math.floor(units / 3);
+  const rem = units - base * 3;
+  return [base, base + (rem >= 1 ? 1 : 0), base + (rem >= 2 ? 1 : 0)].map(u => u / 2);
+}
+
+// 國健署食物代換表的生活份量（給長輩看得懂的說法）
+export const EX_LIFE = {
+  grain: '1 份約 1/4 碗飯', prot: '1 份約一顆蛋', veg: '1 份約半碗煮熟的青菜',
+  fruit: '1 份約一個拳頭大', dairy: '1 份約一杯 240 ml 鮮奶', oil: '1 份約 1 茶匙油'
+};
+const EX_NAME = { grain: '全穀雜糧', prot: '豆魚蛋肉', veg: '蔬菜', fruit: '水果', dairy: '乳品', oil: '油脂' };
+// mealGap 的結果 → { short, over, unknown } 三句話（沒有就是空字串）
+export function gapMessage(gap, mealLabel) {
+  if (!gap) return null;
+  const short = gap.short.length
+    ? mealLabel + '還可以加：' + gap.short.map(s => `${EX_NAME[s.k]} ${s.need} 份（${EX_LIFE[s.k]}）`).join('、')
+    : mealLabel + '的份數都夠了 👍';
+  const over = gap.over.length ? gap.over.map(o => `${EX_NAME[o.k]}多了 ${o.extra} 份`).join('、') + '，下一餐清淡一點就好' : '';
+  const unknown = gap.unknown ? `有 ${gap.unknown} 筆沒有份數，沒算進來` : '';
+  return { short, over, unknown };
+}

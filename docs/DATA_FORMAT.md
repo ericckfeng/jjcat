@@ -57,6 +57,7 @@
 | `targets.water` | 每天喝水目標（ml）。沒有＝沒設目標（喝水頁不顯示目標，小芽用 1500 ml 判斷）。有運動的那天每 30 分鐘 +250 ml（顯示時計算，不存） |
 | `targets.calc` | 目前的目標是「依體重試算」來的：`{ at, weight, activity, goal, protein, bmrSource, bmr }`（`bmrSource`：`inbody`＝體脂機顯示的／`ffm`＝用同一天的體重＋體脂率算去脂體重再算（v23）／`formula`，v19 起）（`weight`＝試算時用的體重）。7 天平均體重和它差 2 公斤以上會提醒重算。**沒有＝手動設定（營養師的數字）**；在「每日目標」手動改熱量、營養素或喝水就會刪掉 |
 | `targets.bodyFat` | （v23 起）目標體脂率（%）。用它算出目標體重 `targets.weight`（假設去脂體重不變）。手動改目標體重就刪掉 |
+| `targets.mealEx` | （v29 起）營養師給的每餐份數：`{ breakfast: { grain, prot, veg, fruit, dairy, oil }, lunch, dinner, snack }`，只存有填的餐別和類別。用來顯示「這一餐還差什麼」。沒有＝沒設（不顯示）。舊版 App 存目標時會把它弄掉 |
 | `targets.bank` | （v22 起）`true`＝開啟熱量銀行（一週總量控管）。沒有＝關閉（預設）。舊版 App 存目標時會把它弄掉，結果是關閉 |
 | `profile.birthYear` | 出生年（西元），用來算年齡 |
 | `profile.activity` | 活動量 `low`／`light`／`active`（係數 1.2／1.375／1.55） |
@@ -149,3 +150,4 @@
 | v3（App v25） | 2026-11-19 | 每日欄位新增 `vfa`（內臟脂肪面積）。每日 CSV 最後加一欄。 |
 | v3（App v26） | 2026-11-19 | 每日欄位新增 `asm`（四肢肌肉量，算 SMI）。每日 CSV 最後加兩欄（四肢肌肉量、SMI）。 |
 | v3（App v27） | 2026-11-19 | AI 辨識：飲食記錄新增選填欄位 `ai`；`meta.ai`（只存本機）。 |
+| v3（App v29） | 2026-11-19 | `targets.mealEx`（每餐份數分配）。 |

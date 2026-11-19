@@ -1,7 +1,7 @@
 // 一整餐的計算：購物車合計、複製某一餐（js/meals.js）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sumNutr, copyEntries, mealEntries } from '../../js/meals.js';
+import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage } from '../../js/meals.js';
 
 test('合計熱量、營養素與六大類份數', () => {
   const t = sumNutr([
@@ -52,4 +52,49 @@ test('取出某天某一餐，依時間排序', () => {
   assert.deepEqual(mealEntries(logs, '2026-11-18', 'lunch').map(e => e.id), ['3', '1']);
   assert.deepEqual(mealEntries(logs, '2026-11-17', 'lunch'), []);
   assert.deepEqual(mealEntries(undefined, '2026-11-17', 'lunch'), []);
+});
+
+/* ---- 這一餐還差什麼 ---- */
+
+test('這一餐還差什麼：缺的、多的、沒份數的', () => {
+  const g = mealGap([
+    { ex: { grain: 3, prot: 2, oil: 3 } },          // 大腸包小腸
+    { ex: { grain: 0.5 } },
+    { name: '飲料', kcal: 120 }                       // 沒份數
+  ], { grain: 3, prot: 2, veg: 1.5, oil: 2, fruit: 1 });
+  assert.deepEqual(g.have, { grain: 3.5, prot: 2, veg: 0, fruit: 0, dairy: 0, oil: 3 });
+  assert.deepEqual(g.short, [{ k: 'veg', need: 1.5 }, { k: 'fruit', need: 1 }]);
+  assert.deepEqual(g.over, [{ k: 'grain', extra: 0.5 }, { k: 'oil', extra: 1 }]);
+  assert.equal(g.unknown, 1);
+  assert.equal(g.done, false);
+});
+
+test('差不到 0.3 份算剛好；蔬菜、水果、乳品多了不提；沒設目標回傳 null', () => {
+  const g = mealGap([{ ex: { grain: 2.8, veg: 3, fruit: 2, dairy: 1 } }], { grain: 3, veg: 1 });
+  assert.deepEqual(g.short, []);
+  assert.deepEqual(g.over, []);
+  assert.equal(g.done, true);
+  assert.equal(mealGap([{ ex: { grain: 1 } }], {}), null);
+  assert.equal(mealGap([{ ex: { grain: 1 } }], null), null);
+  assert.equal(mealGap([], { grain: 3 }).short[0].need, 3);
+});
+
+test('每日份數平均分到三餐（0.5 份為單位，加起來不變）', () => {
+  assert.deepEqual(splitDaily(9), [3, 3, 3]);
+  assert.deepEqual(splitDaily(4), [1, 1.5, 1.5]);
+  assert.deepEqual(splitDaily(5), [1.5, 2, 1.5]);
+  assert.deepEqual(splitDaily(2), [0.5, 1, 0.5]);
+  assert.deepEqual(splitDaily(0), [0, 0, 0]);
+  [1, 2.5, 7, 12].forEach(t => assert.equal(splitDaily(t).reduce((a, b) => a + b, 0), t));
+});
+
+test('提示文字：缺的附生活份量，多的語氣溫和', () => {
+  const g = mealGap([{ ex: { grain: 3, prot: 1, oil: 3 } }, { kcal: 50 }], { grain: 3, prot: 2, veg: 1.5, oil: 2 });
+  const m = gapMessage(g, '午餐');
+  assert.equal(m.short, '午餐還可以加：豆魚蛋肉 1 份（1 份約一顆蛋）、蔬菜 1.5 份（1 份約半碗煮熟的青菜）');
+  assert.equal(m.over, '油脂多了 1 份，下一餐清淡一點就好');
+  assert.equal(m.unknown, '有 1 筆沒有份數，沒算進來');
+  const done = gapMessage(mealGap([{ ex: { grain: 3 } }], { grain: 3 }), '早餐');
+  assert.equal(done.short, '早餐的份數都夠了 👍');
+  assert.equal(gapMessage(null, '午餐'), null);
 });

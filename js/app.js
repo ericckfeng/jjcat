@@ -10,7 +10,7 @@ import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VE
 import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, muscleChange, sumLimbs, calcSmi, smiLow, latestSmi, SMI_CUTOFF, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
 import { mascotSVG, buildMascotMessages } from './mascot.js';
 import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS } from './foods.js';
-import { sumNutr, copyEntries, mealEntries } from './meals.js';
+import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage } from './meals.js';
 import { buildInsights } from './insights.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros } from './bank.js';
@@ -317,7 +317,7 @@ function compressImage(file, maxDim = 900) {
 /* ---------------- Toast / Confirm / Modal ---------------- */
 let toastTimer = null;
 let toastActionFn = null;
-function showToast(msg, actionLabel, actionFn) {
+function showToast(msg, actionLabel, actionFn, ms) {
   $('toastMsg').textContent = msg;
   const btn = $('toastAction');
   if (actionLabel && actionFn) {
@@ -327,7 +327,7 @@ function showToast(msg, actionLabel, actionFn) {
   }
   $('toast').classList.remove('hidden');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => $('toast').classList.add('hidden'), actionFn ? 5000 : 2400);
+  toastTimer = setTimeout(() => $('toast').classList.add('hidden'), ms || (actionFn ? 5000 : 2400));
 }
 $('toastAction').addEventListener('click', () => {
   if (toastActionFn) toastActionFn();
@@ -454,7 +454,8 @@ async function addEntry({ name, nutr, mult = 1, meal, photo = null, pending = fa
   }
   persist();
   renderAll();
-  showToast('已加入「' + it.name + '」(' + it.kcal + ' kcal)');
+  const hint = gapHint(it.meal);
+  showToast('已加入「' + it.name + '」(' + it.kcal + ' kcal)' + hint, null, null, hint ? 6000 : 0);
 }
 function addFromQuick(q) {
   addEntry({ name: q.name, nutr: q, mult: 1, meal: ui.meal });
@@ -837,13 +838,14 @@ function saveFoodCart() {
   renderAll();
   renderFoodCart();
   const total = sumNutr(added).kcal;
-  showToast('已記到' + MEAL_META[meal].label + '：' + added.length + ' 樣、' + total + ' kcal', '復原', () => {
+  const hint = gapHint(meal);
+  showToast('已記到' + MEAL_META[meal].label + '：' + added.length + ' 樣、' + total + ' kcal' + hint, '復原', () => {
     const ids = new Set(added.map(a => a.id));
     state.logs[date] = (state.logs[date] || []).filter(it => !ids.has(it.id));
     added.forEach(a => tombstone('e:' + a.id));
     persist();
     renderAll();
-  });
+  }, hint ? 8000 : 0);
 }
 $('foodCartSaveBtn').addEventListener('click', () => {
   saveFoodCart();
@@ -877,6 +879,7 @@ function openScreen(id) {
   if (id === 'scr-weight') { renderWeightHint(); document.querySelectorAll('[data-limb]').forEach(x => { x.value = ''; }); }
   if (id === 'scr-water') renderWaterBig();
   if (id === 'scr-calc') { initCalc(); renderCalc(); }
+  if (id === 'scr-mealex') renderMealEx();
   if (id === 'scr-weekly') renderWeekly();
   if (id === 'scr-ai') resetAi();
   if (id === 'scr-manual') setBox('aiLabelNote', null, '');
@@ -1144,7 +1147,7 @@ function renderLogs() {
       <div class="px-4 py-2.5 bg-stone-50/80 border-b border-stone-100 flex items-center justify-between">
         <span class="px-2.5 py-0.5 rounded-md text-sm font-bold ${meta.badge}">${meta.label}</span>
         <span class="text-sm font-bold text-stone-700 tabular-nums">${sub.toLocaleString()} kcal</span>
-      </div><ul class="divide-y divide-stone-100">`;
+      </div>${mealGapHTML(mealKey)}<ul class="divide-y divide-stone-100">`;
     items.forEach(item => {
       const mult = item.multiplier && item.multiplier !== 1 ? ' × ' + item.multiplier + '份' : '';
       const pending = item.pending ? '<span class="ml-1.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[0.625rem] font-bold">暫估待修</span>' : '';
@@ -2272,6 +2275,93 @@ $('libraryGrid').addEventListener('click', (e) => {
   const add = e.target.closest('.quick-add-btn');
   if (add) { const it = state.quickItems.find(q => q.id === add.getAttribute('data-qid')); if (it) addFromQuick(it); }
 });
+
+/* ---------------- 每餐份數分配／這一餐還差什麼 ---------------- */
+const MEALEX_MEALS = ['breakfast', 'lunch', 'dinner', 'snack'];
+function mealTarget(meal) { return (state.targets.mealEx || {})[meal] || null; }
+function mealGapFor(date, meal) {
+  return mealGap((state.logs[date] || []).filter(i => i.meal === meal), mealTarget(meal));
+}
+// 記完一餐時附在提示後面的一句（有設目標、還有缺才有）
+function gapHint(meal) {
+  const m = gapMessage(mealGapFor(ui.date, meal), MEAL_META[meal].label);
+  return m && !mealGapFor(ui.date, meal).done ? '。' + m.short : '';
+}
+// 首頁每一餐標題下面那一行
+function mealGapHTML(meal) {
+  const g = mealGapFor(ui.date, meal);
+  if (!g) return '';
+  const overKeys = new Set(g.over.map(o => o.k));
+  const chips = Object.keys(g.target).map(k => {
+    const over = overKeys.has(k);   // 全穀、豆魚蛋肉、油脂吃多了：不打勾，用黃色
+    const ok = !over && g.have[k] >= g.target[k] - 0.25;
+    return `<span class="inline-block mr-2 whitespace-nowrap ${over ? 'text-amber-700' : ok ? 'text-emerald-700' : 'text-stone-700'}">${EX_META[k].short} ${fmt(g.have[k], 1)}/${fmt(g.target[k], 1)}${ok ? ' ✓' : ''}</span>`;
+  }).join('');
+  const m = gapMessage(g, MEAL_META[meal].label);
+  return `<div data-meal-gap="${meal}" class="px-4 py-2.5 bg-sky-50 border-b border-sky-100 text-base leading-relaxed space-y-1">
+    <div class="font-semibold tabular-nums">${chips}</div>
+    <div class="text-sky-900">${esc(m.short)}</div>
+    ${m.over ? `<div class="text-amber-800">${esc(m.over)}</div>` : ''}
+    ${m.unknown ? `<div class="text-sm text-stone-500">${esc(m.unknown)}</div>` : ''}
+  </div>`;
+}
+
+// 設定頁
+function renderMealEx() {
+  const me = state.targets.mealEx || {};
+  $('mealExCards').innerHTML = MEALEX_MEALS.map(meal => `<div class="rounded-2xl bg-white border border-stone-200 p-3 space-y-2">
+      <div class="text-lg font-bold text-stone-800">${MEAL_META[meal].label}</div>
+      <div class="grid grid-cols-3 gap-2 items-end">${EX_KEYS.map(k => `<label class="block"><span class="block text-sm text-stone-600">${EX_META[k].emoji} ${EX_META[k].short}</span>
+        <input data-mealex="${meal}:${k}" type="number" inputmode="decimal" step="any" min="0" max="20" class="field text-center tabular-nums" placeholder="份" value="${me[meal] && me[meal][k] ? me[meal][k] : ''}" /></label>`).join('')}</div>
+    </div>`).join('');
+  $('mealExSplitBtn').classList.toggle('hidden', !EX_KEYS.some(k => state.targets.ex && state.targets.ex[k]));
+  renderMealExSum();
+}
+function readMealEx() {
+  const out = {};
+  document.querySelectorAll('[data-mealex]').forEach(el => {
+    const [meal, k] = el.getAttribute('data-mealex').split(':');
+    const v = num(el.value);
+    if (v > 0) (out[meal] || (out[meal] = {}))[k] = r1(v);
+  });
+  return out;
+}
+function renderMealExSum() {
+  const me = readMealEx();
+  const daily = state.targets.ex || {};
+  const rows = EX_KEYS.map(k => {
+    const sum = r1(MEALEX_MEALS.reduce((s, meal) => s + ((me[meal] && me[meal][k]) || 0), 0));
+    const d = daily[k] || 0;
+    if (!sum && !d) return '';
+    const diff = d && Math.abs(sum - d) >= 0.3;
+    return `<div class="${diff ? 'text-amber-800' : ''}">${EX_META[k].emoji} ${EX_META[k].short}：各餐加起來 ${fmt(sum, 1)} 份${d ? '，每日目標 ' + fmt(d, 1) + ' 份' + (diff ? '（不一樣）' : ' ✓') : ''}</div>`;
+  }).join('');
+  $('mealExSum').innerHTML = rows || '<div class="text-stone-500">還沒有填</div>';
+}
+$('mealExCards').addEventListener('input', renderMealExSum);
+$('mealExSplitBtn').addEventListener('click', () => {
+  const daily = state.targets.ex || {};
+  EX_KEYS.forEach(k => {
+    const parts = splitDaily(daily[k] || 0);
+    ['breakfast', 'lunch', 'dinner'].forEach((meal, i) => {
+      document.querySelector(`[data-mealex="${meal}:${k}"]`).value = parts[i] || '';
+    });
+  });
+  renderMealExSum();
+  showToast('已平均分到三餐，可以再照營養師的單子調整');
+});
+$('mealExSaveBtn').addEventListener('click', () => {
+  const me = readMealEx();
+  const next = { ...state.targets };
+  if (Object.keys(me).length) next.mealEx = me; else delete next.mealEx;
+  state.targets = next;
+  state.targetsAt = now();
+  persist();
+  renderAll();
+  closeScreen();
+  showToast(Object.keys(me).length ? '已儲存每餐份數，記完一餐就會告訴你還差什麼' : '已清除每餐份數');
+});
+$('openMealExBtn').addEventListener('click', () => { closeModal('targetModal'); openScreen('scr-mealex'); });
 
 /* ---------------- 依體重試算目標 ---------------- */
 const calcDraft = { sex: null, activity: 'low', goal: 'slow', protein: 1.2, inbody: null, comp: null, bmrSrc: 'formula' };

@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/app.css?v=28" />
+  <link rel="stylesheet" href="css/app.css?v=29" />
 </head>
 <body class="bg-stone-50 text-stone-800 min-h-screen pb-24 sm:pb-10">
   <!-- Header -->
@@ -618,6 +618,18 @@
     </div>
   </div>
 
+  <!-- 每餐份數分配（營養師給的），記完一餐就知道還差什麼 -->
+  <div id="scr-mealex" class="screen hidden" role="dialog" aria-label="每餐份數分配">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>🍽️ 每餐份數分配</h2></div>
+    <div class="scr-body">
+      <p class="text-lg text-stone-800 leading-relaxed">照營養師給的單子，填每一餐各類吃幾份。填好後，記完一餐就會告訴你<b>這一餐還差什麼</b>。沒排的留空就好。</p>
+      <button type="button" id="mealExSplitBtn" class="btn-secondary w-full">照每日份數平均分到三餐</button>
+      <div id="mealExCards" class="space-y-3"></div>
+      <div id="mealExSum" class="rounded-2xl bg-white border border-stone-200 p-4 text-base text-stone-700 leading-relaxed"></div>
+    </div>
+    <div class="scr-foot"><button type="button" id="mealExSaveBtn" class="btn-primary btn-xl w-full">儲存</button></div>
+  </div>
+
   <!-- 依體重試算目標（從「每日目標」打開） -->
   <div id="scr-calc" class="screen hidden" role="dialog" aria-label="依體重試算目標">
     <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>⚖️ 依體重試算</h2></div>
@@ -876,6 +888,7 @@
         <button type="button" data-close="targetModal" class="modal-x">✕</button>
       </div>
       <button type="button" id="openCalcBtn" class="btn-secondary w-full">⚖️ 沒有營養師的數字？依體重試算</button>
+      <button type="button" id="openMealExBtn" class="btn-secondary w-full">🍽️ 每餐份數分配（營養師給的）</button>
       <div class="grid grid-cols-3 gap-2">
         <button type="button" data-preset="1500" class="preset-btn">減脂 1500</button>
         <button type="button" data-preset="1800" class="preset-btn">維持 1800</button>
@@ -995,6 +1008,6 @@
     <button id="toastAction" type="button" class="hidden font-bold text-emerald-300 hover:text-emerald-200 shrink-0"></button>
   </div>
 
-  <script type="module" src="js/app.js?v=28"></script>
+  <script type="module" src="js/app.js?v=29"></script>
 </body>
 </html>

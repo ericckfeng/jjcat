@@ -10,7 +10,9 @@ export const MEASURES = [
   { key: 'arm', label: '上臂圍', unit: '公分', short: 'cm', step: 0.5, min: 10, max: 80 },
   { key: 'thigh', label: '大腿圍', unit: '公分', short: 'cm', step: 0.5, min: 20, max: 120 },
   { key: 'chest', label: '胸圍', unit: '公分', short: 'cm', step: 0.5, min: 40, max: 200 },
-  { key: 'bodyFat', label: '體脂率', unit: '%', short: '%', step: 0.1, min: 3, max: 70 }
+  { key: 'bodyFat', label: '體脂率', unit: '%', short: '%', step: 0.1, min: 3, max: 70 },
+  // InBody 等體組成機量到的基礎代謝（依去脂體重計算，比公式估算更貼近個人）
+  { key: 'bmr', label: 'InBody 基礎代謝', unit: 'kcal', short: ' kcal', step: 1, min: 600, max: 4000 }
 ];
 export const MEASURE_META = Object.fromEntries(MEASURES.map(m => [m.key, m]));
 

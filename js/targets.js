@@ -3,6 +3,7 @@
 // 這是一般公式的參考值；有營養師給的數字，以營養師為準（App 預設不會自動改掉目標）。
 //
 //   基礎代謝（Mifflin-St Jeor）：男 10×體重 + 6.25×身高 − 5×年齡 + 5；女 … − 161
+//     有 InBody 量到的基礎代謝（依去脂體重算，比公式貼近個人）時，可以改用它
 //   每日消耗＝基礎代謝 × 活動係數
 //   熱量目標＝每日消耗 − 赤字，但不低於 max(基礎代謝, 1200)
 //   蛋白質 1.2／1.6／2.0 g/kg；脂肪 0.8 g/kg；碳水用剩下的熱量回推
@@ -46,12 +47,16 @@ export function calcBmr({ sex, weight, height, age }) {
 }
 
 // 回傳 null（資料不夠）或
-// { bmr, tdee, kcal, p, c, f, water, floored, adjusted }
+// { bmr, bmrSource, tdee, kcal, p, c, f, water, floored, adjusted }
+//   measuredBmr：InBody 量到的基礎代謝（選填）；有填就用它，不用性別、身高、年齡
+//   bmrSource：'inbody' | 'formula'
 //   floored：熱量被安全底線拉高；adjusted：為了留碳水，脂肪或蛋白質被調低
-export function calcTargets({ sex, weight, height, age, activity = 'low', goal = 'slow', protein = 1.2 }) {
-  const bmr = calcBmr({ sex, weight, height, age });
-  if (bmr == null) return null;
+export function calcTargets({ sex, weight, height, age, activity = 'low', goal = 'slow', protein = 1.2, measuredBmr = null }) {
   const w = Number(weight);
+  if (!(w > 0)) return null;
+  const measured = Number(measuredBmr) > 0 ? Math.round(Number(measuredBmr)) : null;
+  const bmr = measured || calcBmr({ sex, weight, height, age });
+  if (bmr == null) return null;
   const act = ACTIVITY.find(a => a.key === activity) || ACTIVITY[0];
   const g = GOALS.find(x => x.key === goal) || GOALS[0];
   const tdee = Math.round(bmr * act.factor);
@@ -71,7 +76,7 @@ export function calcTargets({ sex, weight, height, age, activity = 'low', goal =
     if (carbs() < MIN_CARB_G) p = Math.max(Math.round(w * 1.0), Math.floor((kcal - f * 9 - MIN_CARB_G * 4) / 4));
   }
   const c = Math.max(0, carbs());
-  return { bmr, tdee, kcal, p, c, f, water: Math.min(round(w * WATER_PER_KG, 50), MAX_WATER), floored, adjusted };
+  return { bmr, bmrSource: measured ? 'inbody' : 'formula', tdee, kcal, p, c, f, water: Math.min(round(w * WATER_PER_KG, 50), MAX_WATER), floored, adjusted };
 }
 
 // 這天的喝水目標：基本目標＋運動加碼（每 30 分鐘 +250 ml）
@@ -87,4 +92,14 @@ export function recalcHint(calc, avgWeight) {
   if (!calc || !(Number(calc.weight) > 0) || !(Number(avgWeight) > 0)) return null;
   const diff = Math.round((avgWeight - calc.weight) * 10) / 10;
   return Math.abs(diff) >= RECALC_KG ? diff : null;
+}
+
+// 最近一次 InBody 基礎代謝（90 天內才用；太久以前的肌肉量可能已經變了）
+//   回傳 { value, date } 或 null
+export function latestInbodyBmr(days, today, maxDays = 90) {
+  const [y, m, d] = today.split('-').map(Number);
+  const from = new Date(y, m - 1, d - maxDays);
+  const fromStr = from.getFullYear() + '-' + String(from.getMonth() + 1).padStart(2, '0') + '-' + String(from.getDate()).padStart(2, '0');
+  const date = Object.keys(days || {}).filter(k => k <= today && k >= fromStr && Number(days[k].bmr) > 0).sort().pop();
+  return date ? { value: Math.round(Number(days[date].bmr)), date } : null;
 }

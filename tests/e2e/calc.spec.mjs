@@ -105,3 +105,28 @@ test('體重和試算時差 2 公斤：小芽提醒重算；手動改過目標�
   expect(t).toMatchObject({ kcal: 1700, water: 2800 });
   await expect(page.locator('#tipsCard')).toBeHidden();
 });
+
+test('有 InBody 基礎代謝：預設用它，可以切回公式；只填體重也能算', async ({ page }) => {
+  await seed(page, { days: { [ago(9)]: { weight: 80, bmr: 1720 }, [ago(0)]: { weight: 80 } } });
+  await openApp(page);
+  // 體重・尺寸頁可以填 InBody 基礎代謝
+  await page.click('[data-screen=scr-weight]');
+  await page.click('#moreMeasures summary');
+  await expect(page.locator('#moreMeasures [data-day-num=bmr]')).toBeVisible();
+  await page.click('#scr-weight [data-back]');
+  await openCalc(page);
+  await expect(page.locator('#calcBmrWrap')).toBeVisible();
+  await expect(page.locator('[data-calc-bmr=inbody]')).toHaveClass(/is-active/);
+  await expect(page.locator('[data-calc-bmr=inbody]')).toContainText('1,720 kcal');
+  await page.click('[data-calc-act=light]');
+  await page.click('[data-calc-goal=lose]');
+  await expect(page.locator('#calcResult')).toContainText('基礎代謝 1,720（InBody）');
+  await expect(page.locator('#calcResult')).toContainText('1,870');
+  // 切回公式：要填性別等資料
+  await page.click('[data-calc-bmr=formula]');
+  await expect(page.locator('#calcResult')).toContainText('請填性別');
+  await page.click('[data-calc-bmr=inbody]');
+  await page.click('#calcApplyBtn');
+  const st = await appState(page);
+  expect(st.targets).toMatchObject({ kcal: 1870, calc: { bmrSource: 'inbody', bmr: 1720 } });
+});

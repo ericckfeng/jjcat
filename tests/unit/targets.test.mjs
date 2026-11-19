@@ -1,7 +1,7 @@
 // 依體重試算目標（js/targets.js）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calcBmr, calcTargets, ageFrom, waterGoal, recalcHint } from '../../js/targets.js';
+import { calcBmr, calcTargets, ageFrom, waterGoal, recalcHint, latestInbodyBmr } from '../../js/targets.js';
 
 test('基礎代謝 Mifflin-St Jeor', () => {
   assert.equal(calcBmr({ sex: 'm', weight: 80, height: 172, age: 45 }), 1655);   // 800+1075-225+5
@@ -22,7 +22,7 @@ test('年齡由出生年推算；不合理的出生年不算', () => {
 
 test('一般情況：消耗 − 赤字，蛋白質 1.6、脂肪 0.8 g/kg，碳水回推', () => {
   const t = calcTargets({ sex: 'm', weight: 80, height: 172, age: 45, activity: 'light', goal: 'lose', protein: 1.6 });
-  assert.deepEqual(t, { bmr: 1655, tdee: 2276, kcal: 1780, p: 128, c: 173, f: 64, water: 2800, floored: false, adjusted: false });
+  assert.deepEqual(t, { bmr: 1655, bmrSource: 'formula', tdee: 2276, kcal: 1780, p: 128, c: 173, f: 64, water: 2800, floored: false, adjusted: false });
   assert.ok(Math.abs(t.p * 4 + t.c * 4 + t.f * 9 - t.kcal) <= 4, '三大營養素加起來等於熱量');
 });
 
@@ -72,4 +72,23 @@ test('7 天平均體重和試算時差 2 公斤以上才提醒重算', () => {
   assert.equal(recalcHint({ weight: 70 }, 72.4), 2.4);
   assert.equal(recalcHint(null, 60), null);
   assert.equal(recalcHint({ weight: 70 }, null), null);
+});
+
+test('有 InBody 基礎代謝就用它，不需要性別、身高、年齡', () => {
+  const t = calcTargets({ weight: 80, activity: 'light', goal: 'lose', protein: 1.6, measuredBmr: 1720 });
+  assert.equal(t.bmr, 1720);
+  assert.equal(t.bmrSource, 'inbody');
+  assert.equal(t.tdee, 2365);          // 1720 × 1.375
+  assert.equal(t.kcal, 1870);          // 2365 − 500 → 1870
+  assert.equal(calcTargets({ measuredBmr: 1720 }), null, '還是要體重');
+  const f = calcTargets({ sex: 'm', weight: 80, height: 172, age: 45, measuredBmr: '' });
+  assert.equal(f.bmrSource, 'formula', '空白就用公式');
+});
+
+test('最近一次 InBody 基礎代謝：90 天內才算', () => {
+  const days = { '2026-07-01': { bmr: 1200 }, '2026-09-01': { bmr: 1250 }, '2026-11-10': { bmr: 1262.4, weight: 68 }, '2026-11-20': { bmr: 1300 } };
+  assert.deepEqual(latestInbodyBmr(days, '2026-11-19'), { value: 1262, date: '2026-11-10' });
+  assert.deepEqual(latestInbodyBmr({ '2026-09-01': { bmr: 1250 } }, '2026-11-19'), { value: 1250, date: '2026-09-01' });
+  assert.equal(latestInbodyBmr({ '2026-08-20': { bmr: 1250 } }, '2026-11-19'), null);
+  assert.equal(latestInbodyBmr({}, '2026-11-19'), null);
 });

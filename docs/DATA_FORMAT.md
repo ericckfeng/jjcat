@@ -55,7 +55,7 @@
 | 欄位 | 說明 |
 |---|---|
 | `targets.water` | 每天喝水目標（ml）。沒有＝沒設目標（喝水頁不顯示目標，小芽用 1500 ml 判斷）。有運動的那天每 30 分鐘 +250 ml（顯示時計算，不存） |
-| `targets.calc` | 目前的目標是「依體重試算」來的：`{ at, weight, activity, goal, protein }`（`weight`＝試算時用的體重）。7 天平均體重和它差 2 公斤以上會提醒重算。**沒有＝手動設定（營養師的數字）**；在「每日目標」手動改熱量、營養素或喝水就會刪掉 |
+| `targets.calc` | 目前的目標是「依體重試算」來的：`{ at, weight, activity, goal, protein, bmrSource, bmr }`（`bmrSource`：`inbody`／`formula`，v19 起）（`weight`＝試算時用的體重）。7 天平均體重和它差 2 公斤以上會提醒重算。**沒有＝手動設定（營養師的數字）**；在「每日目標」手動改熱量、營養素或喝水就會刪掉 |
 | `profile.birthYear` | 出生年（西元），用來算年齡 |
 | `profile.activity` | 活動量 `low`／`light`／`active`（係數 1.2／1.375／1.55） |
 
@@ -93,6 +93,7 @@
 | `weight` | 公斤 |
 | `waist` `hip` `arm` `thigh` `chest` | 公分（arm＝上臂圍、thigh＝大腿圍） |
 | `bodyFat` | % |
+| `bmr` | InBody 等體組成機量到的基礎代謝（kcal，v19 起）。依體重試算時，90 天內有值就可以改用它 |
 | `water` | ml |
 | `exercise` | 文字；`exMin` 分鐘 |
 | `hunger` `mood` | 1–5 |
@@ -132,3 +133,4 @@
 | v3（App v11） | 2026-11-19 | 飲食記錄新增選填欄位 `grams`、`foodId`、`weighed`（查食物・秤克數）。匯入時保留記錄與常吃清單的未知欄位（之前匯入會丟掉）。 |
 | v3（App v12） | 2026-11-19 | 飲食記錄新增選填欄位 `groupId`（查食物的購物車）。 |
 | v3（App v18） | 2026-11-19 | 依體重試算目標：`targets.water`、`targets.calc`、`profile.birthYear`、`profile.activity`。 |
+| v3（App v19） | 2026-11-19 | 每日欄位新增 `bmr`（InBody 基礎代謝）。每日 CSV 最後加一欄。 |

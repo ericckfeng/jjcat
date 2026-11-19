@@ -69,6 +69,7 @@
 | `grams` | （選填，v11 起）從「查食物」記錄時輸入的公克數 |
 | `foodId` | （選填，v11 起）食物資料庫的 id（`tfda_foods.json` 的 TFDA 整合編號） |
 | `weighed` | （選填，v11 起）`'cooked'`＝輸入的是熟重，已換算回生重計算 |
+| `groupId` | （選填，v12 起）同一次一起記的一餐（`grp_xxxx`）：查食物的購物車一次記 2 樣以上時加上。複製時換成新的 groupId，同組仍同組 |
 
 匯入備份檔時（`normalizeEntry`／`normalizeQuick`），記錄和常吃清單裡看不懂的欄位會保留；只去掉 v1 的 `photo`（照片改存 IndexedDB）和 `baseKcal`。
 
@@ -118,3 +119,4 @@
 | v3 | 2026-11-12 | 新增睡眠欄位 `sleepBed/sleepWake/sleepMin/sleepQ/naps`。睡眠歸屬日在當天改為「起床那天」（只有極少量測試資料用過「前一天」的規則，未做搬移）。 |
 | v3（App v9） | 2026-11-18 | 資料格式不變（`SYNC_VERSION` 仍是 3）。同步、匯入、匯出、本機儲存都會保留看不懂的最上層資料，為之後的自訂食物庫、套餐等新功能做準備。樣本：`backup-v3-extra-keys.json`。 |
 | v3（App v11） | 2026-11-19 | 飲食記錄新增選填欄位 `grams`、`foodId`、`weighed`（查食物・秤克數）。匯入時保留記錄與常吃清單的未知欄位（之前匯入會丟掉）。 |
+| v3（App v12） | 2026-11-19 | 飲食記錄新增選填欄位 `groupId`（查食物的購物車）。 |

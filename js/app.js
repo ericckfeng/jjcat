@@ -9,6 +9,7 @@ import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VE
 import { MEASURES, MEASURE_META, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
 import { mascotSVG, buildMascotMessages } from './mascot.js';
 import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS } from './foods.js';
+import { sumNutr, copyEntries, mealEntries } from './meals.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
 const LEGACY_KEY = 'daily_calorie_tracker_v1';
@@ -332,11 +333,12 @@ $('toastAction').addEventListener('click', () => {
 
 let pendingConfirm = null;
 let pendingCancel = null;
-function openConfirm(title, message, onOk, okLabel = '確定', onCancel = null) {
+function openConfirm(title, message, onOk, okLabel = '確定', onCancel = null, cancelLabel = '取消') {
   if (typeof pendingCancel === 'function') pendingCancel();
   $('confirmTitle').textContent = title;
   $('confirmMessage').textContent = message;
   $('confirmOkBtn').textContent = okLabel;
+  $('confirmCancelBtn').textContent = cancelLabel;
   pendingConfirm = onOk;
   pendingCancel = onCancel;
   openModal('confirmModal');
@@ -656,11 +658,13 @@ document.addEventListener('click', (e) => {
   renderFoodResults();
 });
 
-const gramsDraft = { food: null, weighed: 'asis' };
-function openGrams(food) {
+const gramsDraft = { food: null, weighed: 'asis', cartKey: null };
+// cartKey：修改購物車裡的某一樣時才有
+function openGrams(food, cartItem = null) {
   gramsDraft.food = food;
-  gramsDraft.weighed = 'asis';
-  $('gramsInput').value = '100';
+  gramsDraft.weighed = cartItem ? cartItem.weighed : 'asis';
+  gramsDraft.cartKey = cartItem ? cartItem.key : null;
+  $('gramsInput').value = cartItem ? String(cartItem.grams) : '100';
   openScreen('scr-grams');
 }
 function gramsValue() {
@@ -686,7 +690,7 @@ function renderGrams() {
     '<button type="button" data-grams-add="10" class="chip-btn chip-lg">+10g</button>',
     '<button type="button" data-grams-add="-10" class="chip-btn chip-lg">−10g</button>'
   ].join('');
-  $('gramsSaveBtn').textContent = '記到' + MEAL_META[ui.meal].label;
+  $('gramsSaveBtn').textContent = gramsDraft.cartKey ? '改好了' : '加入這一餐';
   const g = gramsValue();
   const box = $('gramsResult');
   if (!g) { box.innerHTML = '<div class="text-base text-stone-500">請輸入公克數</div>'; $('gramsSaveBtn').disabled = true; return; }
@@ -712,23 +716,104 @@ $('scr-grams').addEventListener('click', (e) => {
   else return;
   renderGrams();
 });
-$('gramsSaveBtn').addEventListener('click', async () => {
+// 購物車：連續選好幾樣，一次記到同一餐。每一樣各存一筆記錄，用 groupId 標成同一組。
+// 只放在記憶體；離開查食物頁時還有東西，會問要不要記。
+let foodCart = [];   // [{ key, food, grams, weighed, entry }]
+function cartEntryFor(food, g, weighed) {
+  const cooked = Boolean(cookConversion(food)) && weighed === 'cooked';
+  const n = nutrientsFor(food, g, cooked ? 'cooked' : 'asis');
+  const entry = {
+    name: food.name + ' ' + g + 'g' + (cooked ? '（熟重）' : ''),
+    kcal: n.kcal, p: n.p, c: n.c, f: n.f, ex: n.ex, grams: g, foodId: food.id
+  };
+  if (cooked) entry.weighed = 'cooked';
+  return { weighed: cooked ? 'cooked' : 'asis', entry };
+}
+function macroText(t) {
+  return MACRO_KEYS.filter(k => t[k] != null).map(k => MACRO_META[k].label + ' ' + fmt(t[k], 1) + 'g').join('・');
+}
+function renderFoodCart() {
+  const box = $('foodCart');
+  const has = foodCart.length > 0;
+  box.classList.toggle('hidden', !has);
+  $('foodDoneBtn').classList.toggle('hidden', has);
+  $('foodCartSaveBtn').classList.toggle('hidden', !has);
+  if (!has) { box.innerHTML = ''; return; }
+  const t = sumNutr(foodCart.map(c => c.entry));
+  box.innerHTML = `<div class="text-base font-bold text-emerald-900">這一餐已選 ${foodCart.length} 樣</div>
+    <ul class="space-y-2">${foodCart.map(c => `<li class="flex items-center gap-2 bg-white rounded-xl border border-emerald-100 p-2">
+      <span class="min-w-0 flex-1"><span class="block text-base font-semibold text-stone-900 leading-snug break-words">${esc(c.entry.name)}</span>
+      <span class="block text-sm text-emerald-700 font-bold tabular-nums">${c.entry.kcal} kcal</span></span>
+      <button type="button" data-cart-edit="${c.key}" class="chip-btn chip-lg shrink-0">改</button>
+      <button type="button" data-cart-del="${c.key}" class="chip-btn chip-lg shrink-0" aria-label="拿掉">✕</button>
+    </li>`).join('')}</ul>
+    <div class="text-base text-stone-800"><span class="font-bold tabular-nums">合計 ${t.kcal} kcal</span>${macroText(t) ? '<br><span class="text-sm text-stone-600">' + esc(macroText(t)) + '</span>' : ''}</div>`;
+  $('foodCartSaveBtn').textContent = '記到' + MEAL_META[ui.meal].label + '（' + foodCart.length + ' 樣）';
+}
+$('foodCart').addEventListener('click', (e) => {
+  const ed = e.target.closest('[data-cart-edit]');
+  const del = e.target.closest('[data-cart-del]');
+  if (ed) {
+    const c = foodCart.find(x => x.key === ed.getAttribute('data-cart-edit'));
+    if (c) openGrams(c.food, c);
+  } else if (del) {
+    foodCart = foodCart.filter(x => x.key !== del.getAttribute('data-cart-del'));
+    renderFoodCart();
+  }
+});
+$('gramsSaveBtn').addEventListener('click', () => {
   const food = gramsDraft.food;
   const g = gramsValue();
   if (!food || !g) { showToast('請輸入公克數'); return; }
-  const cooked = Boolean(cookConversion(food)) && gramsDraft.weighed === 'cooked';
-  const n = nutrientsFor(food, g, cooked ? 'cooked' : 'asis');
-  const extra = { grams: g, foodId: food.id };
-  if (cooked) extra.weighed = 'cooked';
-  await addEntry({
-    name: food.name + ' ' + g + 'g' + (cooked ? '（熟重）' : ''),
-    nutr: { kcal: n.kcal, p: n.p, c: n.c, f: n.f, ex: n.ex },
-    meal: ui.meal, extra
-  });
-  closeScreen(); // 回到搜尋頁，可以接著記下一樣
+  const { weighed, entry } = cartEntryFor(food, g, gramsDraft.weighed);
+  const editing = foodCart.find(x => x.key === gramsDraft.cartKey);
+  if (editing) Object.assign(editing, { grams: g, weighed, entry });
+  else foodCart.push({ key: uid('c'), food, grams: g, weighed, entry });
+  closeScreen(); // 回到搜尋頁，可以接著選下一樣
   $('foodSearch').value = '';
   renderFoodResults();
+  renderFoodCart();
+  if (!editing) showToast('已加入「' + entry.name + '」，可以再選下一樣');
 });
+function saveFoodCart() {
+  if (!foodCart.length) return;
+  const meal = ui.meal;
+  const date = ui.date;
+  const groupId = foodCart.length > 1 ? uid('grp') : null;
+  const time = nowTime();
+  const added = foodCart.map(c => {
+    const it = {
+      id: uid('item'), multiplier: 1, meal, time, pending: false, hasPhoto: false,
+      ...c.entry, ex: cleanEx(c.entry.ex), updatedAt: now()
+    };
+    if (groupId) it.groupId = groupId;
+    return it;
+  });
+  foodCart = [];
+  (state.logs[date] || (state.logs[date] = [])).push(...added);
+  persist();
+  renderAll();
+  renderFoodCart();
+  const total = sumNutr(added).kcal;
+  showToast('已記到' + MEAL_META[meal].label + '：' + added.length + ' 樣、' + total + ' kcal', '復原', () => {
+    const ids = new Set(added.map(a => a.id));
+    state.logs[date] = (state.logs[date] || []).filter(it => !ids.has(it.id));
+    added.forEach(a => tombstone('e:' + a.id));
+    persist();
+    renderAll();
+  });
+}
+$('foodCartSaveBtn').addEventListener('click', () => {
+  saveFoodCart();
+  closeScreen();
+});
+// 還有沒記的就離開查食物頁（返回鍵、‹ 返回）：問一下，不要默默丟掉
+function askUnsavedCart() {
+  if (!foodCart.length) return;
+  const label = MEAL_META[ui.meal].label;
+  openConfirm('還有 ' + foodCart.length + ' 樣還沒記', foodCart.map(c => c.entry.name).join('、') + '。要記到' + label + '嗎？',
+    saveFoodCart, '記到' + label, () => { foodCart = []; renderFoodCart(); }, '不要了');
+}
 
 /* ---------------- 全螢幕輸入頁 ---------------- */
 const screenStack = [];
@@ -744,7 +829,7 @@ function openScreen(id) {
   renderMealSelector();
   renderDayPanel();
   if (id === 'scr-quick') { $('quickPickSearch').value = ''; renderQuickPick(); }
-  if (id === 'scr-food') { $('foodSearch').value = ''; renderFoodResults(); }
+  if (id === 'scr-food') { $('foodSearch').value = ''; renderFoodResults(); renderFoodCart(); }
   if (id === 'scr-grams') renderGrams();
   if (id === 'scr-est') renderEst();
   if (id === 'scr-weight') renderWeightHint();
@@ -756,6 +841,7 @@ function hideTopScreen() {
   const id = screenStack.pop();
   if (id) $(id).classList.add('hidden');
   if (!screenStack.length) document.body.style.overflow = '';
+  if (id === 'scr-food') askUnsavedCart();
 }
 function closeScreen() { if (screenStack.length) history.back(); }
 function closeAllScreens() { while (screenStack.length) { hideTopScreen(); history.back(); } }
@@ -920,13 +1006,50 @@ function nutrLine(it) {
   return parts.join('・');
 }
 
+// 「和昨天一樣」：這天還沒記、前一天有記的餐別，各一個大按鈕
+function copyMealHTML(list) {
+  const prev = addDays(ui.date, -1);
+  const word = ui.date === todayStr() ? '昨天' : '前一天';
+  const btns = MEAL_KEYS.filter(m => !list.some(i => i.meal === m)).map(m => {
+    const items = mealEntries(state.logs, prev, m);
+    if (!items.length) return '';
+    const names = items.map(i => i.name).join('、');
+    return `<button type="button" data-copy-meal="${m}" class="pick-row">
+      <span class="min-w-0 flex-1 text-left"><span class="block text-lg font-semibold text-stone-900">和${word}一樣的${MEAL_META[m].label}</span>
+      <span class="block text-sm text-stone-500 break-words line-clamp-2">${esc(names)}</span>
+      <span class="block text-base text-emerald-700 font-bold tabular-nums">${items.length} 樣・${sumNutr(items).kcal} kcal</span></span>
+      <span class="pick-add">記一樣的</span></button>`;
+  }).join('');
+  return btns ? `<div id="copyMealBox" class="space-y-2"><div class="sec-title px-1">吃的和${word}一樣？</div>${btns}</div>` : '';
+}
+function copyMeal(meal) {
+  const prev = addDays(ui.date, -1);
+  const date = ui.date;
+  const added = copyEntries(mealEntries(state.logs, prev, meal), { makeId: uid, at: now() });
+  if (!added.length) return;
+  (state.logs[date] || (state.logs[date] = [])).push(...added);
+  persist();
+  renderAll();
+  showToast('已記' + MEAL_META[meal].label + '：' + added.length + ' 樣、' + sumNutr(added).kcal + ' kcal（不含照片）', '復原', () => {
+    const ids = new Set(added.map(a => a.id));
+    state.logs[date] = (state.logs[date] || []).filter(it => !ids.has(it.id));
+    added.forEach(a => tombstone('e:' + a.id));
+    persist();
+    renderAll();
+  });
+}
+$('mealLogContainer').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-copy-meal]');
+  if (b) copyMeal(b.getAttribute('data-copy-meal'));
+});
+
 function renderLogs() {
   const container = $('mealLogContainer');
   const list = state.logs[ui.date] || [];
   if (!list.length) {
     container.innerHTML = `<div class="bg-white rounded-2xl border border-dashed border-stone-300 p-8 text-center space-y-2">
       <p class="text-base font-medium text-stone-600">這天還沒有記錄</p>
-      <p class="text-sm text-stone-400">點上面的「常吃的」「拍照記」開始</p></div>`;
+      <p class="text-sm text-stone-400">點上面的「常吃的」「拍照記」開始</p></div>` + copyMealHTML(list);
     return;
   }
   let html = '';
@@ -968,7 +1091,7 @@ function renderLogs() {
     });
     html += '</ul></div>';
   });
-  container.innerHTML = html;
+  container.innerHTML = html + copyMealHTML(list);
   hydratePhotos(container);
 }
 
@@ -1509,6 +1632,7 @@ document.addEventListener('click', (e) => {
   if (!btn) return;
   ui.meal = btn.getAttribute('data-meal');
   renderMealSelector();
+  if (screenStack.includes('scr-food')) renderFoodCart();
 });
 $('portionGroup').addEventListener('click', (e) => {
   const b = e.target.closest('[data-portion]');
@@ -1697,7 +1821,7 @@ $('copyYesterdayBtn').addEventListener('click', () => {
   const prev = state.logs[addDays(ui.date, -1)] || [];
   if (!prev.length) { showToast('前一天沒有記錄'); return; }
   const cur = state.logs[ui.date] || (state.logs[ui.date] = []);
-  prev.forEach(item => cur.push({ ...item, id: uid('item'), hasPhoto: false, photoKey: undefined, updatedAt: now() }));
+  cur.push(...copyEntries(prev, { makeId: uid, at: now() }));
   persist();
   renderAll();
   showToast('已複製前一天 ' + prev.length + ' 筆（不含照片）');

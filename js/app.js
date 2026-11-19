@@ -377,20 +377,22 @@ document.addEventListener('keydown', (e) => {
 
 /* ---------------- 營養欄位元件 ---------------- */
 const KCAL_FIELD = { add: 'foodKcalInput', edit: 'editLogKcalInput', qi: 'quickItemKcalInput' };
+// step 一律用 any：份數、公克都可能有小數（例如自動算出的 0.7 份），
+// 設成 0.5／0.1 的話，瀏覽器會擋下表單，連改名稱都存不了。
 function nutrFieldsHTML(prefix) {
   const inp = (id, ph, step) =>
     `<input id="${id}" type="number" inputmode="decimal" min="0" step="${step}" placeholder="${ph}" class="field px-2 py-1.5 min-h-[38px] text-center tabular-nums bg-white" />`;
   return `
     <div class="space-y-2 pt-1">
       <div class="grid grid-cols-3 gap-1.5">
-        ${MACRO_KEYS.map(k => `<label class="block"><span class="block text-[0.625rem] text-stone-500 mb-0.5">${MACRO_META[k].label} (g)</span>${inp(prefix + '-' + k, 'g', '0.1')}</label>`).join('')}
+        ${MACRO_KEYS.map(k => `<label class="block"><span class="block text-[0.625rem] text-stone-500 mb-0.5">${MACRO_META[k].label} (g)</span>${inp(prefix + '-' + k, 'g', 'any')}</label>`).join('')}
       </div>
       <div class="flex items-center justify-between pt-1">
         <span class="text-[0.6875rem] font-semibold text-stone-600">六大類份數</span>
         <button type="button" data-derive="${prefix}" class="derive-btn text-[0.6875rem] font-semibold text-emerald-700 hover:underline">依份數推算熱量／營養素</button>
       </div>
       <div class="grid grid-cols-3 gap-1.5">
-        ${EX_KEYS.map(k => `<label class="block"><span class="block text-[0.625rem] text-stone-500 mb-0.5">${EX_META[k].emoji} ${EX_META[k].short}</span>${inp(prefix + '-ex-' + k, '份', '0.5')}</label>`).join('')}
+        ${EX_KEYS.map(k => `<label class="block"><span class="block text-[0.625rem] text-stone-500 mb-0.5">${EX_META[k].emoji} ${EX_META[k].short}</span>${inp(prefix + '-ex-' + k, '份', 'any')}</label>`).join('')}
       </div>
     </div>`;
 }
@@ -410,7 +412,7 @@ $('addNutrFields').innerHTML = nutrFieldsHTML('add');
 $('editNutrFields').innerHTML = nutrFieldsHTML('edit');
 $('qiNutrFields').innerHTML = nutrFieldsHTML('qi');
 $('tgtExFields').innerHTML = EX_KEYS.map(k =>
-  `<label class="block"><span class="block text-[0.625rem] text-stone-500 mb-0.5">${EX_META[k].emoji} ${EX_META[k].short}</span><input id="tgt-ex-${k}" type="number" inputmode="decimal" min="0" step="0.5" placeholder="份" class="field px-2 py-1.5 min-h-[38px] text-center tabular-nums" /></label>`
+  `<label class="block"><span class="block text-[0.625rem] text-stone-500 mb-0.5">${EX_META[k].emoji} ${EX_META[k].short}</span><input id="tgt-ex-${k}" type="number" inputmode="decimal" min="0" step="any" placeholder="份" class="field px-2 py-1.5 min-h-[38px] text-center tabular-nums" /></label>`
 ).join('');
 
 document.addEventListener('click', (e) => {

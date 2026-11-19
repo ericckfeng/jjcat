@@ -21,7 +21,8 @@ export const WATER_ENOUGH = 1500;     // ml
     //   veg 是蔬菜份數合計；exItems 是有填六大類份數的記錄筆數（0 就表示蔬菜份數不明）
     d: [day0, day1, day2],
     lastNightMin,  // 昨晚睡眠分鐘數（記在這天），沒記是 null
-    recalcKg       // 7 天平均體重和上次試算時差幾公斤（targets.js 的 recalcHint），不用提醒是 null
+    recalcKg,      // 7 天平均體重和上次試算時差幾公斤（targets.js 的 recalcHint），不用提醒是 null
+    muscle         // 最近兩次骨骼肌（body.js 的 muscleChange），最近一次在 14 天內才傳，否則 null
   }
 */
 export function buildInsights(ctx) {
@@ -72,6 +73,21 @@ export function buildInsights(ctx) {
     add(48, 'calm',
       `體重比上次試算時${ctx.recalcKg < 0 ? '少' : '多'}了 ${Math.abs(ctx.recalcKg)} 公斤，可以點上面的「目標」重新試算 ⚖️`,
       'recalc');
+  }
+
+  // 5. 骨骼肌：減重時肌肉也掉了要提醒；肌肉增加要誇
+  const mu = ctx.muscle;
+  if (mu) {
+    const wd = mu.weightDelta;
+    if (mu.delta <= -0.5) {
+      add(70, 'calm', wd != null && wd < 0
+        ? `體重少了 ${Math.abs(wd)} 公斤，骨骼肌也少了 ${Math.abs(mu.delta)} 公斤。蛋白質要吃夠、不要減太快 💪`
+        : `骨骼肌比上次少了 ${Math.abs(mu.delta)} 公斤，蛋白質要吃夠、多活動 💪`, 'muscle-down');
+    } else if (mu.delta >= 0.3 && wd != null && wd < 0) {
+      add(85, 'cheer', `體重少了 ${Math.abs(wd)} 公斤，骨骼肌還多了 ${mu.delta} 公斤，減的是脂肪 🎉`, 'muscle-up-' + mu.to);
+    } else if (mu.delta >= 0.3) {
+      add(45, 'happy', `骨骼肌比上次多了 ${mu.delta} 公斤 💪`, 'muscle-gain');
+    }
   }
 
   return out;

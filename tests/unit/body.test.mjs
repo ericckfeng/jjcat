@@ -1,7 +1,7 @@
 // BMI、身體尺寸、睡眠計算（js/body.js）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, sleepMinutes, fmtDuration, daySleep, rollingAverage, weightAvgChange } from '../../js/body.js';
+import { calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, sleepMinutes, fmtDuration, daySleep, rollingAverage, weightAvgChange, muscleChange } from '../../js/body.js';
 
 test('BMI 計算', () => {
   assert.equal(calcBmi(70.6, 168), 25);
@@ -79,4 +79,18 @@ test('期間體重變化看 7 天平均的頭尾；量不到 2 次就不算', ()
   assert.deepEqual(weightAvgChange(days, dates), { first: 70.5, last: 70.4, delta: -0.1 });
   assert.equal(weightAvgChange(days, ['2026-11-07']), null);
   assert.equal(weightAvgChange({}, dates), null);
+});
+
+test('骨骼肌變化：最近兩次量的骨骼肌，體重用那兩天的 7 天平均', () => {
+  const days = {
+    '2026-10-10': { weight: 72, smm: 24.1 },
+    '2026-10-12': { weight: 71.6 },
+    '2026-11-08': { weight: 70.2 },
+    '2026-11-10': { weight: 69.8, smm: 23.5 },
+    '2026-11-25': { smm: 23.9 }
+  };
+  assert.deepEqual(muscleChange(days, '2026-11-19'), { from: '2026-10-10', to: '2026-11-10', smm1: 24.1, smm2: 23.5, delta: -0.6, weightDelta: -2 });
+  assert.equal(muscleChange(days, '2026-11-01'), null, '只量過一次');
+  assert.equal(muscleChange({ '2026-01-01': { smm: 24 }, '2026-11-10': { smm: 23 } }, '2026-11-19'), null, '間隔太久');
+  assert.equal(muscleChange({ '2026-10-10': { smm: 24 }, '2026-11-10': { smm: 23 } }, '2026-11-19').weightDelta, null, '沒有體重');
 });

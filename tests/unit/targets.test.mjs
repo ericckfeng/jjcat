@@ -1,7 +1,7 @@
 // 依體重試算目標（js/targets.js）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calcBmr, calcTargets, ageFrom, waterGoal, recalcHint, latestInbodyBmr } from '../../js/targets.js';
+import { calcBmr, calcTargets, ageFrom, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat } from '../../js/targets.js';
 
 test('基礎代謝 Mifflin-St Jeor', () => {
   assert.equal(calcBmr({ sex: 'm', weight: 80, height: 172, age: 45 }), 1655);   // 800+1075-225+5
@@ -91,4 +91,28 @@ test('最近一次 InBody 基礎代謝：90 天內才算', () => {
   assert.deepEqual(latestInbodyBmr({ '2026-09-01': { bmr: 1250 } }, '2026-11-19'), { value: 1250, date: '2026-09-01' });
   assert.equal(latestInbodyBmr({ '2026-08-20': { bmr: 1250 } }, '2026-11-19'), null);
   assert.equal(latestInbodyBmr({}, '2026-11-19'), null);
+});
+
+test('用去脂體重算基礎代謝（Katch-McArdle）', () => {
+  assert.equal(katchBmr(50), 1450);
+  assert.equal(katchBmr(46.2), 1368);
+  assert.equal(katchBmr(null), null);
+  const t = calcTargets({ weight: 68, measuredBmr: katchBmr(46.2), measuredSource: 'ffm' });
+  assert.equal(t.bmr, 1368);
+  assert.equal(t.bmrSource, 'ffm');
+});
+
+test('最近一次同一天有體重和體脂率 → 去脂體重', () => {
+  const days = { '2026-10-01': { weight: 70, bodyFat: 35 }, '2026-11-10': { weight: 68, bodyFat: 32 }, '2026-11-12': { bodyFat: 31 }, '2026-11-15': { weight: 67.5 } };
+  assert.deepEqual(latestBodyComp(days, '2026-11-19'), { date: '2026-11-10', weight: 68, bodyFat: 32, ffm: 46.2 });
+  assert.equal(latestBodyComp({ '2026-08-01': { weight: 70, bodyFat: 30 } }, '2026-11-19'), null, '超過 90 天');
+  assert.equal(latestBodyComp({}, '2026-11-19'), null);
+});
+
+test('用目標體脂率算目標體重（去脂體重不變）', () => {
+  assert.equal(targetWeightFromBodyFat(50, 28), 69.4);
+  assert.equal(targetWeightFromBodyFat(46.2, 30), 66);
+  assert.equal(targetWeightFromBodyFat(50, 2), null);
+  assert.equal(targetWeightFromBodyFat(50, 60), null);
+  assert.equal(targetWeightFromBodyFat(null, 28), null);
 });

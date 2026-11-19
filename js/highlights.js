@@ -12,7 +12,8 @@
 //   water: { avg, goal } | null,     // goal：這段期間每天喝水目標的平均（沒設是 null）
 //   exercise: { totalMin, days },
 //   questions,                        // 「想問營養師」有寫的天數
-//   noBowelDays                       // 排便記「無」的天數
+//   noBowelDays,                      // 排便記「無」的天數
+//   muscle: { smm1, smm2, delta, weightDelta } | null   // 最近兩次骨骼肌（最近一次在期間內才有）
 // }
 // 回傳 [{ tone: 'good' | 'warn' | 'info', text }]，最多 limit 條，重要的在前
 
@@ -46,6 +47,13 @@ export function buildHighlights(input, { limit = 5 } = {}) {
     const w = x.weight;
     const toward = x.targetWeight > 0 && w.delta !== 0 && Math.sign(x.targetWeight - w.first) === Math.sign(w.delta);
     add(95, toward ? 'good' : 'info', `體重（7 天平均）${n1(w.first)} → ${n1(w.last)} kg（${signed(w.delta)}）${x.targetWeight > 0 ? '，目標 ' + n1(x.targetWeight) + ' kg' : ''}`);
+  }
+
+  const mu = x.muscle;
+  if (mu) {
+    const wd = mu.weightDelta != null ? `，同期體重 ${signed(mu.weightDelta)} kg` : '';
+    if (mu.delta <= -0.5) add(82, 'warn', `骨骼肌 ${n1(mu.smm1)} → ${n1(mu.smm2)} kg（${signed(mu.delta)}）${wd}：減掉的有一部分是肌肉`);
+    else add(68, mu.delta >= 0 ? 'good' : 'info', `骨骼肌 ${n1(mu.smm1)} → ${n1(mu.smm2)} kg（${signed(mu.delta)}）${wd}`);
   }
 
   if (x.questions > 0) add(92, 'info', `有 ${x.questions} 天寫了「想問營養師」，列在下方「想和營養師討論」`);
@@ -125,6 +133,7 @@ export function buildWeekly(input) {
     add(95, `7 天平均體重${w.delta < 0 ? '少' : '多'}了 ${n1(Math.abs(w.delta))} 公斤，往目標前進 🎉`);
   }
   if (x.goodKcalDays >= 3) add(80, `有 ${x.goodKcalDays} 天吃得剛剛好 👍`);
+  if (x.muscle && x.muscle.delta >= 0.3) add(85, `骨骼肌多了 ${n1(x.muscle.delta)} 公斤 💪`);
   const ex = x.exercise || {};
   if (ex.totalMin >= 60) add(75, `運動了 ${ex.days} 天，共 ${n0(ex.totalMin)} 分鐘 🏃`);
   else if (ex.totalMin > 0) add(50, `有運動 ${ex.days} 天，動起來就很棒 🏃`);
@@ -140,6 +149,7 @@ export function buildWeekly(input) {
   // 下週可以試的一件事：只挑一件，最重要的先
   const tries = [
     [x.loggedDays < 4, '每天至少記一餐，下週會更清楚自己吃了什麼'],
+    [x.muscle && x.muscle.delta <= -0.5, '肌肉有一點流失：每餐都要有蛋白質，再加上每天走路或簡單的肌力運動'],
     [x.targetP > 0 && x.macroDays >= 2 && x.avgP != null && x.avgP < x.targetP * 0.85, '每餐加一份蛋白質，例如一顆蛋、一杯無糖豆漿或一個手掌大的魚肉'],
     [x.targetKcal > 0 && x.avgKcal != null && x.avgKcal > x.targetKcal * 1.1, '挑一餐吃少一點，例如飯減半碗、不喝含糖飲料'],
     [x.targetKcal > 0 && x.avgKcal != null && x.avgKcal < x.targetKcal * 0.85, '三餐都要吃，吃夠了比較不會想吃零食'],

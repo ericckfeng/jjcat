@@ -48,10 +48,11 @@ export function calcBmr({ sex, weight, height, age }) {
 
 // 回傳 null（資料不夠）或
 // { bmr, bmrSource, tdee, kcal, p, c, f, water, floored, adjusted }
-//   measuredBmr：InBody 量到的基礎代謝（選填）；有填就用它，不用性別、身高、年齡
-//   bmrSource：'inbody' | 'formula'
+//   measuredBmr：體脂機量到（或用去脂體重算出）的基礎代謝（選填）；有填就用它，不用性別、身高、年齡
+//   measuredSource：measuredBmr 的來源，'inbody'（機器顯示的）或 'ffm'（用去脂體重算的）
+//   bmrSource：'inbody' | 'ffm' | 'formula'
 //   floored：熱量被安全底線拉高；adjusted：為了留碳水，脂肪或蛋白質被調低
-export function calcTargets({ sex, weight, height, age, activity = 'low', goal = 'slow', protein = 1.2, measuredBmr = null }) {
+export function calcTargets({ sex, weight, height, age, activity = 'low', goal = 'slow', protein = 1.2, measuredBmr = null, measuredSource = 'inbody' }) {
   const w = Number(weight);
   if (!(w > 0)) return null;
   const measured = Number(measuredBmr) > 0 ? Math.round(Number(measuredBmr)) : null;
@@ -76,7 +77,7 @@ export function calcTargets({ sex, weight, height, age, activity = 'low', goal =
     if (carbs() < MIN_CARB_G) p = Math.max(Math.round(w * 1.0), Math.floor((kcal - f * 9 - MIN_CARB_G * 4) / 4));
   }
   const c = Math.max(0, carbs());
-  return { bmr, bmrSource: measured ? 'inbody' : 'formula', tdee, kcal, p, c, f, water: Math.min(round(w * WATER_PER_KG, 50), MAX_WATER), floored, adjusted };
+  return { bmr, bmrSource: measured ? measuredSource : 'formula', tdee, kcal, p, c, f, water: Math.min(round(w * WATER_PER_KG, 50), MAX_WATER), floored, adjusted };
 }
 
 // 這天的喝水目標：基本目標＋運動加碼（每 30 分鐘 +250 ml）
@@ -103,3 +104,36 @@ export function latestInbodyBmr(days, today, maxDays = 90) {
   const date = Object.keys(days || {}).filter(k => k <= today && k >= fromStr && Number(days[k].bmr) > 0).sort().pop();
   return date ? { value: Math.round(Number(days[date].bmr)), date } : null;
 }
+
+/* ---------------- 體組成（體脂機：InBody、健身房或家用八極） ---------------- */
+
+// 用去脂體重算基礎代謝（Katch-McArdle；InBody 也是用這個公式）
+export function katchBmr(ffm) {
+  const f = Number(ffm);
+  return f > 0 ? Math.round(370 + 21.6 * f) : null;
+}
+
+// 最近一次同一天有「體重＋體脂率」的記錄（90 天內）→ 去脂體重
+//   回傳 { date, weight, bodyFat, ffm } 或 null
+export function latestBodyComp(days, today, maxDays = 90) {
+  const [y, m, d] = today.split('-').map(Number);
+  const f = new Date(y, m - 1, d - maxDays);
+  const fromStr = f.getFullYear() + '-' + String(f.getMonth() + 1).padStart(2, '0') + '-' + String(f.getDate()).padStart(2, '0');
+  const date = Object.keys(days || {}).filter(k => {
+    const x = days[k];
+    return k <= today && k >= fromStr && Number(x.weight) > 0 && Number(x.bodyFat) > 0 && Number(x.bodyFat) < 70;
+  }).sort().pop();
+  if (!date) return null;
+  const weight = Number(days[date].weight), bodyFat = Number(days[date].bodyFat);
+  return { date, weight, bodyFat, ffm: Math.round(weight * (1 - bodyFat / 100) * 10) / 10 };
+}
+
+// 用目標體脂率算目標體重（假設去脂體重不變）
+export function targetWeightFromBodyFat(ffm, targetPct) {
+  const f = Number(ffm), p = Number(targetPct);
+  if (!(f > 0) || !(p >= 5 && p <= 50)) return null;
+  return Math.round(f / (1 - p / 100) * 10) / 10;
+}
+
+// 一般參考：體脂率超過這個算肥胖（國民健康署）
+export const BODY_FAT_LIMIT = { m: 25, f: 30 };

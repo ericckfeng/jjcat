@@ -7,12 +7,12 @@ import { REPORT_CSS, buildReportHTML, buildReportText, periodSummary } from './r
 import { buildWeekly, lastWeek, weeklyText } from './highlights.js';
 import * as cloud from './cloud.js';
 import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VERSION } from './sync.js';
-import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
+import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, muscleChange, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
 import { mascotSVG, buildMascotMessages } from './mascot.js';
 import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS } from './foods.js';
 import { sumNutr, copyEntries, mealEntries } from './meals.js';
 import { buildInsights } from './insights.js';
-import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr } from './targets.js';
+import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros } from './bank.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
@@ -488,7 +488,8 @@ function bankFor(date) {
   const pr = state.profile;
   const cw = currentWeight();
   const inbody = latestInbodyBmr(state.days, date);
-  const bmr = (inbody && inbody.value) || calcBmr({ sex: pr.sex, weight: cw && cw.w, height: pr.height, age: ageFrom(pr.birthYear) });
+  const comp = latestBodyComp(state.days, date);
+  const bmr = (inbody && inbody.value) || (comp && katchBmr(comp.ffm)) || calcBmr({ sex: pr.sex, weight: cw && cw.w, height: pr.height, age: ageFrom(pr.birthYear) });
   return calorieBank({ base: state.targets.kcal > 0 ? state.targets.kcal : 1800, date, dayKcal: dayTotals, bmr });
 }
 function renderBank(bank, todayKcal) {
@@ -1586,7 +1587,8 @@ function dayInsights(date) {
     isToday: date === todayStr(), targetKcal: state.targets.kcal,
     d: [0, -1, -2].map(n => insightDay(addDays(date, n))),
     lastNightMin: daySleep(getDay(date, false)).night || null,
-    recalcKg: date === todayStr() ? recalcHint(state.targets.calc, rollingAverage(state.days, 'weight', [date])[0]) : null
+    recalcKg: date === todayStr() ? recalcHint(state.targets.calc, rollingAverage(state.days, 'weight', [date])[0]) : null,
+    muscle: (() => { const m = muscleChange(state.days, date); return m && m.to >= addDays(date, -14) ? m : null; })()
   }).sort((a, b) => b.pri - a.pri);
 }
 // 小芽關掉時，提醒改用首頁的小卡片列出來（沒有提醒就不顯示）
@@ -2040,7 +2042,7 @@ $('libraryGrid').addEventListener('click', (e) => {
 });
 
 /* ---------------- 依體重試算目標 ---------------- */
-const calcDraft = { sex: null, activity: 'low', goal: 'slow', protein: 1.2, inbody: null, bmrSrc: 'formula' };
+const calcDraft = { sex: null, activity: 'low', goal: 'slow', protein: 1.2, inbody: null, comp: null, bmrSrc: 'formula' };
 // 試算用的體重：最近 7 天平均；7 天內沒量就用最後一次
 function currentWeight() {
   const avg = rollingAverage(state.days, 'weight', [todayStr()])[0];
@@ -2058,9 +2060,12 @@ function initCalc() {
   calcDraft.activity = pr.activity || c.activity || 'low';
   calcDraft.goal = c.goal || 'slow';
   calcDraft.protein = c.protein || 1.2;
-  // 有 InBody 量到的基礎代謝就預設用它（除非上次選了公式）
+  // 基礎代謝來源：體脂機顯示的 > 用去脂體重算的 > 公式（上次選過的優先）
   calcDraft.inbody = latestInbodyBmr(state.days, todayStr());
-  calcDraft.bmrSrc = calcDraft.inbody && c.bmrSource !== 'formula' ? 'inbody' : 'formula';
+  calcDraft.comp = latestBodyComp(state.days, todayStr());
+  const avail = [calcDraft.inbody && 'inbody', calcDraft.comp && 'ffm', 'formula'].filter(Boolean);
+  calcDraft.bmrSrc = avail.includes(c.bmrSource) ? c.bmrSource : avail[0];
+  $('calcTargetFat').value = state.targets.bodyFat || '';
   $('calcBirthYear').value = pr.birthYear || '';
   $('calcHeight').value = pr.height || '';
   const cw = currentWeight();
@@ -2072,7 +2077,9 @@ function calcInput() {
     sex: calcDraft.sex, weight: num($('calcWeight').value), height: num($('calcHeight').value),
     age: ageFrom(num($('calcBirthYear').value)),
     activity: calcDraft.activity, goal: calcDraft.goal, protein: calcDraft.protein,
-    measuredBmr: calcDraft.bmrSrc === 'inbody' && calcDraft.inbody ? calcDraft.inbody.value : null
+    measuredBmr: calcDraft.bmrSrc === 'inbody' && calcDraft.inbody ? calcDraft.inbody.value
+      : calcDraft.bmrSrc === 'ffm' && calcDraft.comp ? katchBmr(calcDraft.comp.ffm) : null,
+    measuredSource: calcDraft.bmrSrc
   };
 }
 function renderCalc() {
@@ -2082,14 +2089,17 @@ function renderCalc() {
   $('calcProtein').innerHTML = choiceHTML('data-calc-prot', PROTEIN, calcDraft.protein);
   const inp = calcInput();
   const ib = calcDraft.inbody;
-  $('calcBmrWrap').classList.toggle('hidden', !ib);
-  if (ib) {
-    const fb = calcBmr(inp);
+  const comp = calcDraft.comp;
+  $('calcBmrWrap').classList.toggle('hidden', !ib && !comp);
+  if (ib || comp) {
+    const fb = calcBmr({ ...inp, measuredBmr: null });
     $('calcBmrSrc').innerHTML = choiceHTML('data-calc-bmr', [
-      { key: 'inbody', label: '用 InBody 量的 ' + ib.value.toLocaleString() + ' kcal', sub: fmtMD(ib.date) + ' 量的，依肌肉量計算，比較準' },
+      ib && { key: 'inbody', label: '用體脂機量的 ' + ib.value.toLocaleString() + ' kcal', sub: fmtMD(ib.date) + ' 量的，依肌肉量計算，最準' },
+      comp && { key: 'ffm', label: '用體脂率算 ' + katchBmr(comp.ffm).toLocaleString() + ' kcal', sub: fmtMD(comp.date) + ' 體重 ' + comp.weight + ' kg、體脂 ' + comp.bodyFat + '%，去脂體重 ' + comp.ffm + ' kg' },
       { key: 'formula', label: '用公式估算' + (fb ? ' ' + fb.toLocaleString() + ' kcal' : ''), sub: '依體重、身高、年齡、性別估算' }
-    ], calcDraft.bmrSrc);
+    ].filter(Boolean), calcDraft.bmrSrc);
   }
+  renderCalcFat();
   const t = calcTargets(inp);
   $('calcApplyBtn').disabled = !t;
   if (!t) {
@@ -2101,12 +2111,30 @@ function renderCalc() {
   const row = (label, v, unit) => `<div class="flex justify-between items-baseline text-lg"><span class="text-stone-600">${label}</span><span class="font-bold text-stone-900 tabular-nums">${v.toLocaleString()} ${unit}</span></div>`;
   $('calcResult').innerHTML = `
     <div class="text-center"><div class="text-base text-stone-500">每天建議吃</div><span class="text-4xl font-bold text-emerald-700 tabular-nums">${t.kcal.toLocaleString()}</span> <span class="text-lg text-stone-600">kcal</span></div>
-    <div class="text-sm text-stone-500 text-center">基礎代謝 ${t.bmr.toLocaleString()}${t.bmrSource === 'inbody' ? '（InBody）' : ''}・每天約消耗 ${t.tdee.toLocaleString()}${g.deficit ? '・少吃 ' + g.deficit : ''}</div>
+    <div class="text-sm text-stone-500 text-center">基礎代謝 ${t.bmr.toLocaleString()}${{ inbody: '（體脂機）', ffm: '（依體脂率）' }[t.bmrSource] || ''}・每天約消耗 ${t.tdee.toLocaleString()}${g.deficit ? '・少吃 ' + g.deficit : ''}</div>
     ${t.floored ? `<div class="rounded-xl bg-sky-50 text-sky-900 p-2 text-sm leading-relaxed">為了安全，熱量不會低於基礎代謝和 1,200 kcal，所以用 ${t.kcal.toLocaleString()} kcal。想減得更快，可以多走路、多活動。</div>` : ''}
     ${row('蛋白質', t.p, 'g')}${row('脂肪', t.f, 'g')}${row('碳水', t.c, 'g')}${row('喝水', t.water, 'ml')}
     ${t.adjusted ? '<div class="text-sm text-stone-500">熱量不多，蛋白質和脂肪已調低一點，留一些碳水。</div>' : ''}
     <div class="text-sm text-stone-500 leading-relaxed">有運動的那天，喝水每 30 分鐘多 250 ml。心臟、腎臟需要限水的人，請照醫師說的量。</div>`;
 }
+// 用目標體脂率訂目標體重（有體重＋體脂率才顯示）
+function calcFatTarget() {
+  const comp = calcDraft.comp;
+  return comp ? targetWeightFromBodyFat(comp.ffm, num($('calcTargetFat').value)) : null;
+}
+function renderCalcFat() {
+  const comp = calcDraft.comp;
+  $('calcFatWrap').classList.toggle('hidden', !comp);
+  if (!comp) return;
+  const lim = BODY_FAT_LIMIT[calcDraft.sex];
+  $('calcFatInfo').textContent = fmtMD(comp.date) + ' 體脂率 ' + comp.bodyFat + '%，去脂體重（肌肉、骨骼、水分）' + comp.ffm + ' kg。'
+    + (lim ? '一般建議' + (calcDraft.sex === 'm' ? '男性' : '女性') + '體脂率低於 ' + lim + '%。' : '');
+  const tw = calcFatTarget();
+  $('calcFatResult').textContent = tw
+    ? '肌肉維持不變的話，目標體重約 ' + tw + ' kg（比現在' + (tw < comp.weight ? '少 ' : '多 ') + r1(Math.abs(comp.weight - tw)) + ' kg）。按下面的按鈕會一起存成目標體重。'
+    : '填了就會算出目標體重。';
+}
+$('calcTargetFat').addEventListener('input', renderCalcFat);
 $('openCalcBtn').addEventListener('click', () => { closeModal('targetModal'); openScreen('scr-calc'); });
 $('scr-calc').addEventListener('click', (e) => {
   const sex = e.target.closest('[data-calc-sex]');
@@ -2135,6 +2163,8 @@ function applyCalc() {
     ...state.targets, kcal: t.kcal, p: t.p, c: t.c, f: t.f, water: t.water,
     calc: { at: now(), weight: inp.weight, activity: inp.activity, goal: inp.goal, protein: inp.protein, bmrSource: t.bmrSource, bmr: t.bmr }
   };
+  const tw = calcFatTarget();
+  if (tw) { state.targets.weight = tw; state.targets.bodyFat = num($('calcTargetFat').value); }
   state.targetsAt = now();
   persist();
   renderAll();
@@ -2191,6 +2221,8 @@ $('saveTargetBtn').addEventListener('click', () => {
   // 手動改過熱量、營養素或喝水，就不再是試算的數字：拿掉試算記錄（之後不會提醒重算）
   if (['kcal', 'p', 'c', 'f', 'water'].some(k => (next[k] ?? null) !== (state.targets[k] ?? null))) delete next.calc;
   if ($('bankToggle').checked) next.bank = true; else delete next.bank;
+  // 手動改目標體重：不再是用體脂率算的
+  if ((next.weight ?? null) !== (state.targets.weight ?? null)) delete next.bodyFat;
   state.targets = next;
   state.targetsAt = now();
   if (state.profile.name !== $('profileName').value.trim()) {
@@ -2431,12 +2463,12 @@ $('exportCsvBtn').addEventListener('click', () => {
 });
 $('exportDaysCsvBtn').addEventListener('click', () => {
   const dates = Array.from(new Set([...Object.keys(state.logs), ...Object.keys(state.days)])).sort();
-  const rows = [['日期', '總熱量', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '體重(kg)', 'BMI', '腰圍(cm)', '臀圍(cm)', '上臂圍(cm)', '大腿圍(cm)', '胸圍(cm)', '體脂率(%)', '喝水(ml)', '運動', '運動分鐘', '上床', '起床', '夜間睡眠(分)', '補眠(分)', '總睡眠(小時)', '睡眠品質(1-5)', '飢餓感(1-5)', '心情(1-5)', '排便', '備註', '想問營養師', 'InBody 基礎代謝(kcal)']];
+  const rows = [['日期', '總熱量', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '體重(kg)', 'BMI', '腰圍(cm)', '臀圍(cm)', '上臂圍(cm)', '大腿圍(cm)', '胸圍(cm)', '體脂率(%)', '喝水(ml)', '運動', '運動分鐘', '上床', '起床', '夜間睡眠(分)', '補眠(分)', '總睡眠(小時)', '睡眠品質(1-5)', '飢餓感(1-5)', '心情(1-5)', '排便', '備註', '想問營養師', '體脂機基礎代謝(kcal)', '骨骼肌(kg)']];
   dates.forEach(date => {
     const t = dayTotals(date);
     const d = state.days[date] || {};
     rows.push([date, t.kcal, t.macroItems ? t.p : '', t.macroItems ? t.c : '', t.macroItems ? t.f : '', ...EX_KEYS.map(k => (t.exItems ? t.ex[k] : '')),
-      d.weight, calcBmi(d.weight, state.profile.height), d.waist, d.hip, d.arm, d.thigh, d.chest, d.bodyFat, d.water, d.exercise, d.exMin, d.sleepBed, d.sleepWake, d.sleepMin, daySleep(d).nap || '', daySleep(d).total ? r1(daySleep(d).total / 60) : '', d.sleepQ, d.hunger, d.mood, d.bowel != null ? BOWEL_LABELS[d.bowel] : '', d.note, d.question, d.bmr]);
+      d.weight, calcBmi(d.weight, state.profile.height), d.waist, d.hip, d.arm, d.thigh, d.chest, d.bodyFat, d.water, d.exercise, d.exMin, d.sleepBed, d.sleepWake, d.sleepMin, daySleep(d).nap || '', daySleep(d).total ? r1(daySleep(d).total / 60) : '', d.sleepQ, d.hunger, d.mood, d.bowel != null ? BOWEL_LABELS[d.bowel] : '', d.note, d.question, d.bmr, d.smm]);
   });
   downloadBlob('每日身體與備註_' + todayStr() + '.csv', toCSV(rows), 'text/csv;charset=utf-8');
   showToast('已匯出每日 CSV');

@@ -55,7 +55,8 @@
 | 欄位 | 說明 |
 |---|---|
 | `targets.water` | 每天喝水目標（ml）。沒有＝沒設目標（喝水頁不顯示目標，小芽用 1500 ml 判斷）。有運動的那天每 30 分鐘 +250 ml（顯示時計算，不存） |
-| `targets.calc` | 目前的目標是「依體重試算」來的：`{ at, weight, activity, goal, protein, bmrSource, bmr }`（`bmrSource`：`inbody`／`formula`，v19 起）（`weight`＝試算時用的體重）。7 天平均體重和它差 2 公斤以上會提醒重算。**沒有＝手動設定（營養師的數字）**；在「每日目標」手動改熱量、營養素或喝水就會刪掉 |
+| `targets.calc` | 目前的目標是「依體重試算」來的：`{ at, weight, activity, goal, protein, bmrSource, bmr }`（`bmrSource`：`inbody`＝體脂機顯示的／`ffm`＝用同一天的體重＋體脂率算去脂體重再算（v23）／`formula`，v19 起）（`weight`＝試算時用的體重）。7 天平均體重和它差 2 公斤以上會提醒重算。**沒有＝手動設定（營養師的數字）**；在「每日目標」手動改熱量、營養素或喝水就會刪掉 |
+| `targets.bodyFat` | （v23 起）目標體脂率（%）。用它算出目標體重 `targets.weight`（假設去脂體重不變）。手動改目標體重就刪掉 |
 | `targets.bank` | （v22 起）`true`＝開啟熱量銀行（一週總量控管）。沒有＝關閉（預設）。舊版 App 存目標時會把它弄掉，結果是關閉 |
 | `profile.birthYear` | 出生年（西元），用來算年齡 |
 | `profile.activity` | 活動量 `low`／`light`／`active`（係數 1.2／1.375／1.55） |
@@ -94,7 +95,8 @@
 | `weight` | 公斤 |
 | `waist` `hip` `arm` `thigh` `chest` | 公分（arm＝上臂圍、thigh＝大腿圍） |
 | `bodyFat` | % |
-| `bmr` | InBody 等體組成機量到的基礎代謝（kcal，v19 起）。依體重試算時，90 天內有值就可以改用它 |
+| `bmr` | 體脂機（InBody、健身房或家用八極）量到的基礎代謝（kcal，v19 起）。依體重試算時，90 天內有值就可以改用它 |
+| `smm` | 骨骼肌重（公斤，v23 起）。最近兩次比較，減重時肌肉也掉了會提醒 |
 | `water` | ml |
 | `exercise` | 文字；`exMin` 分鐘 |
 | `hunger` `mood` | 1–5 |
@@ -136,3 +138,4 @@
 | v3（App v18） | 2026-11-19 | 依體重試算目標：`targets.water`、`targets.calc`、`profile.birthYear`、`profile.activity`。 |
 | v3（App v19） | 2026-11-19 | 每日欄位新增 `bmr`（InBody 基礎代謝）。每日 CSV 最後加一欄。 |
 | v3（App v22） | 2026-11-19 | `targets.bank`（熱量銀行開關）。 |
+| v3（App v23） | 2026-11-19 | 每日欄位新增 `smm`（骨骼肌）；`targets.bodyFat`（目標體脂率）；`targets.calc.bmrSource` 可為 `ffm`。每日 CSV 最後再加一欄骨骼肌。 |

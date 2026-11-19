@@ -74,3 +74,10 @@ test('最多 5 條，熱量、體重、想問營養師排最前面', () => {
   assert.match(t[3], /蛋白質/);
   assert.match(t[4], /睡/);
 });
+
+test('骨骼肌：減掉的有肌肉要提醒營養師', () => {
+  const t = texts({ muscle: { smm1: 24.1, smm2: 23.5, delta: -0.6, weightDelta: -2 } }, { limit: 10 });
+  assert.ok(t.includes('骨骼肌 24.1 → 23.5 kg（-0.6），同期體重 -2 kg：減掉的有一部分是肌肉'));
+  const g = buildHighlights({ ...base, muscle: { smm1: 24.1, smm2: 24.4, delta: 0.3, weightDelta: -1 } }, { limit: 10 }).find(h => /骨骼肌/.test(h.text));
+  assert.equal(g.tone, 'good');
+});

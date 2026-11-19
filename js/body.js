@@ -11,8 +11,10 @@ export const MEASURES = [
   { key: 'thigh', label: '大腿圍', unit: '公分', short: 'cm', step: 0.5, min: 20, max: 120 },
   { key: 'chest', label: '胸圍', unit: '公分', short: 'cm', step: 0.5, min: 40, max: 200 },
   { key: 'bodyFat', label: '體脂率', unit: '%', short: '%', step: 0.1, min: 3, max: 70 },
-  // InBody 等體組成機量到的基礎代謝（依去脂體重計算，比公式估算更貼近個人）
-  { key: 'bmr', label: 'InBody 基礎代謝', unit: 'kcal', short: ' kcal', step: 1, min: 600, max: 4000 }
+  // 骨骼肌重：InBody、健身房或家用八極（手腳一起量）體脂機都有（v23 起）
+  { key: 'smm', label: '骨骼肌', unit: '公斤', short: 'kg', step: 0.1, min: 5, max: 80 },
+  // 體脂機量到的基礎代謝（依去脂體重計算，比公式估算更貼近個人）
+  { key: 'bmr', label: '體脂機基礎代謝', unit: 'kcal', short: ' kcal', step: 1, min: 600, max: 4000 }
 ];
 export const MEASURE_META = Object.fromEntries(MEASURES.map(m => [m.key, m]));
 
@@ -116,4 +118,22 @@ export function weightAvgChange(days, dates) {
   const first = avg[0];
   const last = avg[avg.length - 1];
   return { first, last, delta: Math.round((last - first) * 10) / 10 };
+}
+
+// 骨骼肌變化：到 upTo 為止最近兩次量的骨骼肌（間隔 120 天內）。
+// 體重變化用那兩天的 7 天平均（體脂機通常一個月量一次，單天體重容易受水分影響）。
+//   回傳 { from, to, smm1, smm2, delta, weightDelta } 或 null
+export function muscleChange(days, upTo, maxGapDays = 120) {
+  const keys = Object.keys(days || {}).filter(k => k <= upTo && Number(days[k].smm) > 0).sort();
+  if (keys.length < 2) return null;
+  const from = keys[keys.length - 2], to = keys[keys.length - 1];
+  const gap = (Date.parse(to) - Date.parse(from)) / 86400000;
+  if (gap > maxGapDays) return null;
+  const smm1 = Number(days[from].smm), smm2 = Number(days[to].smm);
+  const [w1, w2] = rollingAverage(days, 'weight', [from, to]);
+  return {
+    from, to, smm1, smm2,
+    delta: Math.round((smm2 - smm1) * 10) / 10,
+    weightDelta: w1 != null && w2 != null ? Math.round((w2 - w1) * 10) / 10 : null
+  };
 }

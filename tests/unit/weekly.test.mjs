@@ -47,3 +47,8 @@ test('傳 LINE 的文字', () => {
   const t = weeklyText({ from: '2026-11-09', to: '2026-11-15', good: ['A', 'B'], tryNext: 'C', name: '小明' }, (s) => s.slice(5).replace('-', '/'));
   assert.equal(t, '🌱 小芽週報（小明） 11/09～11/15\n這週做得好的事：\n✓ A\n✓ B\n下週可以試的一件事：\n👉 C');
 });
+
+test('週報：骨骼肌增加是好事；流失時下週先顧肌肉', () => {
+  assert.ok(buildWeekly({ ...base, muscle: { delta: 0.4 } }).good.includes('骨骼肌多了 0.4 公斤 💪'));
+  assert.match(buildWeekly({ ...base, muscle: { delta: -0.6 }, avgKcal: 2200 }).tryNext, /肌肉有一點流失/);
+});

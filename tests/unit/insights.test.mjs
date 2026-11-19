@@ -72,3 +72,19 @@ test('體重和上次試算差 2 公斤以上：提醒重新試算', () => {
   assert.match(text({ d: [day(), day(), day()], recalcKg: 2 }, 'recalc'), /多了 2 公斤/);
   assert.deepEqual(keys({ d: [day(), day(), day()], recalcKg: null }), []);
 });
+
+/* ---- 骨骼肌 ---- */
+test('減重時骨骼肌也少 0.5 公斤以上：提醒蛋白質、不要減太快', () => {
+  const ctx = { d: [day(), day(), day()], muscle: { to: '2026-11-10', delta: -0.6, weightDelta: -2 } };
+  assert.deepEqual(keys(ctx), ['muscle-down']);
+  assert.match(text(ctx, 'muscle-down'), /體重少了 2 公斤，骨骼肌也少了 0.6 公斤.*不要減太快/);
+  assert.match(text({ ...ctx, muscle: { to: 'x', delta: -0.5, weightDelta: 0.3 } }, 'muscle-down'), /骨骼肌比上次少了 0.5 公斤/);
+  assert.deepEqual(keys({ ...ctx, muscle: { to: 'x', delta: -0.4, weightDelta: -2 } }), [], '少 0.4 以內不提');
+});
+test('體重下降、骨骼肌增加：歡呼', () => {
+  const ins = buildInsights({ isToday: true, targetKcal: 1800, d: [day(), day(), day()], muscle: { to: '2026-11-10', delta: 0.4, weightDelta: -1.5 } });
+  assert.equal(ins[0].mood, 'cheer');
+  assert.equal(ins[0].key, 'muscle-up-2026-11-10');
+  assert.match(ins[0].text, /減的是脂肪/);
+  assert.deepEqual(keys({ d: [day(), day(), day()], muscle: { to: 'x', delta: 0.5, weightDelta: 1 } }), ['muscle-gain']);
+});

@@ -120,7 +120,7 @@ test('有 InBody 基礎代謝：預設用它，可以切回公式；只填體重
   await expect(page.locator('[data-calc-bmr=inbody]')).toContainText('1,720 kcal');
   await page.click('[data-calc-act=light]');
   await page.click('[data-calc-goal=lose]');
-  await expect(page.locator('#calcResult')).toContainText('基礎代謝 1,720（InBody）');
+  await expect(page.locator('#calcResult')).toContainText('基礎代謝 1,720（體脂機）');
   await expect(page.locator('#calcResult')).toContainText('1,870');
   // 切回公式：要填性別等資料
   await page.click('[data-calc-bmr=formula]');
@@ -129,4 +129,46 @@ test('有 InBody 基礎代謝：預設用它，可以切回公式；只填體重
   await page.click('#calcApplyBtn');
   const st = await appState(page);
   expect(st.targets).toMatchObject({ kcal: 1870, calc: { bmrSource: 'inbody', bmr: 1720 } });
+});
+
+test('有體重＋體脂率：可以用去脂體重算基礎代謝，也可以用目標體脂率訂目標體重', async ({ page }) => {
+  await seed(page, { days: { [ago(5)]: { weight: 68, bodyFat: 32 }, [ago(0)]: { weight: 67.6 } }, profile: { name: '', sex: 'f' }, profileAt: 1 });
+  await openApp(page);
+  await openCalc(page);
+  // 沒有體脂機的基礎代謝：預設用體脂率算（去脂 46.2 kg → 1,368）
+  await expect(page.locator('[data-calc-bmr=ffm]')).toHaveClass(/is-active/);
+  await expect(page.locator('[data-calc-bmr=ffm]')).toContainText('1,368 kcal');
+  await expect(page.locator('[data-calc-bmr=ffm]')).toContainText('去脂體重 46.2 kg');
+  await expect(page.locator('#calcResult')).toContainText('基礎代謝 1,368（依體脂率）');
+  await expect(page.locator('#calcFatInfo')).toContainText('一般建議女性體脂率低於 30%');
+  await page.fill('#calcTargetFat', '28');
+  await expect(page.locator('#calcFatResult')).toContainText('目標體重約 64.2 kg（比現在少 3.8 kg）');
+  await page.click('#calcApplyBtn');
+  const t = (await appState(page)).targets;
+  expect(t).toMatchObject({ weight: 64.2, bodyFat: 28, calc: { bmrSource: 'ffm', bmr: 1368 } });
+  // 手動改目標體重：目標體脂率拿掉
+  await page.click('#openTargetBtn');
+  await page.fill('#tgt-weight', '63');
+  await page.click('#saveTargetBtn');
+  expect((await appState(page)).targets.bodyFat).toBeUndefined();
+});
+
+test('骨骼肌：減重時肌肉也掉了，小提醒和營養師報告都會說', async ({ page }) => {
+  const errors = [];
+  await seed(page, {
+    days: { [ago(30)]: { weight: 72, smm: 24.1 }, [ago(2)]: { weight: 70, smm: 23.5 } },
+    meta: { welcomed: true, mascot: false }
+  });
+  await openApp(page, { errors });
+  await expect(page.locator('#tipsList')).toContainText('骨骼肌也少了 0.6 公斤');
+  // 體重・尺寸頁有骨骼肌欄位
+  await page.click('[data-screen=scr-weight]');
+  await page.click('#moreMeasures summary');
+  await expect(page.locator('#moreMeasures [data-day-num=smm]')).toBeVisible();
+  await page.click('#scr-weight [data-back]');
+  await page.click('.mobile-nav-tab[data-tab=report]');
+  await page.click('[data-days="7"]');
+  await page.click('#genReportBtn');
+  await expect(page.locator('#reportArea .hl')).toContainText('骨骼肌 24.1 → 23.5 kg（-0.6），同期體重 -2 kg：減掉的有一部分是肌肉');
+  expect(errors).toEqual([]);
 });

@@ -116,6 +116,8 @@
 
 `{ id, name, kcal, cat, isFav, p, c, f, ex, updatedAt }`，`cat` 為 `fav` / `breakfast` / `meal` / `drink`。預設項目 id 為 `f1`…`f17`。
 
+**即將停用**（2026-11-19 決定，11/26 之後的第 1 步）：由「我的食物」`customFoods` 取代，舊清單不轉移。欄位**不刪**：舊版 App 同步、舊備份檔匯入仍會讀寫它，新版要繼續原樣保留、照常合併，只是不顯示、不新增。
+
 ### meta（只存在這台裝置）
 
 `deviceId`、`welcomed`（true＝這台裝置已經選過歡迎畫面的開始方式）、`ai: { key, at }`（使用者自己的 Gemini API Key；**只存在這台裝置，絕不能放進同步檔或備份檔**，有 e2e 測試檢查）、`weeklySeen`（已看過的小芽週報，值是那週週一的日期）、`fontSize`（`m`/`l`/`xl`）、`mascot`（false＝關閉小芽）、`lastCheer`、`installHintDismissed`、`lastBackup`、`photoVer`（`{ entryId: 本機照片的 photoKey }`）、`cloud: { linked, email, auto, lastSync, lastBackup, knownModified, dirty, needAuth }`。

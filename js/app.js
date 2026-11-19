@@ -10,7 +10,7 @@ import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VE
 import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, muscleChange, sumLimbs, calcSmi, smiLow, latestSmi, SMI_CUTOFF, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
 import { mascotSVG, buildMascotMessages } from './mascot.js';
 import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS, energyDensity, isGlutinous } from './foods.js';
-import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage } from './meals.js';
+import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, shouldAskBackfill } from './meals.js';
 import { buildInsights } from './insights.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros } from './bank.js';
@@ -444,6 +444,7 @@ async function addEntry({ name, nutr, mult = 1, meal, photo = null, pending = fa
     pending: Boolean(pending), hasPhoto: Boolean(photo), p: s.p, c: s.c, f: s.f, ex: s.ex, updatedAt: now(),
     ...(extra || {})
   };
+  if (ui.date !== todayStr()) it.backfill = true;   // 記在過去的日期：時間是記錄的時間，不是吃的時間
   if (photo) await savePhoto(it.id, photo);
   (state.logs[ui.date] || (state.logs[ui.date] = [])).push(it);
   if (saveFav && (num(nutr.kcal) || 0) > 0 && !state.quickItems.some(q => q.name === it.name)) {
@@ -456,6 +457,7 @@ async function addEntry({ name, nutr, mult = 1, meal, photo = null, pending = fa
   renderAll();
   const hint = gapHint(it.meal);
   showToast('已加入「' + it.name + '」(' + it.kcal + ' kcal)' + hint, null, null, hint ? 6000 : 0);
+  askBackfill([it]);
 }
 function addFromQuick(q) {
   addEntry({ name: q.name, nutr: q, mult: 1, meal: ui.meal });
@@ -840,6 +842,7 @@ function saveFoodCart() {
       ...c.entry, ex: cleanEx(c.entry.ex), updatedAt: now()
     };
     if (groupId) it.groupId = groupId;
+    if (date !== todayStr()) it.backfill = true;
     if (c.photo) photos.push([it.id, c.photo]);
     return it;
   });
@@ -858,6 +861,7 @@ function saveFoodCart() {
     persist();
     renderAll();
   }, hint ? 8000 : 0);
+  askBackfill(added);
 }
 $('foodCartSaveBtn').addEventListener('click', () => {
   saveFoodCart();
@@ -2288,6 +2292,20 @@ $('libraryGrid').addEventListener('click', (e) => {
   if (add) { const it = state.quickItems.find(q => q.id === add.getAttribute('data-qid')); if (it) addFromQuick(it); }
 });
 
+/* ---------------- 夜間進食：分清楚是現在吃的還是事後補記 ---------------- */
+// 晚上 10 點到清晨 5 點記午餐或晚餐，多半是事後補記；問一下，補記的不算夜間進食（只影響給營養師的報告）
+function askBackfill(entries) {
+  const first = entries && entries[0];
+  if (!first || first.backfill || !shouldAskBackfill(first.meal, first.time)) return;
+  const label = MEAL_META[first.meal].label;
+  openConfirm(label + '是現在吃的嗎？', '現在是晚上 ' + first.time + '。如果是之前吃、現在才補記，請選「之前吃的」，給營養師的報告就不會算成夜間進食。',
+    () => {
+      const ids = new Set(entries.map(e => e.id));
+      (state.logs[ui.date] || []).forEach(e => { if (ids.has(e.id)) { e.backfill = true; touch(e); } });
+      persist();
+    }, '之前吃的（補記）', null, '現在吃的');
+}
+
 /* ---------------- 每餐份數分配／這一餐還差什麼 ---------------- */
 const MEALEX_MEALS = ['breakfast', 'lunch', 'dinner', 'snack'];
 function mealTarget(meal) { return (state.targets.mealEx || {})[meal] || null; }
@@ -2799,10 +2817,10 @@ function csvCell(v) {
 }
 function toCSV(rows) { return '﻿' + rows.map(r => r.map(csvCell).join(',')).join('\r\n'); }
 $('exportCsvBtn').addEventListener('click', () => {
-  const rows = [['日期', '時間', '餐別', '食物', '份數', '熱量(kcal)', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '暫估待修', '有照片']];
+  const rows = [['日期', '時間', '餐別', '食物', '份數', '熱量(kcal)', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '暫估待修', '有照片', '事後補記']];
   Object.keys(state.logs).sort().forEach(date => {
     (state.logs[date] || []).slice().sort((a, b) => MEAL_KEYS.indexOf(a.meal) - MEAL_KEYS.indexOf(b.meal) || (a.time || '').localeCompare(b.time || '')).forEach(it => {
-      rows.push([date, it.time, MEAL_META[it.meal].label, it.name, it.multiplier || 1, it.kcal, it.p, it.c, it.f, ...EX_KEYS.map(k => (it.ex && it.ex[k]) || ''), it.pending ? '是' : '', it.hasPhoto ? '是' : '']);
+      rows.push([date, it.time, MEAL_META[it.meal].label, it.name, it.multiplier || 1, it.kcal, it.p, it.c, it.f, ...EX_KEYS.map(k => (it.ex && it.ex[k]) || ''), it.pending ? '是' : '', it.hasPhoto ? '是' : '', it.backfill ? '是' : '']);
     });
   });
   downloadBlob('飲食明細_' + todayStr() + '.csv', toCSV(rows), 'text/csv;charset=utf-8');

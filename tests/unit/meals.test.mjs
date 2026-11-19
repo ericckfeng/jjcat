@@ -1,7 +1,7 @@
 // 一整餐的計算：購物車合計、複製某一餐（js/meals.js）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage } from '../../js/meals.js';
+import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, inNightWindow, isNightEntry, shouldAskBackfill, nightSummary } from '../../js/meals.js';
 
 test('合計熱量、營養素與六大類份數', () => {
   const t = sumNutr([
@@ -97,4 +97,38 @@ test('提示文字：缺的附生活份量，多的語氣溫和', () => {
   const done = gapMessage(mealGap([{ ex: { grain: 3 } }], { grain: 3 }), '早餐');
   assert.equal(done.short, '早餐的份數都夠了 👍');
   assert.equal(gapMessage(null, '午餐'), null);
+});
+
+/* ---- 夜間進食 ---- */
+test('夜間時段：晚上 10 點到早上 7 點', () => {
+  for (const t of ['22:00', '23:59', '00:00', '03:15', '06:59']) assert.equal(inNightWindow(t), true, t);
+  for (const t of ['07:00', '12:00', '21:59', '', null, '9:00']) assert.equal(inNightWindow(t), false, String(t));
+});
+
+test('夜間進食：早餐和補記的不算', () => {
+  assert.equal(isNightEntry({ meal: 'snack', time: '23:10' }), true);
+  assert.equal(isNightEntry({ meal: 'dinner', time: '22:30' }), true);
+  assert.equal(isNightEntry({ meal: 'breakfast', time: '06:30' }), false);
+  assert.equal(isNightEntry({ meal: 'dinner', time: '23:30', backfill: true }), false);
+  assert.equal(isNightEntry({ meal: 'snack', time: '15:00' }), false);
+});
+
+test('什麼時候問「是現在吃的嗎」：晚上 10 點到清晨 5 點記午餐或晚餐', () => {
+  assert.equal(shouldAskBackfill('dinner', '23:00'), true);
+  assert.equal(shouldAskBackfill('lunch', '01:30'), true);
+  assert.equal(shouldAskBackfill('snack', '23:00'), false, '宵夜就是宵夜');
+  assert.equal(shouldAskBackfill('dinner', '21:30'), false);
+  assert.equal(shouldAskBackfill('dinner', '05:30'), false);
+  assert.equal(shouldAskBackfill('breakfast', '23:00'), false);
+});
+
+test('一段期間的夜間進食', () => {
+  const logs = {
+    '2026-11-16': [{ meal: 'snack', time: '23:00', kcal: 300 }, { meal: 'dinner', time: '18:30', kcal: 600 }],
+    '2026-11-17': [{ meal: 'dinner', time: '23:30', kcal: 500, backfill: true }, { meal: 'breakfast', time: '06:00', kcal: 250 }],
+    '2026-11-18': [{ meal: 'snack', time: '00:30', kcal: 150 }, { meal: 'snack', time: '22:15', kcal: 200 }]
+  };
+  assert.deepEqual(nightSummary(logs, ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19']),
+    { days: 2, entries: 3, kcal: 650, byDate: { '2026-11-16': 300, '2026-11-18': 350 } });
+  assert.deepEqual(nightSummary({}, ['2026-11-16']), { days: 0, entries: 0, kcal: 0, byDate: {} });
 });

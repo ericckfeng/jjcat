@@ -101,3 +101,33 @@ export function gapMessage(gap, mealLabel) {
   const unknown = gap.unknown ? `有 ${gap.unknown} 筆沒有份數，沒算進來` : '';
   return { short, over, unknown };
 }
+
+/* ---------------- 夜間進食（只記錄給營養師看，不提示使用者、不和減熱量掛鉤） ---------------- */
+// 晚上 10 點到早上 7 點之間吃的；早餐不算（清晨吃早餐很正常）；補記的不算（時間是記錄的時間，不是吃的時間）
+export const NIGHT_FROM = '22:00';
+export const NIGHT_TO = '07:00';
+export function inNightWindow(time) {
+  const t = String(time || '');
+  if (!/^\d{2}:\d{2}$/.test(t)) return false;
+  return t >= NIGHT_FROM || t < NIGHT_TO;
+}
+export function isNightEntry(e) {
+  return Boolean(e) && e.meal !== 'breakfast' && !e.backfill && inNightWindow(e.time);
+}
+// 記錄時要不要問「是現在吃的嗎？」：晚上 10 點到清晨 5 點記午餐或晚餐，多半是事後補記
+export function shouldAskBackfill(meal, time) {
+  const t = String(time || '');
+  return (meal === 'lunch' || meal === 'dinner') && (t >= NIGHT_FROM || t < '05:00');
+}
+// 一段期間的夜間進食：{ days, entries, kcal, byDate: { 日期: kcal } }
+export function nightSummary(logs, dates) {
+  const byDate = {};
+  let entries = 0, kcal = 0;
+  (dates || []).forEach(d => {
+    const night = ((logs && logs[d]) || []).filter(isNightEntry);
+    if (!night.length) return;
+    const k = night.reduce((s, e) => s + (Number(e.kcal) || 0), 0);
+    byDate[d] = k; entries += night.length; kcal += k;
+  });
+  return { days: Object.keys(byDate).length, entries, kcal: Math.round(kcal), byDate };
+}

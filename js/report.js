@@ -2,6 +2,7 @@
 import { MEAL_KEYS, MEAL_META, MACRO_KEYS, MACRO_META, EX_KEYS, EX_META, HUNGER_LABELS, MOOD_OPTIONS, BOWEL_LABELS } from './nutrition.js';
 import { MEASURES, bmiCategory, weightAvgChange, muscleChange, latestSmi, smiLow, SMI_CUTOFF, daySleep, fmtDuration, sleepQualityLabel } from './body.js';
 import { waterGoal } from './targets.js';
+import { nightSummary } from './meals.js';
 import { buildHighlights } from './highlights.js';
 const EXTRA_MEASURES = MEASURES.filter(m => m.key !== 'weight' && m.key !== 'waist');
 
@@ -156,6 +157,9 @@ export async function buildReportHTML(ctx, opts) {
   const lastBmi = w.length ? calcBmi(w[w.length - 1].w, height) : null;
   h += stat('體重', w.length ? w[w.length - 1].w + ' kg' : '–', (wc ? '7 天平均 ' + wc.first + '→' + wc.last + ' kg（' + signed(wc.delta) + '）' : (tg.weight ? '目標 ' + tg.weight + ' kg' : '')) + (lastBmi ? '・BMI ' + lastBmi + ' ' + bmiCategory(lastBmi).label : ''));
   h += stat('喝水／運動', s.avgWater != null ? fmt(s.avgWater) + ' ml' : '–', '運動共 ' + s.exMinTotal + ' 分鐘');
+  // 夜間進食：只記錄供參考（晚上 10 點到早上 7 點，不含早餐與補記）
+  const night = nightSummary(state.logs, dates);
+  if (night.days) h += stat('夜間進食', night.days + ' 天', night.entries + ' 筆・共 ' + fmt(night.kcal) + ' kcal（22:00～07:00）');
   if (avgSleep != null) {
     const qs = sleepRows.filter(r => r.quality != null);
     const aq = qs.length ? qs.reduce((a, r) => a + r.quality, 0) / qs.length : null;
@@ -184,6 +188,7 @@ export async function buildReportHTML(ctx, opts) {
   if (cols.exercise) h += '<th>運動</th>';
   if (cols.sleep) h += '<th>睡眠(時)</th>';
   if (cols.sleepQ) h += '<th>睡眠品質</th>';
+  if (night.days) h += '<th>夜間(kcal)</th>';
   h += '</tr></thead><tbody>';
   // 目標列
   h += `<tr class="tgt"><td class="l">目標</td><td>${fmt(tg.kcal)}</td>`;
@@ -197,6 +202,7 @@ export async function buildReportHTML(ctx, opts) {
   if (cols.exercise) h += '<td></td>';
   if (cols.sleep) h += '<td>7–9</td>';
   if (cols.sleepQ) h += '<td></td>';
+  if (night.days) h += '<td></td>';
   h += '</tr>';
   dates.forEach((d, i) => {
     const t = s.totals[i];
@@ -214,6 +220,7 @@ export async function buildReportHTML(ctx, opts) {
     if (cols.exercise) h += `<td class="l">${esc(dd.exercise || '')}${dd.exMin ? ' ' + dd.exMin + '分' : ''}</td>`;
     if (cols.sleep) { const sr = sleepRows[i]; h += `<td class="${sr.total && sr.total < 360 ? 'under' : ''}">${sr.total ? r1(sr.total / 60) + (sr.nap ? '*' : '') : ''}</td>`; }
     if (cols.sleepQ) h += `<td>${dd.sleepQ != null ? sleepQualityLabel(dd.sleepQ) : ''}</td>`;
+    if (night.days) h += `<td>${night.byDate[d] != null ? fmt(night.byDate[d]) : ''}</td>`;
     h += '</tr>';
   });
   // 平均列
@@ -228,8 +235,9 @@ export async function buildReportHTML(ctx, opts) {
   if (cols.exercise) h += `<td>${s.exMinTotal ? s.exMinTotal + '分' : ''}</td>`;
   if (cols.sleep) h += `<td>${avgSleep != null ? r1(avgSleep / 60) : ''}</td>`;
   if (cols.sleepQ) h += '<td></td>';
+  if (night.days) h += `<td>${fmt(night.kcal)}</td>`;
   h += '</tr></tbody></table></div>';
-  h += '<div class="muted" style="margin-top:4px">紅字＝超過目標 10% 以上；橘字＝蔬菜／水果／乳品低於目標；* ＝當天有暫估待修的記錄（熱量欄）或含補眠（睡眠欄）。昨晚的睡眠記在起床那天（含當天補眠），橘字＝不到 6 小時。營養素與份數只計入有填的記錄。</div>';
+  h += '<div class="muted" style="margin-top:4px">紅字＝超過目標 10% 以上；橘字＝蔬菜／水果／乳品低於目標；* ＝當天有暫估待修的記錄（熱量欄）或含補眠（睡眠欄）。昨晚的睡眠記在起床那天（含當天補眠），橘字＝不到 6 小時。營養素與份數只計入有填的記錄。' + (night.days ? '夜間＝晚上 10 點到早上 7 點吃的（不含早餐與事後補記），只記錄供參考。' : '') + '</div>';
 
   // 想問營養師
   const qs = dates.filter(d => days[d] && days[d].question);
@@ -344,6 +352,8 @@ export function buildReportText(ctx, opts) {
   if (s.avgWater != null) extra.push('平均喝水 ' + fmt(s.avgWater) + ' ml');
   if (s.exMinTotal) extra.push('運動共 ' + s.exMinTotal + ' 分鐘');
   const sl = dates.map(d => daySleep(state.days[d])).filter(r => r.total > 0);
+  const nt = nightSummary(state.logs, dates);
+  if (nt.days) extra.push('夜間進食（22:00～07:00）' + nt.days + ' 天、' + nt.entries + ' 筆、共 ' + fmt(nt.kcal) + ' kcal');
   if (sl.length) extra.push('平均睡眠 ' + r1(sl.reduce((a, r) => a + r.total, 0) / sl.length / 60) + ' 小時（不到 6 小時 ' + sl.filter(r => r.total < 360).length + ' 天）');
   if (extra.length) lines.push(extra.join('｜'));
   if (s.pending) lines.push('⚠ 有 ' + s.pending + ' 筆是暫估、還沒修正');

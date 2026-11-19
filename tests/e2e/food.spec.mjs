@@ -1,6 +1,6 @@
 // 查食物・秤克數：搜尋衛福部資料庫、輸入克數、存成一筆飲食記錄
 import { test, expect } from '@playwright/test';
-import { openApp, appState } from './helpers.mjs';
+import { openApp, appState, closeScreens, openSettings } from './helpers.mjs';
 
 async function openFood(page) {
   await page.click('[data-screen=scr-food]');
@@ -178,10 +178,11 @@ test('糯米類提醒：預設不顯示；打開「我在控制血糖」後，�
   await expect(page.locator('#foodResults .pick-row', { hasText: '肉粽' }).first()).toBeVisible();
   await expect(page.locator('#foodResults [data-glutinous]')).toHaveCount(0);
   await page.click('#scr-food .scr-foot [data-back]');
-  await page.click('#openTargetBtn');
+  await openSettings(page, '[data-screen=scr-profile]');
   await page.check('#sugarCareToggle');
-  await page.click('#saveTargetBtn');
+  await page.click('#profileSaveBtn');
   expect((await appState(page)).profile.sugarCare).toBe(true);
+  await closeScreens(page);
   await openFood(page);
   await page.fill('#foodSearch', '肉粽');
   const row = page.locator('#foodResults .pick-row', { hasText: '肉粽' }).first();
@@ -193,8 +194,8 @@ test('糯米類提醒：預設不顯示；打開「我在控制血糖」後，�
   await expect(page.locator('#foodResults .pick-row', { hasText: '糯米椒' }).first().locator('[data-glutinous]')).toHaveCount(0);
   // 關掉
   await page.click('#scr-food .scr-foot [data-back]');
-  await page.click('#openTargetBtn');
+  await openSettings(page, '[data-screen=scr-profile]');
   await page.uncheck('#sugarCareToggle');
-  await page.click('#saveTargetBtn');
+  await page.click('#profileSaveBtn');
   expect((await appState(page)).profile.sugarCare).toBeUndefined();
 });

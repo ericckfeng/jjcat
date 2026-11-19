@@ -1,7 +1,7 @@
 // 舊版資料相容性：每一種曾經存在過的備份格式都要能匯入，資料不能遺失
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { openApp, appState, photoBytes, importFile } from './helpers.mjs';
+import { openApp, appState, photoBytes, importFile, closeScreens, openSettings } from './helpers.mjs';
 
 const fx = (name) => new URL('../fixtures/' + name, import.meta.url).pathname;
 
@@ -85,7 +85,7 @@ test('含新版資料的備份檔：看不懂的最上層資料會保留，重�
   await page.waitForFunction(() => window.__dietApp);
   s = await appState(page);
   expect(s.customFoods.map(x => x.id)).toEqual(['cf_1', 'cf_2']);
-  await page.click('.mobile-nav-tab[data-tab=report]');
+  await openSettings(page, '#setDataRow');
   const [download] = await Promise.all([page.waitForEvent('download'), page.click('#exportJsonBtn')]);
   const out = JSON.parse(readFileSync(await download.path(), 'utf8'));
   expect(out.customFoods.map(x => x.id)).toEqual(['cf_1', 'cf_2']);

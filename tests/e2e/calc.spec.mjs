@@ -1,6 +1,6 @@
 // 依體重試算目標：試算畫面、套用、喝水目標、手動改過就不再提醒重算
 import { test, expect } from '@playwright/test';
-import { openApp, appState } from './helpers.mjs';
+import { openApp, appState, closeScreens, openSettings } from './helpers.mjs';
 
 function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 const ago = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return ymd(d); };
@@ -13,10 +13,9 @@ async function seed(page, data) {
   }, data);
 }
 async function openCalc(page) {
-  await page.click('#openTargetBtn');
+  await closeScreens(page); await page.click('#openTargetBtn');
   await page.click('#openCalcBtn');
   await expect(page.locator('#scr-calc')).toBeVisible();
-  await expect(page.locator('#targetModal')).toBeHidden();
 }
 
 test('試算：體重用 7 天平均，填好資料算出建議，套用後寫入目標與個人資料', async ({ page }) => {
@@ -90,13 +89,14 @@ test('體重和試算時差 2 公斤：小芽提醒重算；手動改過目標�
   });
   await openApp(page);
   await expect(page.locator('#tipsList')).toContainText('體重比上次試算時少了 2.3 公斤');
-  // 只改名字：還是試算的目標
-  await page.click('#openTargetBtn');
+  // 只改名字（基本資料）：還是試算的目標
+  await openSettings(page, '[data-screen=scr-profile]');
   await page.fill('#profileName', '王小明');
-  await page.click('#saveTargetBtn');
+  await page.click('#profileSaveBtn');
+  expect((await appState(page)).profile.name).toBe('王小明');
   expect((await appState(page)).targets.calc).toBeTruthy();
   // 手動改熱量：變成自己的目標，不再提醒
-  await page.click('#openTargetBtn');
+  await closeScreens(page); await page.click('#openTargetBtn');
   await expect(page.locator('#tgt-water')).toHaveValue('2800');
   await page.fill('#tgt-kcal', '1700');
   await page.click('#saveTargetBtn');
@@ -147,7 +147,7 @@ test('有體重＋體脂率：可以用去脂體重算基礎代謝，也可以�
   const t = (await appState(page)).targets;
   expect(t).toMatchObject({ weight: 64.2, bodyFat: 28, calc: { bmrSource: 'ffm', bmr: 1368 } });
   // 手動改目標體重：目標體脂率拿掉
-  await page.click('#openTargetBtn');
+  await closeScreens(page); await page.click('#openTargetBtn');
   await page.fill('#tgt-weight', '63');
   await page.click('#saveTargetBtn');
   expect((await appState(page)).targets.bodyFat).toBeUndefined();
@@ -166,7 +166,7 @@ test('骨骼肌：減重時肌肉也掉了，小提醒和營養師報告都會�
   await page.click('#moreMeasures summary');
   await expect(page.locator('#moreMeasures [data-day-num=smm]')).toBeVisible();
   await page.click('#scr-weight [data-back]');
-  await page.click('.mobile-nav-tab[data-tab=report]');
+  await closeScreens(page); await page.click('.mobile-nav-tab[data-tab=report]');
   await page.click('[data-days="7"]');
   await page.click('#genReportBtn');
   await expect(page.locator('#reportArea .hl')).toContainText('骨骼肌 24.1 → 23.5 kg（-0.6），同期體重 -2 kg：減掉的有一部分是肌肉');
@@ -186,7 +186,7 @@ test('內臟脂肪、相位角、細胞外水分比：可以記錄，報告和�
   await page.click('#scr-weight [data-back]');
   const d = (await appState(page)).days[ago(0)];
   expect(d).toMatchObject({ vfl: 11, pa: 4.8, ecw: 0.392, vfa: 261.7 });
-  await page.click('.mobile-nav-tab[data-tab=report]');
+  await closeScreens(page); await page.click('.mobile-nav-tab[data-tab=report]');
   await page.click('[data-days="7"]');
   await page.click('#genReportBtn');
   const head = page.locator('#reportArea thead');
@@ -217,14 +217,14 @@ test('四肢肌肉量：手腳四個數字幫忙加總，算出 SMI；偏低時�
   await expect(page.locator('#smiText')).toContainText('SMI 6.4 kg/m²');
   await expect(page.locator('#smiText')).toContainText('肌肉偏少');
   await page.click('#scr-weight [data-back]');
-  await page.click('#openTargetBtn');
+  await closeScreens(page); await page.click('#openTargetBtn');
   await page.click('#openCalcBtn');
   await page.fill('#calcBirthYear', String(birthYearFor(58)));
   await expect(page.locator('#calcResult')).toContainText('四肢骨骼肌指數 6.4 kg/m² 偏低');
   await page.click('[data-calc-goal=keep]');
   await expect(page.locator('#calcResult')).not.toContainText('偏低');
   await page.click('#scr-calc [data-back]');
-  await page.click('.mobile-nav-tab[data-tab=report]');
+  await closeScreens(page); await page.click('.mobile-nav-tab[data-tab=report]');
   await page.click('[data-days="7"]');
   await page.click('#genReportBtn');
   await expect(page.locator('#reportArea .hl')).toContainText('四肢骨骼肌指數 6.4 kg/m²，低於肌少症參考值 7.0（AWGS 2019）');

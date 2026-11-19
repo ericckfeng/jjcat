@@ -416,7 +416,7 @@ $('addNutrFields').innerHTML = nutrFieldsHTML('add');
 $('editNutrFields').innerHTML = nutrFieldsHTML('edit');
 $('qiNutrFields').innerHTML = nutrFieldsHTML('qi');
 $('tgtExFields').innerHTML = EX_KEYS.map(k =>
-  `<label class="block"><span class="block text-[0.625rem] text-stone-500 mb-0.5">${EX_META[k].emoji} ${EX_META[k].short}</span><input id="tgt-ex-${k}" type="number" inputmode="decimal" min="0" step="any" placeholder="份" class="field px-2 py-1.5 min-h-[38px] text-center tabular-nums" /></label>`
+  `<label class="block"><span class="block text-sm text-stone-600">${EX_META[k].emoji} ${EX_META[k].short}</span><input id="tgt-ex-${k}" type="number" inputmode="decimal" min="0" step="any" placeholder="份" class="field text-center tabular-nums" /></label>`
 ).join('');
 
 document.addEventListener('click', (e) => {
@@ -883,6 +883,7 @@ function openScreen(id) {
   if (screenStack.includes(id)) return;
   el.classList.remove('hidden');
   screenStack.push(id);
+  el.style.zIndex = String(45 + screenStack.length);   // 後打開的疊在上面（不看 HTML 裡的順序）
   history.pushState({ screen: id }, '');
   document.body.style.overflow = 'hidden';
   el.querySelector('.scr-body').scrollTop = 0;
@@ -896,6 +897,11 @@ function openScreen(id) {
   if (id === 'scr-water') renderWaterBig();
   if (id === 'scr-calc') { initCalc(); renderCalc(); }
   if (id === 'scr-mealex') renderMealEx();
+  if (id === 'scr-settings') renderSettings();
+  if (id === 'scr-profile') renderProfileScreen();
+  if (id === 'scr-targets') fillTargetFields();
+  if (id === 'scr-features') renderFeatures();
+  if (id === 'scr-about') $('appVersionText').textContent = '版本 ' + APP_VERSION;
   if (id === 'scr-weekly') renderWeekly();
   if (id === 'scr-ai') resetAi();
   if (id === 'scr-manual') setBox('aiLabelNote', null, '');
@@ -1673,10 +1679,7 @@ function renderAiUi() {
   const on = Boolean(aiKey());
   $('aiTile').classList.toggle('hidden', !on);
   $('aiLabelWrap').classList.toggle('hidden', !on);
-  $('aiStatusText').textContent = on
-    ? '已開啟：首頁有「AI 幫我認」，自己輸入可以拍營養標示。Key 只存在這支手機。'
-    : '用自己的免費 Google API Key：拍一餐或說一句話，AI 拆成一樣一樣記；拍營養標示自動填數字。預設關閉。';
-  $('aiSetupBtn').textContent = on ? 'AI 辨識設定' : '設定 AI 辨識';
+  $('aiStatusText').textContent = on ? '已開啟（Key 只存在這支手機）' : '關閉・用自己的免費 Google API Key';
 }
 
 // 設定頁
@@ -2039,21 +2042,24 @@ function finishWelcome() {
 $('welcomeCloudBtn').classList.toggle('hidden', !cloud.isConfigured());
 $('welcomeCloudBtn').addEventListener('click', () => {
   if (cloud.isBlockedInAppBrowser()) { $('welcomeInAppWarn').classList.remove('hidden'); return; }
-  // 先回到雲端區塊再登入，登入失敗的訊息才看得到
-  finishWelcome();
-  goToCloudSection();
+  // 先到雲端區塊再登入，登入失敗的訊息才看得到
+  state.meta.welcomed = true;
+  persistLocal();
+  swapScreen('scr-data');
   setTimeout(() => cloudRun('connect'), 300);
 });
 $('welcomeImportBtn').addEventListener('click', () => {
   $('importJsonInput').click();
-  finishWelcome();
-  switchTab('report');
-  setTimeout(() => $('backupSection').scrollIntoView({ behavior: 'smooth' }), 50);
+  state.meta.welcomed = true;
+  persistLocal();
+  swapScreen('scr-data');
+  setTimeout(() => $('backupSection').scrollIntoView({ behavior: 'smooth' }), 400);
 });
 $('welcomeStartBtn').addEventListener('click', finishWelcome);
 
+// 設定 → 資料與備份（雲端同步、備份）；已經開著別的頁面時直接疊上去
 function goToCloudSection() {
-  switchTab('report');
+  openScreen('scr-data');
   const target = cloud.isConfigured() ? $('cloudSection') : $('backupSection');
   setTimeout(() => target.scrollIntoView({ behavior: 'smooth' }), 50);
 }
@@ -2354,6 +2360,92 @@ $('whenOkBtn').addEventListener('click', () => {
   showToast(to !== w.date ? '已記到 ' + fmtMD(to) + ' ' + MEAL_META[w.meal].label + '（' + time + '）' : '時間改成 ' + time);
 });
 
+/* ---------------- ⚙️ 設定 ---------------- */
+// 版本號取自 index.html 載入 app.js 的 ?v=N（發佈時本來就要加 1，不用另外改）
+const APP_VERSION = 'v' + (new URL(import.meta.url).searchParams.get('v') || '?');
+function renderSettings() {
+  const pr = state.profile;
+  const age = ageFrom(pr.birthYear);
+  $('setProfileSub').textContent = [pr.name, pr.sex === 'm' ? '男' : pr.sex === 'f' ? '女' : '', age ? age + ' 歲' : '', pr.height ? pr.height + ' 公分' : '']
+    .filter(Boolean).join('・') || '名字、性別、出生年、身高';
+  const t = state.targets;
+  $('setTargetsSub').textContent = '每天 ' + (t.kcal || 1800).toLocaleString() + ' kcal' + (t.mealEx ? '・有每餐份數' : '') + (t.calc ? '・依體重試算' : '');
+  $('setFeaturesSub').textContent = '字體 ' + FONT_SIZES[FONT_SIZES[state.meta.fontSize] ? state.meta.fontSize : 'l'].label
+    + '・小芽 ' + (state.meta.mascot === false ? '關' : '開') + '・熱量銀行 ' + (t.bank ? '開' : '關');
+  const c = state.meta.cloud;
+  $('setDataSub').textContent = cloud.isConfigured() && c.linked ? '雲端同步：已連結' + (c.email ? '（' + c.email + '）' : '') : '雲端同步、下載備份、匯入、匯出 CSV';
+  $('setAboutSub').textContent = '版本 ' + APP_VERSION + '・隱私權政策・資料來源';
+}
+
+// 我的基本資料
+const pfDraft = { sex: null, activity: 'low' };
+function renderProfileScreen() {
+  const pr = state.profile;
+  pfDraft.sex = pr.sex || null;
+  pfDraft.activity = pr.activity || 'low';
+  $('profileName').value = pr.name || '';
+  $('pfBirthYear').value = pr.birthYear || '';
+  $('pfHeight').value = pr.height || '';
+  $('sugarCareToggle').checked = Boolean(pr.sugarCare);
+  renderProfileChoices();
+}
+function renderProfileChoices() {
+  document.querySelectorAll('[data-pf-sex]').forEach(b => b.classList.toggle('is-active', b.getAttribute('data-pf-sex') === pfDraft.sex));
+  $('pfActivity').innerHTML = choiceHTML('data-pf-act', ACTIVITY, pfDraft.activity);
+}
+$('scr-profile').addEventListener('click', (e) => {
+  const sx = e.target.closest('[data-pf-sex]');
+  const act = e.target.closest('[data-pf-act]');
+  if (sx) pfDraft.sex = pfDraft.sex === sx.getAttribute('data-pf-sex') ? null : sx.getAttribute('data-pf-sex');
+  else if (act) pfDraft.activity = act.getAttribute('data-pf-act');
+  else return;
+  renderProfileChoices();
+});
+$('profileSaveBtn').addEventListener('click', () => {
+  const h = num($('pfHeight').value);
+  const by = num($('pfBirthYear').value);
+  if (h && (h < 100 || h > 230)) { showToast('身高請填 100～230 公分'); return; }
+  if (by && !ageFrom(by)) { showToast('出生年好像不對，請再看一下'); return; }
+  const next = { ...state.profile, name: $('profileName').value.trim(), sex: pfDraft.sex, height: h || null, birthYear: by || null, activity: pfDraft.activity };
+  if ($('sugarCareToggle').checked) next.sugarCare = true; else delete next.sugarCare;
+  const changed = ['name', 'sex', 'height', 'birthYear', 'activity', 'sugarCare'].some(k => (next[k] ?? null) !== (state.profile[k] ?? null));
+  if (changed) { state.profile = next; state.profileAt = now(); persist(); }
+  renderAll();
+  closeScreen();
+  showToast(changed ? '已儲存基本資料' : '沒有變更');
+});
+
+// 功能開關與字體：按下去就生效
+function renderFeatures() {
+  const cur = FONT_SIZES[state.meta.fontSize] ? state.meta.fontSize : 'l';
+  $('fontSizeGroup').innerHTML = Object.entries(FONT_SIZES).map(([k, f]) =>
+    `<button type="button" data-font="${k}" class="toggle-btn ${k === cur ? 'is-active' : ''}" style="font-size:${f.px}px">${f.label}</button>`).join('');
+  $('mascotToggle').checked = state.meta.mascot !== false;
+  $('bankToggle').checked = Boolean(state.targets.bank);
+}
+$('fontSizeGroup').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-font]');
+  if (!b) return;
+  state.meta.fontSize = b.getAttribute('data-font');
+  persistLocal();
+  applyFontSize();
+  renderFeatures();
+});
+$('mascotToggle').addEventListener('change', () => {
+  state.meta.mascot = $('mascotToggle').checked;
+  persistLocal();
+  renderAll();
+});
+$('bankToggle').addEventListener('change', () => {
+  const next = { ...state.targets };
+  if ($('bankToggle').checked) next.bank = true; else delete next.bank;
+  state.targets = next;
+  state.targetsAt = now();
+  persist();
+  renderAll();
+  showToast($('bankToggle').checked ? '已開啟熱量銀行' : '已關閉熱量銀行');
+});
+
 /* ---------------- 每餐份數分配／這一餐還差什麼 ---------------- */
 const MEALEX_MEALS = ['breakfast', 'lunch', 'dinner', 'snack'];
 function mealTarget(meal) { return (state.targets.mealEx || {})[meal] || null; }
@@ -2439,7 +2531,7 @@ $('mealExSaveBtn').addEventListener('click', () => {
   closeScreen();
   showToast(Object.keys(me).length ? '已儲存每餐份數，記完一餐就會告訴你還差什麼' : '已清除每餐份數');
 });
-$('openMealExBtn').addEventListener('click', () => { closeModal('targetModal'); openScreen('scr-mealex'); });
+$('openMealExBtn').addEventListener('click', () => openScreen('scr-mealex'));
 
 /* ---------------- 依體重試算目標 ---------------- */
 const calcDraft = { sex: null, activity: 'low', goal: 'slow', protein: 1.2, inbody: null, comp: null, bmrSrc: 'formula' };
@@ -2540,7 +2632,7 @@ function renderCalcFat() {
     : '填了就會算出目標體重。';
 }
 $('calcTargetFat').addEventListener('input', renderCalcFat);
-$('openCalcBtn').addEventListener('click', () => { closeModal('targetModal'); openScreen('scr-calc'); });
+$('openCalcBtn').addEventListener('click', () => openScreen('scr-calc'));
 $('scr-calc').addEventListener('click', (e) => {
   const sex = e.target.closest('[data-calc-sex]');
   const act = e.target.closest('[data-calc-act]');
@@ -2573,6 +2665,7 @@ function applyCalc() {
   state.targetsAt = now();
   persist();
   renderAll();
+  fillTargetFields();   // 底下的每日目標頁換成新的數字
   closeScreen();
   showToast('已設定目標：每天 ' + t.kcal.toLocaleString() + ' kcal');
 }
@@ -2589,19 +2682,16 @@ $('calcApplyBtn').addEventListener('click', () => {
 });
 
 /* ---------------- 事件：目標設定 ---------------- */
-$('openTargetBtn').addEventListener('click', () => {
+// 每日目標頁（右上「目標」或設定 → 每日目標）
+function fillTargetFields() {
   const t = state.targets;
   $('tgt-kcal').value = t.kcal;
   MACRO_KEYS.forEach(k => { $('tgt-' + k).value = t[k] ?? ''; });
   EX_KEYS.forEach(k => { $('tgt-ex-' + k).value = (t.ex && t.ex[k]) ?? ''; });
   $('tgt-weight').value = t.weight ?? '';
   $('tgt-water').value = t.water ?? '';
-  $('profileName').value = state.profile.name || '';
-  $('mascotToggle').checked = state.meta.mascot !== false;
-  $('bankToggle').checked = Boolean(t.bank);
-  $('sugarCareToggle').checked = Boolean(state.profile.sugarCare);
-  openModal('targetModal');
-});
+}
+$('openTargetBtn').addEventListener('click', () => openScreen('scr-targets'));
 document.querySelectorAll('.preset-btn').forEach(btn => btn.addEventListener('click', () => { $('tgt-kcal').value = btn.getAttribute('data-preset'); }));
 $('deriveTargetBtn').addEventListener('click', () => {
   const ex = {};
@@ -2626,29 +2716,15 @@ $('saveTargetBtn').addEventListener('click', () => {
   };
   // 手動改過熱量、營養素或喝水，就不再是試算的數字：拿掉試算記錄（之後不會提醒重算）
   if (['kcal', 'p', 'c', 'f', 'water'].some(k => (next[k] ?? null) !== (state.targets[k] ?? null))) delete next.calc;
-  if ($('bankToggle').checked) next.bank = true; else delete next.bank;
   // 手動改目標體重：不再是用體脂率算的
   if ((next.weight ?? null) !== (state.targets.weight ?? null)) delete next.bodyFat;
   state.targets = next;
   state.targetsAt = now();
-  if (state.profile.name !== $('profileName').value.trim()) {
-    state.profile.name = $('profileName').value.trim();
-    state.profileAt = now();
-  }
-  // 「我在控制血糖」存在個人資料（會同步）
-  const care = $('sugarCareToggle').checked;
-  if (care !== Boolean(state.profile.sugarCare)) {
-    state.profile = { ...state.profile };
-    if (care) state.profile.sugarCare = true; else delete state.profile.sugarCare;
-    state.profileAt = now();
-  }
-  state.meta.mascot = $('mascotToggle').checked;
   persist();
   renderAll();
-  closeModal('targetModal');
+  closeScreen();
   showToast('已更新目標');
 });
-$('openSourceBtn').addEventListener('click', () => openModal('sourceModal'));
 document.addEventListener('click', (e) => { if (e.target.closest('[data-open-sources]')) openModal('sourceModal'); });
 
 /* ---------------- 份量估算器 ---------------- */

@@ -1,6 +1,6 @@
 // 體重趨勢：每天的點＋7 天平均線，體重變化看平均
 import { test, expect } from '@playwright/test';
-import { openApp } from './helpers.mjs';
+import { openApp, closeScreens, openSettings } from './helpers.mjs';
 
 function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 const ago = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return ymd(d); };
@@ -20,7 +20,7 @@ test('體重顯示 7 天平均與平均的期間變化；其他指標不顯示�
     localStorage.setItem('diet_tracker_v2', JSON.stringify({ logs: {}, days, quickItems: [], tomb: {}, meta: { welcomed: true } }));
   }, days);
   await openApp(page, { errors });
-  await page.click('.mobile-nav-tab[data-tab=trends]');
+  await closeScreens(page); await page.click('.mobile-nav-tab[data-tab=trends]');
   // 第一天平均 (71+70)/2 = 70.5；今天平均（前 6 天內）(70+71.2+69.4+69.6)/4 = 70.05 → 70.1
   await expect(page.locator('#bodyMetricSummary')).toHaveText('最新 69.6 kg・7 天平均 70.1 kg（期間 -0.4）');
   await expect(page.locator('#weightAvgNote')).toBeVisible();
@@ -45,7 +45,7 @@ test('營養師報告與 LINE 文字：體重變化看 7 天平均', async ({ pa
     localStorage.setItem('diet_tracker_v2', JSON.stringify({ logs: {}, days, quickItems: [], tomb: {}, meta: { welcomed: true } }));
   }, days);
   await openApp(page);
-  await page.click('.mobile-nav-tab[data-tab=report]');
+  await closeScreens(page); await page.click('.mobile-nav-tab[data-tab=report]');
   await page.click('[data-days="7"]');
   await page.click('#genReportBtn');
   await expect(page.locator('#reportArea')).toContainText('7 天平均 70.5→70.1 kg（-0.4）');

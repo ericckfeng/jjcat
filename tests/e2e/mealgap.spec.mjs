@@ -1,6 +1,6 @@
 // 這一餐還差什麼：每餐份數分配、首頁每一餐顯示、記完一餐的提示
 import { test, expect } from '@playwright/test';
-import { openApp, appState } from './helpers.mjs';
+import { openApp, appState, closeScreens, openSettings } from './helpers.mjs';
 
 function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 
@@ -15,7 +15,7 @@ test('設定每餐份數：可以照每日份數平均分，三餐加起來對�
   const errors = [];
   await seed(page, { kcal: 1500, ex: { grain: 9, prot: 5, veg: 4, oil: 4, fruit: 2, dairy: 1 } });
   await openApp(page, { errors });
-  await page.click('#openTargetBtn');
+  await closeScreens(page); await page.click('#openTargetBtn');
   await page.click('#openMealExBtn');
   await expect(page.locator('#scr-mealex')).toBeVisible();
   await page.click('#mealExSplitBtn');
@@ -38,7 +38,7 @@ test('設定每餐份數：可以照每日份數平均分，三餐加起來對�
   expect(t.mealEx.snack).toBeUndefined();
   expect(t.kcal).toBe(1500);
   // 每日目標視窗存檔不會弄掉每餐份數
-  await page.click('#openTargetBtn');
+  await closeScreens(page); await page.click('#openTargetBtn');
   await page.click('#saveTargetBtn');
   expect((await appState(page)).targets.mealEx.lunch.grain).toBe(3);
   expect(errors).toEqual([]);

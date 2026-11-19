@@ -1,6 +1,6 @@
 // 熱量銀行：設定開啟、首頁顯示本週進度與今天的建議
 import { test, expect } from '@playwright/test';
-import { openApp, appState } from './helpers.mjs';
+import { openApp, appState, closeScreens, openSettings } from './helpers.mjs';
 import { weekOf } from '../../js/bank.js';
 
 function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -48,15 +48,15 @@ test('開啟後：前幾天多吃，今天的目標下修，蛋白質不變', as
 test('在「每日目標」打開／關閉熱量銀行', async ({ page }) => {
   await seed(page, { bank: false, perDay: 1800 });
   await openApp(page);
-  await page.click('#openTargetBtn');
+  await openSettings(page, '[data-screen=scr-features]');
   await page.check('#bankToggle');
-  await page.click('#saveTargetBtn');
+  await closeScreens(page);
   expect((await appState(page)).targets.bank).toBe(true);
   await expect(page.locator('#bankBox')).toBeVisible();
-  await page.click('#openTargetBtn');
+  await openSettings(page, '[data-screen=scr-features]');
   await expect(page.locator('#bankToggle')).toBeChecked();
   await page.uncheck('#bankToggle');
-  await page.click('#saveTargetBtn');
+  await closeScreens(page);
   expect((await appState(page)).targets.bank).toBeUndefined();
   await expect(page.locator('#bankBox')).toBeHidden();
 });

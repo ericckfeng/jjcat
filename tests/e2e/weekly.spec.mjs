@@ -1,6 +1,6 @@
 // 小芽週報：首頁卡片、週報畫面、看過就收起來、分享文字
 import { test, expect } from '@playwright/test';
-import { openApp } from './helpers.mjs';
+import { openApp, closeScreens, openSettings } from './helpers.mjs';
 import { lastWeek } from '../../js/highlights.js';
 
 function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -46,7 +46,7 @@ test('上週有記：首頁出現週報卡片，打開看到做得好的事和�
   await page.waitForFunction(() => window.__dietApp);
   await expect(page.locator('#weeklyCard')).toBeHidden();
   // 報告頁隨時可以打開
-  await page.click('.mobile-nav-tab[data-tab=report]');
+  await closeScreens(page); await page.click('.mobile-nav-tab[data-tab=report]');
   await page.click('#tab-report [data-screen=scr-weekly]');
   await expect(page.locator('#weeklyGood li')).toHaveCount(3);
   expect(errors).toEqual([]);
@@ -56,7 +56,7 @@ test('上週記不到 3 天：首頁不出現卡片；完全沒記時週報畫�
   await seed(page, 2);
   await openApp(page);
   await expect(page.locator('#weeklyCard')).toBeHidden();
-  await page.click('.mobile-nav-tab[data-tab=report]');
+  await closeScreens(page); await page.click('.mobile-nav-tab[data-tab=report]');
   await page.click('#tab-report [data-screen=scr-weekly]');
   await expect(page.locator('#weeklyTry')).toContainText('每天至少記一餐');
 });
@@ -64,7 +64,7 @@ test('上週記不到 3 天：首頁不出現卡片；完全沒記時週報畫�
 test('上週完全沒記：週報畫面顯示說明，不顯示分享', async ({ page }) => {
   await seed(page, 0);
   await openApp(page);
-  await page.click('.mobile-nav-tab[data-tab=report]');
+  await closeScreens(page); await page.click('.mobile-nav-tab[data-tab=report]');
   await page.click('#tab-report [data-screen=scr-weekly]');
   await expect(page.locator('#weeklyEmpty')).toBeVisible();
   await expect(page.locator('#weeklyShareBtn')).toBeHidden();

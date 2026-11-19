@@ -1,6 +1,6 @@
 // 夜間進食：只記錄給營養師看；補記的不算
 import { test, expect } from '@playwright/test';
-import { openApp, appState } from './helpers.mjs';
+import { openApp, appState, closeScreens, openSettings } from './helpers.mjs';
 
 function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 const ago = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return ymd(d); };
@@ -16,7 +16,7 @@ test('報告：夜間進食的天數、筆數、熱量，每日總表一欄；�
     [ago(1)]: [{ id: 'e', name: '泡麵', kcal: 400, meal: 'snack', time: '00:30', updatedAt: 1 }]
   } });
   await openApp(page, { errors });
-  await page.click('.mobile-nav-tab[data-tab=report]');
+  await closeScreens(page); await page.click('.mobile-nav-tab[data-tab=report]');
   await page.click('[data-days="7"]');
   await page.click('#genReportBtn');
   const area = page.locator('#reportArea');
@@ -36,7 +36,7 @@ test('沒有夜間進食時，報告不出現這一格和這一欄', async ({ pa
     localStorage.setItem('diet_tracker_v2', JSON.stringify({ logs, days: {}, quickItems: [], tomb: {}, meta: { welcomed: true }, targets: { kcal: 1800, ex: {} }, targetsAt: 1 }));
   }, { logs: { [ago(1)]: [{ id: 'a', name: '便當', kcal: 700, meal: 'lunch', time: '12:00', updatedAt: 1 }] } });
   await openApp(page);
-  await page.click('.mobile-nav-tab[data-tab=report]');
+  await closeScreens(page); await page.click('.mobile-nav-tab[data-tab=report]');
   await page.click('[data-days="7"]');
   await page.click('#genReportBtn');
   await expect(page.locator('#reportArea')).not.toContainText('夜間');

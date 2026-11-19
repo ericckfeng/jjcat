@@ -36,8 +36,22 @@ export async function photoBytes(page, id) {
   }), id);
 }
 
+// 關掉所有開著的全螢幕頁（像手機按返回鍵）
+export async function closeScreens(page) {
+  for (let i = 0; i < 8; i++) {
+    if (!(await page.locator('.screen:not(.hidden)').count())) return;
+    await page.goBack();
+  }
+}
+// ⚙️ 設定 → 某一列（例如 '#setDataRow'、'[data-screen=scr-features]'）
+export async function openSettings(page, row) {
+  await closeScreens(page);
+  await page.click('#openSettingsBtn');
+  if (row) await page.click('#scr-settings ' + row);
+}
+
 export async function importFile(page, file) {
-  await page.click('.mobile-nav-tab[data-tab=report]');
+  if (!(await page.isVisible('#scr-data'))) await openSettings(page, '#setDataRow');
   // 清掉上一次的提示，否則連續匯入時會誤認為已完成
   await page.evaluate(() => { document.getElementById('toastMsg').textContent = ''; });
   await page.setInputFiles('#importJsonInput', file);

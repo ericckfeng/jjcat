@@ -33,7 +33,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 
 | 檔案 | 內容 |
 |---|---|
-| `index.html` | 所有畫面：首頁大按鈕、全螢幕輸入頁（`.screen`）、分頁（記錄／快選／趨勢／報告）、modal |
+| `index.html` | 所有畫面：首頁大按鈕、全螢幕輸入頁（`.screen`）、分頁（記錄／快選／趨勢／報告）、modal。**所有設定集中在右上 ⚙️ 設定**（`scr-settings` → 基本資料 `scr-profile`、每日目標 `scr-targets`、功能開關 `scr-features`、AI `scr-aikey`、資料與備份 `scr-data`、關於 `scr-about`）；新的設定放進這幾頁，不要再加到其他地方 |
 | `js/app.js` | 主程式：狀態、儲存、畫面渲染、事件、同步流程、小芽、睡眠 |
 | `js/sync.js` | **純函式**：同步的逐筆合併 `mergeData()`（有單元測試） |
 | `js/body.js` | **純函式**：BMI／國健署分級、身體尺寸、睡眠時數計算 |
@@ -73,7 +73,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 1. `npm test`，有改到流程就再跑 `npm run test:e2e`。
 2. **一起把版本號加 1**（避免使用者手機新舊檔案混用）：
    - `sw.js` 的 `const CACHE = 'diet-tracker-vN'`
-   - `index.html` 裡 `js/app.js?v=N` 和 `css/app.css?v=N`
+   - `index.html` 裡 `js/app.js?v=N` 和 `css/app.css?v=N`（「關於」頁顯示的版本號就是從 `app.js?v=N` 讀的，不用另外改）
    - 新增 JS 檔時，也要加進 `sw.js` 的 `CORE` 清單
 3. commit（英文 conventional commits），push 到 `main`。GitHub Pages 約 1 分鐘更新；GitHub 會讓檔案快取最多 10 分鐘。
 

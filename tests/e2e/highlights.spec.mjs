@@ -1,6 +1,6 @@
 // 營養師報告頂端的本週重點
 import { test, expect } from '@playwright/test';
-import { openApp } from './helpers.mjs';
+import { openApp, closeScreens, openSettings } from './helpers.mjs';
 
 function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 const ago = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return ymd(d); };
@@ -19,7 +19,7 @@ test('7 天報告最上面有「本週重點」，LINE 文字也有', async ({ p
     [ago(8)]: { weight: 71 }, [ago(6)]: { weight: 70, question: '晚餐可以吃水果嗎？' }, [ago(0)]: { weight: 69.6, bowel: 0 }, [ago(1)]: { bowel: 0 }
   } });
   await openApp(page, { errors });
-  await page.click('.mobile-nav-tab[data-tab=report]');
+  await closeScreens(page); await page.click('.mobile-nav-tab[data-tab=report]');
   await page.click('[data-days="7"]');
   await page.click('#genReportBtn');
   const hl = page.locator('#reportArea .hl li');

@@ -1,6 +1,6 @@
 // 主要流程：每個全螢幕輸入頁都能存資料，報告能產生，沒有任何 JS 錯誤
 import { test, expect } from '@playwright/test';
-import { openApp, appState } from './helpers.mjs';
+import { openApp, appState, closeScreens, openSettings } from './helpers.mjs';
 
 test('記錄吃的、身體、睡眠，並產生報告', async ({ page }) => {
   const errors = [];
@@ -44,7 +44,7 @@ test('記錄吃的、身體、睡眠，並產生報告', async ({ page }) => {
   expect(s.days[today]._t.sleepMin).toBeGreaterThan(0);
   expect(s.logs[today].every(i => i.updatedAt > 0)).toBe(true);
 
-  await page.click('.mobile-nav-tab[data-tab=report]');
+  await closeScreens(page); await page.click('.mobile-nav-tab[data-tab=report]');
   await page.click('#genReportBtn');
   await expect(page.locator('#reportArea')).toContainText('每日總表');
   expect(errors).toEqual([]);

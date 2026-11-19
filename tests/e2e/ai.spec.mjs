@@ -1,6 +1,6 @@
 // AI 辨識：Gemini API 用假的回應（不連真的網路、不用真的 Key）
 import { test, expect } from '@playwright/test';
-import { openApp, appState } from './helpers.mjs';
+import { openApp, appState, closeScreens, openSettings } from './helpers.mjs';
 
 // 2×2 的 PNG
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAAMBgEB1JqCEwAAAABJRU5ErkJggg==', 'base64');
@@ -25,13 +25,11 @@ async function mockGemini(page, handler) {
   return calls;
 }
 async function enableAi(page) {
-  await page.click('.mobile-nav-tab[data-tab=report]');
-  await page.click('#aiSetupBtn');
+  await openSettings(page, '#aiSetupBtn');
   await page.fill('#aiKeyInput', KEY);
   await page.click('#aiKeySaveBtn');
   await expect(page.locator('#aiKeyStatus')).toContainText('成功');
-  await page.click('#scr-aikey [data-back]');
-  await page.click('.mobile-nav-tab[data-tab=log]');
+  await closeScreens(page);
 }
 
 test('預設關閉：首頁沒有 AI，自己輸入沒有拍標示；不會連到 Gemini', async ({ page }) => {
@@ -48,8 +46,7 @@ test('設定：Key 不對會說明；對的 Key 開啟，只存在本機，不�
     ? { status: 400, contentType: 'application/json', body: JSON.stringify([{ error: { code: 400, message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT', details: [{ reason: 'API_KEY_INVALID' }] } }]) }
     : reply({ ok: true }));
   await openApp(page);
-  await page.click('.mobile-nav-tab[data-tab=report]');
-  await page.click('#aiSetupBtn');
+  await openSettings(page, '#aiSetupBtn');
   await page.fill('#aiKeyInput', 'wrong');
   await page.click('#aiKeySaveBtn');
   await expect(page.locator('#aiKeyStatus')).toContainText('這把 Key 不能用');
@@ -63,16 +60,13 @@ test('設定：Key 不對會說明；對的 Key 開啟，只存在本機，不�
   const payload = await page.evaluate(() => JSON.stringify(window.__dietApp.exportPayload()));
   expect(payload).not.toContain(KEY);
   expect(payload).not.toContain('"meta"');
-  await page.click('#scr-aikey [data-back]');
-  await page.click('.mobile-nav-tab[data-tab=log]');
+  await closeScreens(page);
   await expect(page.locator('#aiTile')).toBeVisible();
   // 關閉
-  await page.click('.mobile-nav-tab[data-tab=report]');
-  await page.click('#aiSetupBtn');
+  await openSettings(page, '#aiSetupBtn');
   await page.click('#aiOffBtn');
   expect((await appState(page)).meta.ai).toBeUndefined();
-  await page.click('#scr-aikey [data-back]');
-  await page.click('.mobile-nav-tab[data-tab=log]');
+  await closeScreens(page);
   await expect(page.locator('#aiTile')).toBeHidden();
 });
 

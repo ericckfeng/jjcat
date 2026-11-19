@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/app.css?v=16" />
+  <link rel="stylesheet" href="css/app.css?v=17" />
 </head>
 <body class="bg-stone-50 text-stone-800 min-h-screen pb-24 sm:pb-10">
   <!-- Header -->
@@ -88,6 +88,11 @@
           <div id="mascotChips" class="flex flex-wrap gap-1.5 mt-2"></div>
         </div>
         <div id="confetti" class="confetti" aria-hidden="true"></div>
+      </section>
+      <!-- 小芽關掉時，跨模組提醒改在這裡顯示 -->
+      <section id="tipsCard" class="tips-card hidden">
+        <h2 id="tipsTitle" class="text-base font-bold text-stone-800">今天的小提醒</h2>
+        <ul id="tipsList" class="space-y-2"></ul>
       </section>
 
       <!-- Daily Summary -->
@@ -833,6 +838,6 @@
     <button id="toastAction" type="button" class="hidden font-bold text-emerald-300 hover:text-emerald-200 shrink-0"></button>
   </div>
 
-  <script type="module" src="js/app.js?v=16"></script>
+  <script type="module" src="js/app.js?v=17"></script>
 </body>
 </html>

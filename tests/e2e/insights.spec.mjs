@@ -48,3 +48,36 @@ test('昨晚睡太少、連兩天沒排便：兩個提醒都在小芽的話裡',
   expect(texts.some(t => t.includes('兩天沒排便') && t.includes('青菜平均 0.5 份') && t.includes('水平均 900 ml'))).toBe(true);
   expect(texts.filter(t => t.includes('只睡'))).toHaveLength(1); // 舊的睡太少訊息不再重複出現
 });
+
+test('小芽關掉時，提醒改在首頁小卡片顯示；沒有提醒就不顯示卡片', async ({ page }) => {
+  await seed(page, {
+    targets: { kcal: 1800, ex: {} },
+    logs: { [ago(1)]: [{ id: 'a', name: '火鍋', kcal: 2300, meal: 'dinner', time: '19:00', updatedAt: 1 }] },
+    days: { [ago(1)]: { weight: 70, bowel: 0 }, [ago(0)]: { weight: 70.8, bowel: 0, sleepMin: 300 } },
+    meta: { welcomed: true, mascot: false }
+  });
+  await openApp(page);
+  await expect(page.locator('#mascotCard')).toBeHidden();
+  await expect(page.locator('#tipsCard')).toBeVisible();
+  await expect(page.locator('#tipsTitle')).toHaveText('今天的小提醒');
+  const items = page.locator('#tipsList li');
+  await expect(items).toHaveCount(3);
+  await expect(items.nth(0)).toContainText('不是真的胖');   // 依重要程度排序
+  await expect(items.nth(1)).toContainText('只睡 5 小時');
+  await expect(items.nth(2)).toContainText('兩天沒排便');
+
+  // 前一天沒有提醒：卡片收起來
+  await page.click('#prevDayBtn');
+  await expect(page.locator('#tipsCard')).toBeHidden();
+});
+
+test('小芽開著時不顯示提醒卡片（提醒由小芽說）', async ({ page }) => {
+  await seed(page, {
+    targets: { kcal: 1800, ex: {} },
+    logs: { [ago(1)]: [{ id: 'a', name: '火鍋', kcal: 2300, meal: 'dinner', time: '19:00', updatedAt: 1 }] },
+    days: { [ago(1)]: { weight: 70 }, [ago(0)]: { weight: 70.8 } }
+  });
+  await openApp(page);
+  await expect(page.locator('#mascotCard')).toBeVisible();
+  await expect(page.locator('#tipsCard')).toBeHidden();
+});

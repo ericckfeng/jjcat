@@ -1538,10 +1538,26 @@ function insightDay(date) {
     kcal: t.kcal, count: t.count, veg: t.ex.veg, exItems: t.exItems
   };
 }
+function dayInsights(date) {
+  return buildInsights({
+    isToday: date === todayStr(), targetKcal: state.targets.kcal,
+    d: [0, -1, -2].map(n => insightDay(addDays(date, n))),
+    lastNightMin: daySleep(getDay(date, false)).night || null
+  }).sort((a, b) => b.pri - a.pri);
+}
+// 小芽關掉時，提醒改用首頁的小卡片列出來（沒有提醒就不顯示）
+function renderTips(insights) {
+  $('tipsCard').classList.toggle('hidden', !insights.length);
+  if (!insights.length) return;
+  $('tipsTitle').textContent = ui.date === todayStr() ? '今天的小提醒' : fmtMD(ui.date) + ' 的小提醒';
+  $('tipsList').innerHTML = insights.map(m => `<li>${esc(m.text)}</li>`).join('');
+}
 function renderMascot() {
   const card = $('mascotCard');
-  if (state.meta.mascot === false) { card.classList.add('hidden'); return; }
+  const insights = dayInsights(ui.date);
+  if (state.meta.mascot === false) { card.classList.add('hidden'); renderTips(insights); return; }
   card.classList.remove('hidden');
+  renderTips([]);
   const isToday = ui.date === todayStr();
   const t = dayTotals(ui.date);
   const d = getDay(ui.date, false);
@@ -1554,11 +1570,7 @@ function renderMascot() {
     targetWeight: num(state.targets.weight), bmi, water: num(d.water) || 0,
     lastNight: daySleep(getDay(ui.date, false)),
     exercise: d.exercise || (d.exMin ? d.exMin + ' 分鐘' : ''),
-    insights: buildInsights({
-      isToday, targetKcal: state.targets.kcal,
-      d: [0, -1, -2].map(n => insightDay(addDays(ui.date, n))),
-      lastNightMin: daySleep(d).night || null
-    })
+    insights
   });
   mascotIdx = 0;
   showMascotMsg();

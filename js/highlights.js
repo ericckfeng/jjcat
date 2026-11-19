@@ -97,3 +97,69 @@ export function buildHighlights(input, { limit = 5 } = {}) {
 
   return out.sort((a, b) => b.pri - a.pri).slice(0, limit).map(({ tone, text }) => ({ tone, text }));
 }
+
+/* ---------------- 小芽週報（給使用者自己看、可傳 LINE） ---------------- */
+
+// 上一個完整的週（週一～週日）。today：'YYYY-MM-DD'
+export function lastWeek(today) {
+  const [y, m, d] = today.split('-').map(Number);
+  const t = new Date(y, m - 1, d);
+  const back = (t.getDay() + 6) % 7 + 7;      // 回到上週一
+  const s = (n) => { const x = new Date(y, m - 1, d - n); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+  return { from: s(back), to: s(back - 6) };
+}
+
+// input 和 buildHighlights 一樣，另外用到：goodKcalDays（和目標差不到 10% 的天數）、waterMetDays（喝水達標天數）
+// 回傳 { good: [文字…]（最多 3 條）, tryNext: 文字 }
+export function buildWeekly(input) {
+  const x = input || {};
+  const good = [];
+  const add = (pri, text) => good.push({ pri, text });
+  const tex = x.targetEx || {};
+  const avgEx = x.avgEx || {};
+
+  if (x.loggedDays >= 5) add(90, `這週記錄了 ${x.loggedDays} 天，很用心 📒`);
+  else if (x.loggedDays >= 3) add(60, `這週記錄了 ${x.loggedDays} 天，有在持續 📒`);
+  const w = x.weight;
+  if (w && x.targetWeight > 0 && Math.abs(w.delta) >= 0.2 && Math.sign(x.targetWeight - w.first) === Math.sign(w.delta)) {
+    add(95, `7 天平均體重${w.delta < 0 ? '少' : '多'}了 ${n1(Math.abs(w.delta))} 公斤，往目標前進 🎉`);
+  }
+  if (x.goodKcalDays >= 3) add(80, `有 ${x.goodKcalDays} 天吃得剛剛好 👍`);
+  const ex = x.exercise || {};
+  if (ex.totalMin >= 60) add(75, `運動了 ${ex.days} 天，共 ${n0(ex.totalMin)} 分鐘 🏃`);
+  else if (ex.totalMin > 0) add(50, `有運動 ${ex.days} 天，動起來就很棒 🏃`);
+  if (x.targetP > 0 && x.macroDays >= 3 && x.avgP >= x.targetP * 0.85) add(70, '蛋白質吃得夠 💪');
+  if (x.exDays >= 3 && (tex.veg > 0 ? (avgEx.veg || 0) >= tex.veg * 0.8 : (avgEx.veg || 0) >= 3)) add(70, '青菜吃得夠 🥬');
+  if (x.waterMetDays >= 4) add(65, `有 ${x.waterMetDays} 天水喝夠了 💧`);
+  const s = x.sleep;
+  if (s && s.days >= 3 && s.avgMin >= 420) add(55, `平均睡 ${n1(s.avgMin / 60)} 小時，睡得很好 😴`);
+
+  const picked = good.sort((a, b) => b.pri - a.pri).slice(0, 3).map(g => g.text);
+  if (!picked.length) picked.push('願意打開 App 記錄，就是很好的開始 🌱');
+
+  // 下週可以試的一件事：只挑一件，最重要的先
+  const tries = [
+    [x.loggedDays < 4, '每天至少記一餐，下週會更清楚自己吃了什麼'],
+    [x.targetP > 0 && x.macroDays >= 2 && x.avgP != null && x.avgP < x.targetP * 0.85, '每餐加一份蛋白質，例如一顆蛋、一杯無糖豆漿或一個手掌大的魚肉'],
+    [x.targetKcal > 0 && x.avgKcal != null && x.avgKcal > x.targetKcal * 1.1, '挑一餐吃少一點，例如飯減半碗、不喝含糖飲料'],
+    [x.targetKcal > 0 && x.avgKcal != null && x.avgKcal < x.targetKcal * 0.85, '三餐都要吃，吃夠了比較不會想吃零食'],
+    [x.exDays >= 2 && (tex.veg > 0 ? (avgEx.veg || 0) < tex.veg * 0.8 : (avgEx.veg || 0) < 3), '每天多吃一碗青菜，午餐、晚餐各加一份'],
+    [s && s.days > 0 && (s.avgMin < 360 || s.shortDays >= 3), '每天早 30 分鐘上床，睡飽比較不嘴饞'],
+    [x.water && x.water.avg != null && x.water.avg < (x.water.goal || 1500) * 0.8, '起床先喝一杯水，三餐飯前再各喝一杯'],
+    [x.exDays >= 2 && tex.fruit > 0 && (avgEx.fruit || 0) < tex.fruit * 0.8, '每天吃一份水果，大約一個拳頭大'],
+    [x.exDays >= 2 && tex.oil > 0 && (avgEx.oil || 0) > tex.oil * 1.2, '少吃油炸，改選蒸、煮、滷的'],
+    [!(ex.totalMin > 0), '每天飯後散步 10 分鐘']
+  ];
+  const t = tries.find(([cond]) => cond);
+  return { good: picked, tryNext: t ? t[1] : '保持這週的好習慣，下週繼續 👍' };
+}
+
+export function weeklyText({ from, to, good, tryNext, name }, fmtMD) {
+  return [
+    `🌱 小芽週報${name ? '（' + name + '）' : ''} ${fmtMD(from)}～${fmtMD(to)}`,
+    '這週做得好的事：',
+    ...good.map(g => '✓ ' + g),
+    '下週可以試的一件事：',
+    '👉 ' + tryNext
+  ].join('\n');
+}

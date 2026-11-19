@@ -3,7 +3,8 @@ import {
   EST_PARTS, PRESET_FOODS, HUNGER_LABELS, MOOD_OPTIONS, BOWEL_LABELS
 } from './nutrition.js';
 import { photoDB } from './db.js';
-import { REPORT_CSS, buildReportHTML, buildReportText } from './report.js';
+import { REPORT_CSS, buildReportHTML, buildReportText, periodSummary } from './report.js';
+import { buildWeekly, lastWeek, weeklyText } from './highlights.js';
 import * as cloud from './cloud.js';
 import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VERSION } from './sync.js';
 import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
@@ -839,6 +840,7 @@ function openScreen(id) {
   if (id === 'scr-weight') renderWeightHint();
   if (id === 'scr-water') renderWaterBig();
   if (id === 'scr-calc') { initCalc(); renderCalc(); }
+  if (id === 'scr-weekly') renderWeekly();
   if (id === 'scr-sleep') renderSleepScreen();
   if (id === 'scr-photo') resetPhotoQuick();
 }
@@ -1563,6 +1565,46 @@ function renderTips(insights) {
   $('tipsTitle').textContent = ui.date === todayStr() ? '今天的小提醒' : fmtMD(ui.date) + ' 的小提醒';
   $('tipsList').innerHTML = insights.map(m => `<li>${esc(m.text)}</li>`).join('');
 }
+/* ---------------- 小芽週報 ---------------- */
+function weeklyData() {
+  const wk = lastWeek(todayStr());
+  const sum = periodSummary(reportContext(), datesBetween(wk.from, wk.to));
+  return { ...wk, sum, ...buildWeekly(sum) };
+}
+// 首頁卡片：週一起出現，上週有記 3 天以上、還沒看過才顯示
+function renderWeeklyCard() {
+  const wk = lastWeek(todayStr());
+  const logged = datesBetween(wk.from, wk.to).filter(d => (state.logs[d] || []).length).length;
+  const show = ui.date === todayStr() && logged >= 3 && state.meta.weeklySeen !== wk.from;
+  $('weeklyCard').classList.toggle('hidden', !show);
+  if (show) $('weeklyCardSub').textContent = fmtMD(wk.from) + '～' + fmtMD(wk.to) + ' 出來了，點這裡看';
+}
+let lastWeekly = null;
+function renderWeekly() {
+  const w = weeklyData();
+  lastWeekly = w;
+  if (state.meta.weeklySeen !== w.from) { state.meta.weeklySeen = w.from; persistLocal(); renderWeeklyCard(); }
+  const empty = w.sum.loggedDays === 0;
+  $('weeklyMascot').innerHTML = mascotSVG(empty ? 'calm' : 'cheer');
+  $('weeklyRange').textContent = fmtMD(w.from) + '～' + fmtMD(w.to);
+  $('weeklyEmpty').classList.toggle('hidden', !empty);
+  $('weeklyGood').parentElement.classList.toggle('hidden', empty);
+  $('weeklyTry').parentElement.classList.toggle('hidden', empty);
+  $('weeklyShareBtn').classList.toggle('hidden', empty);
+  $('weeklyGood').innerHTML = w.good.map(g => `<li class="rounded-2xl bg-emerald-50 border border-emerald-200 p-3 text-lg font-semibold text-emerald-900 leading-relaxed">✓ ${esc(g)}</li>`).join('');
+  $('weeklyTry').textContent = '👉 ' + w.tryNext;
+}
+$('weeklyShareBtn').addEventListener('click', async () => {
+  if (!lastWeekly) return;
+  const text = weeklyText({ ...lastWeekly, name: state.profile.name }, fmtMD);
+  try {
+    if (navigator.share) { await navigator.share({ text }); return; }
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+  }
+  try { await navigator.clipboard.writeText(text); showToast('已複製週報，貼到 LINE 即可'); } catch (e) { showToast('無法複製'); }
+});
+
 function renderMascot() {
   const card = $('mascotCard');
   const insights = dayInsights(ui.date);
@@ -1657,6 +1699,7 @@ function renderBanners() {
 }
 function renderAll() {
   renderSummary();
+  renderWeeklyCard();
   renderMealSelector();
   renderQuickStrip();
   renderLogs();

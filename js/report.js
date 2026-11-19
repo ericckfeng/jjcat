@@ -67,9 +67,10 @@ function inject() {
   document.head.appendChild(st);
 }
 
-// 本週重點要的資料（js/highlights.js）
-function highlightsFor(ctx, dates, s) {
-  const { state, dayTotals } = ctx;
+// 本週重點、小芽週報要的資料（js/highlights.js）
+export function periodSummary(ctx, dates) {
+  const { state, dayTotals, rangeStats } = ctx;
+  const s = rangeStats(dates);
   const days = state.days;
   const tg = state.targets;
   const dd = (d) => days[d] || {};
@@ -89,7 +90,7 @@ function highlightsFor(ctx, dates, s) {
   const mean = (a) => (a.length >= 2 ? a.reduce((x, y) => x + y, 0) / a.length : null);
   const waterDays = dates.filter(d => dd(d).water != null && dd(d).water !== '');
   const goals = waterDays.map(d => waterGoal(tg.water, dd(d).exMin)).filter(Boolean);
-  return buildHighlights({
+  return {
     days: dates.length, loggedDays: s.loggedDays, pending: s.pending,
     avgKcal: s.avgKcal, targetKcal: tg.kcal, overDays: s.overDays,
     weight: weightAvgChange(days, dates), targetWeight: Number(tg.weight) || null,
@@ -99,9 +100,12 @@ function highlightsFor(ctx, dates, s) {
     water: s.avgWater != null ? { avg: s.avgWater, goal: goals.length ? goals.reduce((a, b) => a + b, 0) / goals.length : null } : null,
     exercise: { totalMin: s.exMinTotal, days: dates.filter(d => Number(dd(d).exMin) > 0 || dd(d).exercise).length },
     questions: dates.filter(d => String(dd(d).question || '').trim()).length,
-    noBowelDays: dates.filter(d => dd(d).bowel != null && Number(dd(d).bowel) === 0).length
-  });
+    noBowelDays: dates.filter(d => dd(d).bowel != null && Number(dd(d).bowel) === 0).length,
+    goodKcalDays: tg.kcal > 0 ? s.totals.filter(t => t.count > 0 && Math.abs(t.kcal - tg.kcal) <= tg.kcal * 0.1).length : 0,
+    waterMetDays: waterDays.filter(d => Number(dd(d).water) >= (waterGoal(tg.water, dd(d).exMin) || 1500)).length
+  };
 }
+const highlightsFor = (ctx, dates) => buildHighlights(periodSummary(ctx, dates));
 const hlTitle = (n) => (n === 7 ? '本週重點' : '本期重點');
 
 export async function buildReportHTML(ctx, opts) {
@@ -132,7 +136,7 @@ export async function buildReportHTML(ctx, opts) {
     <div class="muted">產生於 ${new Date().toLocaleString('zh-TW', { hour12: false })}</div></div>`;
 
   // 本週重點
-  const hl = highlightsFor(ctx, dates, s);
+  const hl = highlightsFor(ctx, dates);
   if (hl.length) h += `<h2>${hlTitle(dates.length)}</h2><ul class="hl">${hl.map(x => `<li class="${x.tone}">${esc(x.text)}</li>`).join('')}</ul>`;
 
   // 摘要
@@ -300,7 +304,7 @@ export function buildReportText(ctx, opts) {
   const tg = state.targets;
   const lines = [];
   lines.push('【飲食記錄摘要】' + (state.profile.name ? state.profile.name + ' ' : '') + fmtMD(opts.from) + '～' + fmtMD(opts.to) + '（' + dates.length + ' 天）');
-  const hl = highlightsFor(ctx, dates, s);
+  const hl = highlightsFor(ctx, dates);
   if (hl.length) {
     lines.push('〔' + hlTitle(dates.length) + '〕');
     hl.forEach(x => lines.push((x.tone === 'good' ? '✓ ' : x.tone === 'warn' ? '！' : '・') + x.text));

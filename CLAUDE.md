@@ -48,6 +48,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/highlights.js` | **純函式**：營養師報告頂端的「本週重點」（有單元測試） |
 | `js/bank.js` | **純函式**：熱量銀行（一週總量控管、今天的建議熱量、營養素調整）（有單元測試） |
 | `js/ai.js` | AI 辨識：呼叫 Gemini（使用者自己的 Key，存 `meta.ai`）、整理回傳資料（純函式有單元測試）。只能用 CORS 允許的 `content-type`、`x-goog-api-key` 標頭 |
+| `js/party.js` | **純函式**：吃到飽・聚餐速記的範本（目前只有港式點心）、備忘錄文字解析、合計（有單元測試）。新增範本＝在 `PARTY_TEMPLATES` 加一組 |
 | `js/nutrition.js` | 餐別、營養素、六大類代換表、預設快選 |
 | `js/config.js` | Google OAuth 用戶端 ID（公開值，可以放程式碼裡） |
 | `sw.js` | Service worker：自己的檔案一律向伺服器確認最新版（`cache: 'no-cache'`），離線才用快取 |

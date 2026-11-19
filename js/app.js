@@ -12,6 +12,7 @@ import { mascotSVG, buildMascotMessages } from './mascot.js';
 import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS, energyDensity, isGlutinous } from './foods.js';
 import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, shouldAskWhen, eatenAt, MEAL_TIME_CHIPS } from './meals.js';
 import { buildInsights } from './insights.js';
+import { partyTemplate, startCounts, parsePartyText, partyMemo, partyEntries, partyTotals } from './party.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros } from './bank.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
@@ -831,12 +832,19 @@ $('gramsSaveBtn').addEventListener('click', () => {
 });
 function saveFoodCart() {
   if (!foodCart.length) return;
+  const items = foodCart;
+  foodCart = [];
+  saveGroup(items);
+  renderFoodCart();
+}
+// 一次記好幾樣到目前這一餐（查食物的購物車、吃到飽速記）：每樣一筆，2 樣以上用 groupId 標成同一組
+function saveGroup(items) {
   const meal = ui.meal;
   const date = ui.date;
-  const groupId = foodCart.length > 1 ? uid('grp') : null;
+  const groupId = items.length > 1 ? uid('grp') : null;
   const time = nowTime();
   const photos = [];
-  const added = foodCart.map(c => {
+  const added = items.map(c => {
     const it = {
       id: uid('item'), multiplier: 1, meal, time, pending: false, hasPhoto: Boolean(c.photo),
       ...c.entry, ex: cleanEx(c.entry.ex), updatedAt: now()
@@ -846,12 +854,10 @@ function saveFoodCart() {
     if (c.photo) photos.push([it.id, c.photo]);
     return it;
   });
-  foodCart = [];
   photos.forEach(([id, photo]) => savePhoto(id, photo));
   (state.logs[date] || (state.logs[date] = [])).push(...added);
   persist();
   renderAll();
-  renderFoodCart();
   const total = sumNutr(added).kcal;
   const hint = gapHint(meal);
   showToast('已記到' + MEAL_META[meal].label + '：' + added.length + ' 樣、' + total + ' kcal' + hint, '復原', () => {
@@ -893,6 +899,7 @@ function openScreen(id) {
   if (id === 'scr-food') { $('foodSearch').value = ''; renderFoodResults(); renderFoodCart(); }
   if (id === 'scr-grams') renderGrams();
   if (id === 'scr-est') renderEst();
+  if (id === 'scr-party') openParty();
   if (id === 'scr-weight') renderWeightHint();
   if (id === 'scr-bodycomp') { bcDate = ui.date; renderBodyComp(); }
   if (id === 'scr-water') renderWaterBig();
@@ -2091,6 +2098,7 @@ function renderAll() {
   renderLogs();
   renderDayPanel();
   renderTiles();
+  renderPartyTile();
   renderMascot();
   renderSyncChip();
   renderExercisePresets();
@@ -2115,6 +2123,7 @@ document.addEventListener('click', (e) => {
   ui.meal = btn.getAttribute('data-meal');
   renderMealSelector();
   if (screenStack.includes('scr-food')) renderFoodCart();
+  if (screenStack.includes('scr-party')) renderParty();
 });
 $('portionGroup').addEventListener('click', (e) => {
   const b = e.target.closest('[data-portion]');
@@ -2871,6 +2880,106 @@ $('estPicked').addEventListener('click', (e) => {
   renderEst();
 });
 $('resetEstPartsBtn').addEventListener('click', () => { estCounts = {}; renderEst(); });
+
+/* ---------------- 吃到飽・聚餐速記 ---------------- */
+// 數量存在這台裝置（meta.party），中途關掉 App 也不會不見；按「記下來」才變成飲食記錄
+const partyDraft = () => state.meta.party || null;
+function partyStarted(d) {
+  if (!d) return false;
+  const base = startCounts(partyTemplate(d.tpl));
+  return Object.keys(d.counts || {}).some(k => d.counts[k] !== (base[k] || 0));
+}
+function openParty() {
+  if (!partyDraft()) { state.meta.party = { tpl: 'dimsum', counts: startCounts(partyTemplate('dimsum')), at: now() }; persistLocal(); }
+  $('partyPaste').value = '';
+  renderParty();
+}
+function renderParty() {
+  const d = partyDraft();
+  if (!d) return;
+  const tpl = partyTemplate(d.tpl);
+  const counts = d.counts || {};
+  $('partyTitle').textContent = tpl.icon + ' ' + tpl.title;
+  $('partyNote').textContent = tpl.note;
+  const old = partyStarted(d) && now() - (d.at || 0) > 6 * 3600 * 1000;
+  $('partyOld').classList.toggle('hidden', !old);
+  if (old) $('partyOld').textContent = '這是 ' + new Date(d.at).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' 開始的速記，還沒記下來。是那次的就按下面「記下來」；不是的話按「全部清空重來」。';
+  let group = '';
+  $('partyRows').innerHTML = tpl.items.map(it => {
+    const n = counts[it.code] || 0;
+    const head = it.group !== group ? `<h3 class="text-lg font-bold text-stone-700 pt-1">${esc((group = it.group))}</h3>` : '';
+    return head + `<div class="party-row${n ? ' party-on' : ''}">
+      <div class="w-full"><div class="text-lg font-bold text-stone-900 break-words"><span class="text-stone-400 text-base">${it.code}</span> ${esc(it.name)}</div>
+        <div class="text-base text-stone-500 break-words">${esc(it.eg)}</div></div>
+      <div class="min-w-0 flex-1 text-base text-emerald-700 tabular-nums">每${it.unit} ${it.kcal} 大卡</div>
+      <button type="button" class="party-step party-minus" data-party-minus="${it.code}" aria-label="${esc(it.name)}少一${it.unit}" ${n ? '' : 'disabled'}>−</button>
+      <span class="party-count">${n}</span>
+      <button type="button" class="party-step party-plus" data-party-plus="${it.code}" aria-label="${esc(it.name)}多一${it.unit}">＋</button>
+    </div>`;
+  }).join('');
+  const t = partyTotals(tpl, counts);
+  $('partyKcal').textContent = t.kcal;
+  $('partyMacro').textContent = t.kcal ? `蛋白質 ${t.p}g・碳水 ${t.c}g・脂肪 ${t.f}g` : '';
+  $('partySaveBtn').textContent = t.kcal ? '記到' + MEAL_META[ui.meal].label + '（' + t.kcal + ' 大卡）' : '記下來';
+  renderPartyTile();
+}
+function renderPartyTile() {
+  const d = partyDraft();
+  $('partyTileSub').textContent = partyStarted(d)
+    ? '進行中：目前 ' + partyTotals(partyTemplate(d.tpl), d.counts).kcal + ' 大卡，點這裡繼續'
+    : '拿一輪按一下，最後自動算熱量';
+}
+function setPartyCount(code, n) {
+  const d = partyDraft();
+  if (!d) return;
+  d.counts = { ...(d.counts || {}) };
+  if (n > 0) d.counts[code] = n; else delete d.counts[code];
+  if (!partyStarted({ ...d, counts: d.counts })) d.at = now();   // 從頭開始算的時間
+  persistLocal();
+  renderParty();
+}
+$('partyRows').addEventListener('click', (e) => {
+  const plus = e.target.closest('[data-party-plus]');
+  const minus = e.target.closest('[data-party-minus]');
+  const d = partyDraft();
+  if (!d || (!plus && !minus)) return;
+  const code = (plus || minus).getAttribute(plus ? 'data-party-plus' : 'data-party-minus');
+  const n = (d.counts && d.counts[code]) || 0;
+  setPartyCount(code, plus ? n + 1 : Math.max(0, n - 1));
+});
+$('partyPasteBtn').addEventListener('click', () => {
+  const d = partyDraft();
+  const tpl = partyTemplate(d && d.tpl);
+  const { counts, unknown } = parsePartyText($('partyPaste').value, tpl);
+  const codes = Object.keys(counts);
+  if (!codes.length) { showToast('沒有讀到數量。寫法像「A1: 3」'); return; }
+  d.counts = { ...(d.counts || {}), ...counts };
+  persistLocal();
+  renderParty();
+  showToast('讀到 ' + codes.length + ' 樣' + (unknown.length ? '；看不懂的代碼：' + unknown.join('、') : ''), null, null, unknown.length ? 6000 : 0);
+});
+$('partyMemoBtn').addEventListener('click', async () => {
+  const d = partyDraft();
+  try { await navigator.clipboard.writeText(partyMemo(partyTemplate(d && d.tpl))); showToast('已複製，到備忘錄貼上就可以用'); }
+  catch (e) { showToast('這台裝置不能自動複製'); }
+});
+$('partyResetBtn').addEventListener('click', () => {
+  const d = partyDraft();
+  if (!partyStarted(d)) return;
+  openConfirm('全部清空？', '目前記的數量會全部歸零。', () => {
+    state.meta.party = { tpl: d.tpl, counts: startCounts(partyTemplate(d.tpl)), at: now() };
+    persistLocal();
+    renderParty();
+  }, '清空', null, '不要');
+});
+$('partySaveBtn').addEventListener('click', () => {
+  const d = partyDraft();
+  const list = d ? partyEntries(partyTemplate(d.tpl), d.counts) : [];
+  if (!list.length) { showToast('還沒有按任何一樣'); return; }
+  delete state.meta.party;
+  saveGroup(list.map(entry => ({ entry })));
+  closeScreen();
+});
 $('extGoogleSearchBtn').addEventListener('click', () => {
   const q = $('extSearchInput').value.trim() || '台灣外食';
   window.open('https://www.google.com/search?q=' + encodeURIComponent(q + ' 熱量 大卡'), '_blank', 'noopener,noreferrer');

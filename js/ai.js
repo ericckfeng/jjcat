@@ -84,8 +84,14 @@ export function buildRequest({ prompt, imageDataUrl = null, schema }) {
 }
 
 // 把 API 的錯誤分成幾種，畫面依種類給長輩看得懂的說明
+// detail：給使用者截圖用的原始原因（HTTP 狀態碼＋Google 的英文訊息），方便查問題
 export class AiError extends Error {
-  constructor(kind, message) { super(message || kind); this.kind = kind; }
+  constructor(kind, message, detail = '') { super(message || kind); this.kind = kind; this.detail = detail; }
+}
+export function errorDetail(status, body) {
+  const err = (Array.isArray(body) ? body[0] : body) || {};
+  const e = err.error || {};
+  return [status, e.status, String(e.message || '').slice(0, 160)].filter(Boolean).join(' ');
 }
 export function classifyError(status, body) {
   const err = (Array.isArray(body) ? body[0] : body) || {};
@@ -96,6 +102,7 @@ export function classifyError(status, body) {
   if (status === 429 || e.status === 'RESOURCE_EXHAUSTED') return 'quota';
   if (status === 403) return /referer|referrer/i.test(msg) || reason === 'API_KEY_HTTP_REFERRER_BLOCKED' ? 'referrer' : 'forbidden';
   if (status === 404) return 'model';
+  if (status === 503 || /overloaded|high demand/i.test(msg)) return 'busy';
   if (status >= 500) return 'server';
   return 'other';
 }
@@ -113,30 +120,49 @@ export function responseText(json) {
 }
 export function parseJsonText(text) {
   const t = String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/```$/, '').trim();
-  try { return JSON.parse(t); } catch (e) { throw new AiError('parse'); }
+  try { return JSON.parse(t); } catch (e) { throw new AiError('parse', '', t ? 'JSON: ' + t.slice(0, 80) : ''); }
+}
+// 回應成功但沒有內容：被安全過濾擋掉、或字數用完被截斷
+export function emptyReason(json) {
+  const j = (Array.isArray(json) ? json[0] : json) || {};
+  const block = j.promptFeedback && j.promptFeedback.blockReason;
+  if (block) return 'blocked ' + block;
+  const cand = j.candidates && j.candidates[0];
+  return cand && cand.finishReason && cand.finishReason !== 'STOP' ? 'finish ' + cand.finishReason : '';
 }
 
-export async function callGemini({ key, request, fetchFn = fetch, models = AI_MODELS }) {
+// 模型找不到（404）或太忙（503）就換下一個；每個模型最多等 timeoutMs，不讓畫面一直卡住
+export async function callGemini({ key, request, fetchFn = fetch, models = AI_MODELS, timeoutMs = 60000 }) {
   if (!key) throw new AiError('key');
-  let lastKind = 'other';
+  let last = new AiError('other');
   for (const model of models) {
-    let res;
+    const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+    let res, body = null;
     try {
       res = await fetchFn(AI_ENDPOINT + encodeURIComponent(model) + ':generateContent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-        body: JSON.stringify(request)
+        body: JSON.stringify(request),
+        signal: ctrl ? ctrl.signal : undefined
       });
+      try { body = await res.json(); } catch (e) { body = null; }
     } catch (e) {
-      throw new AiError('network');
+      if (ctrl && ctrl.signal.aborted) { last = new AiError('timeout', '', model); continue; }
+      throw new AiError('network', '', String((e && e.message) || ''));
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-    let body = null;
-    try { body = await res.json(); } catch (e) { body = null; }
-    if (res.ok) return parseJsonText(responseText(body));
-    lastKind = classifyError(res.status, body);
-    if (lastKind !== 'model') throw new AiError(lastKind);
+    if (res.ok) {
+      const text = responseText(body);
+      if (!text.trim()) throw new AiError('empty', '', model + ' ' + emptyReason(body));
+      return parseJsonText(text);
+    }
+    const kind = classifyError(res.status, body);
+    last = new AiError(kind, '', model + ' ' + errorDetail(res.status, body));
+    if (kind !== 'model' && kind !== 'busy') throw last;
   }
-  throw new AiError(lastKind);
+  throw last;
 }
 
 /* ---------------- 整理回傳的資料（純函式） ---------------- */

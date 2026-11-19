@@ -18,7 +18,8 @@ test('錯誤分類', () => {
   assert.equal(classifyError(403, { error: { message: 'Requests from referer http://localhost are blocked.', details: [{ reason: 'API_KEY_HTTP_REFERRER_BLOCKED' }] } }), 'referrer');
   assert.equal(classifyError(403, { error: { message: 'denied' } }), 'forbidden');
   assert.equal(classifyError(404, null), 'model');
-  assert.equal(classifyError(503, null), 'server');
+  assert.equal(classifyError(503, null), 'busy');
+  assert.equal(classifyError(500, null), 'server');
 });
 
 test('取出回應文字：generateContent 與 interactions 兩種形狀', () => {
@@ -90,4 +91,25 @@ test('整理營養標示', () => {
     { name: '高纖蘇打餅', servingG: 30, servings: 6, kcal: 132, p: 2.7, c: 19.6, f: 4.8, sugar: 1.2, na: 151 });
   assert.equal(normalizeLabel({ found: false }), null);
   assert.equal(normalizeLabel({ found: true }), null, '沒有熱量不算');
+});
+
+test('呼叫：模型太忙（503）換下一個；都失敗時保留原始原因給使用者截圖', async () => {
+  let n = 0;
+  const out = await callGemini({ key: 'K', request: {}, fetchFn: async () => (++n === 1 ? errRes(503, { error: { status: 'UNAVAILABLE', message: 'The model is overloaded.' } }) : okRes({ ok: 1 })) });
+  assert.deepEqual(out, { ok: 1 });
+  await assert.rejects(callGemini({ key: 'K', request: {}, fetchFn: async () => errRes(503, { error: { status: 'UNAVAILABLE', message: 'The model is overloaded.' } }) }),
+    (e) => e.kind === 'busy' && /503 UNAVAILABLE The model is overloaded/.test(e.detail));
+  await assert.rejects(callGemini({ key: 'K', request: {}, fetchFn: async () => errRes(400, { error: { status: 'FAILED_PRECONDITION', message: 'User location is not supported' } }) }),
+    (e) => e.kind === 'other' && /400 FAILED_PRECONDITION User location/.test(e.detail));
+});
+
+test('呼叫：成功但沒有內容（被擋、被截斷）', async () => {
+  const res = (body) => async () => ({ ok: true, status: 200, json: async () => body });
+  await assert.rejects(callGemini({ key: 'K', request: {}, fetchFn: res({ promptFeedback: { blockReason: 'SAFETY' } }) }), (e) => e.kind === 'empty' && /blocked SAFETY/.test(e.detail));
+  await assert.rejects(callGemini({ key: 'K', request: {}, fetchFn: res({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: '{"items":[' }] } }] }) }), (e) => e.kind === 'parse');
+});
+
+test('呼叫：等太久就放棄這個模型，不讓畫面卡住', async () => {
+  const hang = async (url, opt) => new Promise((_, reject) => opt.signal.addEventListener('abort', () => reject(new Error('aborted'))));
+  await assert.rejects(callGemini({ key: 'K', request: {}, fetchFn: hang, timeoutMs: 20 }), (e) => e.kind === 'timeout');
 });

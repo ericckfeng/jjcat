@@ -1714,13 +1714,19 @@ function renderTips(insights) {
 /* ---------------- AI 辨識（使用者自己的 Gemini API Key，預設關閉） ---------------- */
 const aiKey = () => (state.meta.ai && state.meta.ai.key) || '';
 const AI_ERRORS = {
-  key: 'API Key 不對或已經失效，請到「報告」頁的「AI 辨識」重新設定。',
+  key: 'API Key 不對或已經失效，請到右上 ⚙️ 設定的「AI 辨識」重新設定。',
   quota: '免費額度暫時用完了（或太頻繁），請過一會兒再試。',
   referrer: '這把 Key 限制了可以使用的網站，請確認有加上 https://ericckfeng.github.io/*',
   forbidden: 'Google 拒絕了這個請求，請確認這把 Key 是 Gemini API 用的。',
-  network: '連不上網路，請確認網路後再試一次。'
+  network: '連不上網路，請確認網路後再試一次。',
+  busy: 'Google 的 AI 現在太多人用，請過一兩分鐘再試。',
+  timeout: 'AI 等太久沒有回應（超過 1 分鐘），請再試一次；照片可以拍近一點。',
+  empty: 'AI 這次沒有給答案（可能被 Google 的安全過濾擋下），請換張照片或用說的。',
+  model: '找不到可以用的 AI 模型，請截圖這個畫面給開發者。'
 };
-const aiErrorText = (e) => AI_ERRORS[e && e.kind] || 'AI 這次沒有回答好，請再試一次。';
+// 後面附上原始原因（代碼），截圖給開發者就能查
+const aiErrorText = (e) => (AI_ERRORS[e && e.kind] || 'AI 這次沒有回答好，請再試一次。') +
+  (e && (e.kind || e.detail) ? '\n（代碼：' + [e.kind, e.detail].filter(Boolean).join(' ') + '）' : '');
 function setBox(id, tone, text) {
   const el = $(id);
   el.classList.toggle('hidden', !text);

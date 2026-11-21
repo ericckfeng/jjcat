@@ -49,7 +49,7 @@ export function nutrientsFor(food, grams, weighed = 'asis') {
   return {
     kcal: val('kcal', 0) ?? 0,
     p: val('p'), f: val('f'), c: val('c'),
-    sugar: val('sugar'), na: val('na', 0),
+    sugar: val('sugar'), na: val('na', 0), fiber: val('fiber'),
     ex: exchangesFor(food, g)
   };
 }

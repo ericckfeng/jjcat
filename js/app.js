@@ -727,7 +727,7 @@ function renderGrams() {
     ${cooked ? `<div class="text-sm text-stone-500 text-center">熟重 ${g} g ≈ ${conv.factor > 1 ? '生米' : '生重'} ${Math.round(baseGrams(food, g, 'cooked'))} g（${esc(conv.label)}）</div>` : ''}
     <div class="grid grid-cols-3 gap-2">${macro('p', '蛋白質')}${macro('f', '脂肪')}${macro('c', '碳水')}</div>
     ${n.fiber != null ? `<div class="text-base text-stone-700">膳食纖維 ${n.fiber} g</div>` : ''}
-    <div class="text-base text-stone-700">${ex ? '六大類：' + ex : '<span class="text-stone-500">這類食物無法換算六大類份數</span>'}</div>
+    <div class="text-base text-stone-700">${ex ? '六大類：' + ex : '<span class="text-stone-500">' + (mine ? '沒有填六大類份數' : '這類食物無法換算六大類份數') + '</span>'}</div>
     ${sugarCare() && isGlutinous(food) ? '<div data-glutinous class="rounded-xl bg-sky-50 text-sky-900 p-2 text-base leading-relaxed">糯米類：支鏈澱粉多，血糖上升比較快。份量少一點，搭配青菜和蛋白質一起吃。</div>' : ''}
     ${byServing ? '' : (() => { const d = energyDensity(food, n.kcal / g); return d && d.high ? `<div data-density class="rounded-xl bg-amber-50 text-amber-900 p-2 text-base leading-relaxed">熱量密度高：每公克 ${d.perG} 大卡，一小份熱量就很多，份量要留意。</div>` : ''; })()}`;
 }

@@ -24,7 +24,7 @@ test('每筆都有名稱、分類與每 100g 熱量和三大營養素，數值�
     const n = f.per100g;
     assert.ok(Number.isFinite(n.kcal) && n.kcal >= 0 && n.kcal <= 950, where + ' kcal ' + n.kcal);
     // 上限 105：TFDA 實測值偶有略超過 100 的測量誤差（例如調合植物油脂肪 100.3），不改官方數字
-    for (const k of ['p', 'f', 'c', 'sugar']) {
+    for (const k of ['p', 'f', 'c', 'fiber', 'sugar']) {
       if (n[k] == null) continue;
       assert.ok(Number.isFinite(n[k]) && n[k] >= 0 && n[k] <= 105, where + ' ' + k + ' ' + n[k]);
     }
@@ -33,7 +33,7 @@ test('每筆都有名稱、分類與每 100g 熱量和三大營養素，數值�
     if (f.state) assert.ok(['raw', 'cooked'].includes(f.state), where);
     if (f.removed) assert.equal(typeof f.removed, 'string', where);
     // 只收營養標示上有的項目
-    assert.deepEqual(Object.keys(n).filter(k => !['kcal', 'p', 'f', 'c', 'sugar', 'na'].includes(k)), [], where);
+    assert.deepEqual(Object.keys(n).filter(k => !['kcal', 'p', 'f', 'c', 'fiber', 'sugar', 'na'].includes(k)), [], where);
   }
 });
 test('常見食物抽查（白飯、地瓜別名）', () => {

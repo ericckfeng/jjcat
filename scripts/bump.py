@@ -9,6 +9,8 @@
   index.html      js/app.js?v=<Rev>、css/app.css?v=<Rev>
 
 用法：python3 scripts/bump.py          （--dry-run 只顯示會改成什麼）
+      python3 scripts/bump.py --min-rev  這一版會寫入舊版看不懂的資料：同時把 js/version.js 的
+                                         DATA_MIN_REV 調成這一版的 Rev.（見 docs/DATA_FORMAT.md 相容性規則 9）
 """
 import json
 import re
@@ -29,6 +31,7 @@ def sub_once(text, pattern, repl, name):
 
 def main():
     dry = '--dry-run' in sys.argv
+    min_rev = '--min-rev' in sys.argv
     vpath = ROOT / 'js' / 'version.js'
     vjs = vpath.read_text(encoding='utf-8')
     rev = int(re.search(r'export const APP_REV = (\d+);', vjs).group(1))
@@ -40,12 +43,16 @@ def main():
     new_seq = seq + 1 if date == today else 1
     ver = f'{today}-{new_seq}'
     print(f'{date + "-" + str(seq) if date else "（舊編法）"}（Rev. {rev}） → {ver}（Rev. {new_rev}）')
+    if min_rev:
+        print(f'最低需要版本 DATA_MIN_REV → {new_rev}（比這版舊的 App 會暫停同步、提示更新）')
     if dry:
         return
 
     vjs = sub_once(vjs, r'export const APP_REV = \d+;', f'export const APP_REV = {new_rev};', 'js/version.js')
     vjs = sub_once(vjs, r"export const APP_DATE = '[^']*';", f"export const APP_DATE = '{today}';", 'js/version.js')
     vjs = sub_once(vjs, r'export const APP_SEQ = \d+;', f'export const APP_SEQ = {new_seq};', 'js/version.js')
+    if min_rev:
+        vjs = sub_once(vjs, r'export const DATA_MIN_REV = \d+;', f'export const DATA_MIN_REV = {new_rev};', 'js/version.js')
     vpath.write_text(vjs, encoding='utf-8')
 
     (ROOT / 'version.json').write_text(json.dumps({'rev': new_rev, 'ver': ver}) + '\n', encoding='utf-8')

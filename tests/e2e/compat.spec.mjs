@@ -101,3 +101,15 @@ test('最早單檔版的欄位（targetKcal）不會被當成新資料存起來'
   // v1 的照片 data URL 和 baseKcal 不會留在記錄裡
   for (const it of s.logs['2026-10-01']) { expect(it.photo).toBeUndefined(); expect(it.baseKcal).toBeUndefined(); }
 });
+
+test('我的食物（customFoods）備份檔：食物都匯入（和記錄一樣，匯入只加不刪）；看不懂的欄位保留；記錄連得回我的食物', async ({ page }) => {
+  await openApp(page);
+  expect(await importFile(page, fx('backup-v3-custom-foods.json'))).toContain('匯入完成');
+  const s = await appState(page);
+  expect(s.customFoods.map(f => f.id)).toEqual(['cf_nut', 'cf_noodle', 'cf_future']);
+  expect(s.customFoods[2]).toMatchObject({ barcode: '4710000000000', futureField: { x: 1 } });
+  expect(s.logs['2026-11-25'].find(i => i.id === 'item_cf2')).toMatchObject({ customFoodId: 'cf_noodle', servings: 1.5 });
+  await closeScreens(page);
+  await page.click('.mobile-nav-tab[data-tab=library]');
+  await expect(page.locator('#myFoodList [data-mf-edit]')).toHaveCount(3);
+});

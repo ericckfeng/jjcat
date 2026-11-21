@@ -1,0 +1,21 @@
+{
+  "app": "diet-tracker",
+  "version": 3,
+  "exportedAt": "2026-11-26T12:00:00.000Z",
+  "targets": { "kcal": 1800 },
+  "logs": {
+    "2026-11-25": [
+      { "id": "item_cf1", "name": "堅果包 7g", "kcal": 20, "meal": "snack", "time": "15:00", "multiplier": 1, "p": 0.6, "f": 2, "fiber": 0.3, "grams": 7, "customFoodId": "cf_nut", "updatedAt": 1764050000000 },
+      { "id": "item_cf2", "name": "巷口牛肉麵 1.5 份", "kcal": 975, "meal": "lunch", "time": "12:10", "multiplier": 1, "p": 45, "servings": 1.5, "customFoodId": "cf_noodle", "updatedAt": 1764050000000 }
+    ]
+  },
+  "days": {},
+  "quickItems": [],
+  "customFoods": [
+    { "id": "cf_nut", "name": "堅果包", "serving": { "g": 35, "label": "1 包" }, "per100g": { "kcal": 285.71, "p": 8.57, "f": 28.57, "fiber": 4 }, "updatedAt": 1764040000000 },
+    { "id": "cf_noodle", "name": "巷口牛肉麵", "serving": { "label": "1 碗" }, "perServing": { "kcal": 650, "p": 30, "f": 22, "c": 80 }, "exPerServing": { "grain": 4, "prot": 2, "oil": 3 }, "updatedAt": 1764040000000 },
+    { "id": "cf_future", "name": "未來的食物", "perServing": { "kcal": 100 }, "barcode": "4710000000000", "futureField": { "x": 1 }, "updatedAt": 1764040000000 }
+  ],
+  "tomb": { "customFoods:cf_gone": 1764040000000 },
+  "photos": {}
+}

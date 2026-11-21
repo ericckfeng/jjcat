@@ -41,7 +41,7 @@ test('自己輸入可以填小數份數', async ({ page }) => {
 test('營養素、份數、目標、克數欄位都接受任意小數', async ({ page }) => {
   await openApp(page);
   const bad = await page.evaluate(() => {
-    const ids = ['add-p', 'add-ex-veg', 'edit-c', 'edit-ex-prot', 'qi-f', 'qi-ex-grain', 'tgt-ex-veg', 'tgt-p', 'gramsInput'];
+    const ids = ['add-p', 'add-ex-veg', 'edit-c', 'edit-ex-prot', 'mf-servingG', 'mf-kcal', 'mf-f', 'mf-na', 'mf-ex-grain', 'tgt-ex-veg', 'tgt-p', 'gramsInput'];
     return ids.filter(id => { const el = document.getElementById(id); el.value = '1.37'; return !el.checkValidity(); });
   });
   expect(bad).toEqual([]);

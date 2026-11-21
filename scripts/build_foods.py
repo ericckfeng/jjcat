@@ -30,12 +30,12 @@ NS = {'m': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
 COLS = {
     'id': '整合編號', 'category': '食品分類', 'name': '樣品名稱', 'desc': '內容物描述', 'aliases': '俗名',
     'waste': '廢棄率(%)', 'kcal_raw': '熱量(kcal)', 'kcal_adj': '修正熱量(kcal)',
-    'p': '粗蛋白(g)', 'f': '粗脂肪(g)', 'c': '總碳水化合物(g)', 'sugar': '糖質總量(g)',
+    'p': '粗蛋白(g)', 'f': '粗脂肪(g)', 'c': '總碳水化合物(g)', 'fiber': '膳食纖維(g)', 'sugar': '糖質總量(g)',
     'na': '鈉(mg)',
 }
 REQUIRED = ['id', 'name', 'kcal_raw', 'p', 'f', 'c']
 # 判斷「數值變了」的欄位
-NUTR_KEYS = ['kcal', 'p', 'f', 'c', 'sugar', 'na']
+NUTR_KEYS = ['kcal', 'p', 'f', 'c', 'fiber', 'sugar', 'na']
 
 
 def col_index(ref):
@@ -154,7 +154,7 @@ def convert(rows):
         if kcal is None:
             kcal = num(get(r, 'kcal_raw'))
         per = {'kcal': kcal, 'p': num(get(r, 'p')), 'f': num(get(r, 'f')), 'c': num(get(r, 'c')),
-               'sugar': num(get(r, 'sugar')), 'na': num(get(r, 'na'), 0)}
+               'fiber': num(get(r, 'fiber')), 'sugar': num(get(r, 'sugar')), 'na': num(get(r, 'na'), 0)}
         if per['kcal'] is None:
             problems.append('第 %d 列 %s %s 沒有熱量，略過' % (n, fid, name))
             continue
@@ -252,7 +252,7 @@ def main():
             'file': src.name,
             'sha256': hashlib.sha256(raw).hexdigest(),
             'builtAt': date.today().isoformat(),
-            'note': '數值為每 100 g 可食部分。kcal 取「修正熱量」（沒有時用「熱量」）；c 為總碳水化合物（和營養標示一樣含膳食纖維）；na 單位 mg。只收營養標示上有的項目。',
+            'note': '數值為每 100 g 可食部分。kcal 取「修正熱量」（沒有時用「熱量」）；c 為總碳水化合物（和營養標示一樣含膳食纖維）；fiber 膳食纖維；na 單位 mg。收營養標示上有的項目，另加膳食纖維（對血糖和排便有用）。',
         },
         'foods': foods,
     }

@@ -67,7 +67,7 @@ test('首頁每一餐顯示還差什麼；多的溫和提醒；沒份數的註�
 test('記完一餐的提示附上還差什麼；份數都夠了就說夠了', async ({ page }) => {
   await seed(page, { kcal: 1500, ex: {}, mealEx: { breakfast: { grain: 2, veg: 1 } } });
   await openApp(page);
-  await page.click('[data-screen=scr-food]');
+  await page.click('[data-food-open=all]');
   await page.click('#scr-food [data-meal=breakfast]');
   await page.fill('#foodSearch', '地瓜');
   await page.locator('#foodResults [data-food-id=B0400101]').click();

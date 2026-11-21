@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 import { openApp, appState, closeScreens, openSettings } from './helpers.mjs';
 
 async function openFood(page) {
-  await page.click('[data-screen=scr-food]');
+  await page.click('[data-food-open=all]');
   await expect(page.locator('#scr-food')).toBeVisible();
 }
 
@@ -68,19 +68,6 @@ test('快捷克數鈕與找不到時的說明', async ({ page }) => {
   await page.click('#scr-grams [data-back]');
   await page.fill('#foodSearch', '雞腿便當');
   await expect(page.locator('#foodResults')).toContainText('找不到');
-});
-
-test('常吃清單找不到時，可以直接到食物資料庫查', async ({ page }) => {
-  await openApp(page);
-  await page.click('[data-screen=scr-quick]');
-  await page.fill('#quickPickSearch', '鮭魚');
-  await page.click('[data-food-query]');
-  await expect(page.locator('#scr-food')).toBeVisible();
-  await expect(page.locator('#foodSearch')).toHaveValue('鮭魚');
-  await expect(page.locator('#foodResults .pick-row').first()).toContainText('鮭魚');
-  await page.click('#scr-food .scr-foot [data-back]');
-  await expect(page.locator('#scr-quick')).toBeVisible();
-  await expect(page.locator('#scr-food')).toBeHidden();
 });
 
 test('購物車：選三樣、修改一樣、拿掉一樣，一次記到午餐（同一組）', async ({ page }) => {

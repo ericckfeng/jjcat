@@ -88,6 +88,9 @@
 | `label` | （選填，Rev. 41 起）用「照營養標示算」記的：`{ g, kcal, p?, c?, f? }`＝標示上「每 g 克」的數字，沒填的營養素不寫（不是 0）。這筆的熱量＝`label` 換算 `grams` 的結果（使用者之後手動改過熱量就不一定相等）。之後可以拿來建「我的食物」 |
 | `morePhotos` | （選填，Rev. 41 起）第 2、3 張照片的 key 清單，例如 `['x_item_abc_mi5k2x1']`，只有 `hasPhoto` 為 true 時才有意義。格式 `x_<記錄 id>_<時間>`，**不能有「-」**：舊版 App 清雲端照片時把「-」前面那段當記錄 id，記錄還在就刪；`x_` 開頭的對不到記錄，舊版不會誤刪。照片內容不會改，換照片＝換新 key |
 | `lookup` | （選填，Rev. 42 起）「拍照記・待查」用手比的大小：`{ ref?, amt?, n?, cat? }`。`ref`＝`fist`／`palm`／`thumb`（拳頭／手掌／大拇指），`amt`＝幾個（0.25～20，例如 1/3 存 0.333），`n`＝數量（沒有＝1），`cat`＝粗估用的類別（`js/lookup.js` 的 `LOOKUP_CATS`）。選了類別和大小時，熱量、營養素、六大類是手掌法粗估的**這一筆全部**的量，`pending` 為 true。回填待查表後 `pending` 變 false、`ex` 清成 null，`lookup` 留著當紀錄 |
+| `customFoodId` | （選填，第 1 步起）從「我的食物」記的：`customFoods` 的 id。我的食物刪掉後記錄照舊（數字是記的當時算好的） |
+| `servings` | （選填，第 1 步起）以份計的我的食物吃了幾份（這時沒有 `grams`） |
+| `fiber` | （選填，第 1 步起）膳食纖維 g。只有查食物／我的食物有纖維資料時才有；很多記錄沒有，合計時要註明「有填纖維的 N 筆」 |
 | `foodId` | （選填，v11 起）食物資料庫的 id（`tfda_foods.json` 的 TFDA 整合編號） |
 | `backfill` | （選填，v32 起）`true`＝事後補記：`time` 是記錄的時間、不是吃的時間。記在過去的日期時自動標。報告的夜間進食不算這些。（v33 起，晚上 10 點到清晨 5 點記的會問吃的時間，直接改 `time`，不再標 `backfill`） |
 | `ai` | （選填，v27 起）這筆是 AI 估算的：`'photo'` 拍照、`'text'` 用說的／打字。沒有 `foodId` |
@@ -126,7 +129,21 @@
 
 `{ id, name, kcal, cat, isFav, p, c, f, ex, updatedAt }`，`cat` 為 `fav` / `breakfast` / `meal` / `drink`。預設項目 id 為 `f1`…`f17`。
 
-**即將停用**（2026-11-19 決定，11/26 之後的第 1 步）：由「我的食物」`customFoods` 取代，舊清單不轉移。欄位**不刪**：舊版 App 同步、舊備份檔匯入仍會讀寫它，新版要繼續原樣保留、照常合併，只是不顯示、不新增。
+**已停用**（第 1 步起）：由「我的食物」`customFoods` 取代，舊清單不轉移。欄位**不刪**：舊版 App 同步、舊備份檔匯入仍會讀寫它，新版要繼續原樣保留、照常合併，只是不顯示、不新增。新裝置的預設值改成空清單（以前是預設的 f1～f17）。
+
+### CustomFood（我的食物，最上層 `customFoods`，第 1 步起）
+
+```
+{ id: 'cf_xxxx', name, serving?: { g?, label? },
+  per100g?: { kcal, p?, f?, c?, sugar?, na?, fiber? }, exPer100g?: { grain?, prot?, ... },     // 以克計
+  perServing?: { kcal, p?, f?, c?, sugar?, na?, fiber? }, exPerServing?: { ... },               // 以份計
+  aliases?, category?, barcode?, source?, note?, updatedAt }
+```
+
+- 兩種形狀二選一：知道一份幾克 → `per100g`（新增頁填的「一份」數字 ×100÷克數，取到小數 2 位），記的時候問幾克、預填 `serving.g`；不知道克數 → `perServing`，記的時候問幾份。和 `tfda_foods.json` 同形狀，`foods.js` 的 `nutrientsFor` 直接能用。
+- 沒填的營養素不寫（不是 0）。`na` 單位 mg，其他 g；`fiber`＝膳食纖維。
+- 清單照規則 5 合併（`id`＋`updatedAt`），刪除用 `tomb['customFoods:<id>']`。匯入備份檔和記錄一樣「只加不刪」，不套用備份檔裡的刪除標記。
+- `aliases`、`category`、`barcode`、`source`、`note` 是之後（條碼、機構資料庫）用的，修改時要原樣保留。
 
 ### meta（只存在這台裝置）
 
@@ -161,6 +178,7 @@
 | v3（Rev. 41） | 2026-11-21 | 記錄新增 `label`（照營養標示算）、`morePhotos`（一筆最多 3 張照片）。**沒有調 `DATA_MIN_REV`**：兩個都是記錄裡的欄位，舊版會原樣保留；舊版看不到第 2、3 張、不會同步它們，但也不會刪（見 `morePhotos` 的 key 格式）。舊版「複製前一天」會連 `morePhotos` 一起複製，兩筆共用同一張照片，不會壞。 |
 | v3（Rev. 42） | 2026-11-21 | 記錄新增 `lookup`（拍照記・待查）。只是記錄裡的新欄位，舊版原樣保留，沒有調 `DATA_MIN_REV`。待查表（CSV）只是匯出／匯入用的檔案，不是同步格式：欄位見 `js/lookup.js` 的 `CSV_HEAD`，回填只看「編號」和要填的欄。 |
 | v3（Rev. 43） | 2026-11-21 | 拿掉吃到飽速記畫面（使用者覺得用不到）。格式沒變：舊記錄的 `party` 欄位保留；裝置上還沒記下來的 `meta.party` 開 App 時問一次要不要記下來。首頁角色改成可以複選：小芽、小貓、營養師（`meta.cat`、`meta.doc`、`meta.docSeen`，只存這台裝置）。 |
+| v3（第 1 步，11/26 之後發佈） | — | 最上層新增 `customFoods`（我的食物），「常吃的」`quickItems` 停用（不顯示、不新增，資料保留）。記錄新增 `customFoodId`、`servings`、`fiber`。`tfda_foods.json` 加回 `fiber`。**發佈時用 `python3 scripts/bump.py --min-rev`**，把 `DATA_MIN_REV` 調成這一版：還沒更新的 App 會暫停同步、提示更新。 |
 | v3（App v23） | 2026-11-19 | 每日欄位新增 `smm`（骨骼肌）；`targets.bodyFat`（目標體脂率）；`targets.calc.bmrSource` 可為 `ffm`。每日 CSV 最後再加一欄骨骼肌。 |
 | v3（App v24） | 2026-11-19 | 每日欄位新增 `vfl`、`pa`、`ecw`。每日 CSV 最後加三欄。 |
 | v3（App v25） | 2026-11-19 | 每日欄位新增 `vfa`（內臟脂肪面積）。每日 CSV 最後加一欄。 |

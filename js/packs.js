@@ -314,3 +314,63 @@ export function groupHits(hits) {
   });
   return [...groups.values()];
 }
+
+/* ---------------- 分享我的食物 ---------------- */
+// 我的食物 → 分享檔：和資料庫檔同一種格式，只是沒有 pack（App 匯入時加進「我的食物」，不是另一個資料庫）
+const FOOD_KEYS = ['name', 'aliases', 'category', 'brand', 'note', 'source', 'barcode', 'serving', 'per100g', 'exPer100g', 'perServing', 'exPerServing'];
+const NUTR_KEYS = ['serving', 'per100g', 'exPer100g', 'perServing', 'exPerServing'];
+export function myFoodsFile(foods, { now = Date.now() } = {}) {
+  const out = (foods || []).map(f => {
+    const c = { id: f.id };
+    FOOD_KEYS.forEach(k => { if (f[k] != null) c[k] = f[k]; });
+    return c;
+  });
+  return { app: PACK_APP, version: PACK_VERSION, exportedAt: new Date(now).toISOString(), foods: out };
+}
+// 資料庫（App 裡存的形狀）→ 資料庫檔（分享給別人）
+export function packToFile(pack, { now = Date.now() } = {}) {
+  const meta = { ...pack };
+  delete meta.foods; delete meta.updatedAt;
+  return { app: PACK_APP, version: PACK_VERSION, exportedAt: new Date(now).toISOString(), pack: meta, foods: pack.foods || [] };
+}
+export const isMyFoodsFile = (data) => Boolean(data && data.app === PACK_APP && !data.pack && Array.isArray(data.foods));
+
+// 別人分享的我的食物要怎麼加進來（以名稱比對，寫法差空白、全形半形也算同名）
+//   add：新的（給新 id）；update：同名但數字不同（使用者同意才更新，留原本的 id）；same：同名、數字一樣，不用動
+export function planMyFoodsImport(local, incoming, { makeId, now = Date.now() } = {}) {
+  const byName = new Map((local || []).map(f => [normalize(f.name), f]));
+  const nums = (f) => JSON.stringify(NUTR_KEYS.map(k => f[k] ?? null));
+  const plan = { add: [], update: [], same: 0 };
+  const seen = new Set();
+  (incoming || []).forEach(f => {
+    if (!f || !String(f.name || '').trim() || !(f.per100g || f.perServing)) return;
+    const key = normalize(f.name);
+    if (seen.has(key)) return;   // 檔案裡自己重複的只收第一筆
+    seen.add(key);
+    const clean = {};
+    FOOD_KEYS.forEach(k => { if (f[k] != null) clean[k] = f[k]; });
+    clean.name = String(clean.name).trim();
+    const old = byName.get(key);
+    if (!old) { plan.add.push({ ...clean, id: makeId('cf'), updatedAt: now }); return; }
+    if (nums(old) === nums(clean)) { plan.same++; return; }
+    const food = { ...old, updatedAt: now };
+    NUTR_KEYS.forEach(k => { delete food[k]; if (clean[k] != null) food[k] = clean[k]; });
+    plan.update.push({ old, food });
+  });
+  return plan;
+}
+
+/* ---------------- 和衛福部資料重複 ---------------- */
+// 沒有店家（或來源寫衛福部／TFDA）的品項，名稱和衛福部資料庫的品名或俗名一樣：查食物時會出現兩次，整理時可以拿掉
+const TFDA_WORDS = /TFDA|衛福部|衛生福利部|食藥署/i;
+export function tfdaOverlap(foods, tfda) {
+  const names = new Map();
+  (tfda || []).forEach(t => [t.name, ...(t.aliases || [])].forEach(n => { const k = normalize(n); if (k && !names.has(k)) names.set(k, t); }));
+  const out = [];
+  (foods || []).forEach(f => {
+    if (f.brand && !TFDA_WORDS.test(f.brand + ' ' + (f.source || ''))) return;
+    const t = names.get(normalize(f.name)) || names.get(normalize(f.base));
+    if (t) out.push({ food: f, tfda: t });
+  });
+  return out;
+}

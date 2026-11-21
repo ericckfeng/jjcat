@@ -32,6 +32,7 @@
 | localStorage | `diet_gdrive_pending` | 跳轉去 Google 登入前暫存的 `{ state, action, silent, at }` |
 | sessionStorage | `diet_reauth_at` | 防止登入無限重試 |
 | localStorage | `diet_silent_at`、`diet_silent_fail` | 登入過期時自動換新（打開 App、切回 App 時，沒在輸入才跳轉）：上次試的時間（10 分鐘內不重試）、上次 Google 要求自己登入的時間（6 小時內不再自動試）。自己登入成功會清掉 `diet_silent_fail` |
+| localStorage | `foodpack_tool_v1` | 整理工具（`tools/foodpack.html`）做到一半的進度：表格內容、欄位對照、資料庫資訊、勾掉的品項。只有整理工具讀寫，和 App 的資料無關；下次打開時問「接著做／重新開始」 |
 | IndexedDB | 資料庫 `diet-tracker` v1，store `photos` | key＝飲食記錄的 `id`（第 1 張照片）或 `morePhotos` 裡的 key（第 2、3 張），value＝JPEG 的 data URL |
 | Google 雲端硬碟 | `飲控隨身記/飲控隨身記備份.json` | 同步資料（不含照片） |
 | Google 雲端硬碟 | `飲控隨身記/照片/<photoKey>.jpg` | 照片，`appProperties.itemId` = photoKey（第 2、3 張就是 `morePhotos` 裡的 key） |
@@ -177,6 +178,8 @@
 - `id`：`pk_` ＋ 名稱和整理者的雜湊；同一個名稱和整理者再做一次＝新版，匯入時問「換成新版／保留舊版」（整包換掉）。食物 `id`：`pf_` ＋ 店家和品名的雜湊，新版裡同一樣的 id 不變。
 - `base`／`variant`：名稱結尾括號裡的是規格（「珍珠奶茶(大杯/無糖)」→ `珍珠奶茶`／`大杯/無糖`）。查食物時同一個 `base` 收成一列，點進去依店家分開列。各家的數字不合併、不平均。
 - `askBy: 'serving'`（外食）：一律存 `perServing`，問幾份，`serving.g`／`ml` 只是說明。`'grams'`（食材份量表）：有每份克數就存 `per100g`，問幾克。
+- **分享我的食物**用同一種檔案，只是**沒有 `pack`**：`{ app: 'diet-tracker-foods', version: 1, exportedAt, foods }`（`foods` 是我的食物的欄位，不帶 `updatedAt`）。匯入時加進對方的「我的食物」（給新 id）：以名稱比對，新的先問要不要加；同名但數字不同的再問「換成檔案裡的／保留我的」（換的話留原本的 id，只換 `serving`、`per100g`、`perServing`、六大類）；一樣的不動（`js/packs.js` 的 `planMyFoodsImport`）。
+- 資料庫也可以整包分享（`packToFile`），對方匯入就是同一個資料庫（同一個 `id`）。
 - `sfa`（飽和脂肪 g）、`tfa`（反式脂肪 g）：存起來，App 還不顯示、不算進記錄（2026-11-21 使用者決定）。
 - 清單照規則 5 合併（`id`＋`updatedAt`，整包比較），刪除用 `tomb['foodPacks:<id>']`。會同步到自己的其他裝置；不放進公開的 App 程式碼（著作權、準確度由整理的人負責）。
 

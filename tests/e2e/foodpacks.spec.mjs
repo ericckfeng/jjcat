@@ -11,7 +11,8 @@ const CSV = [
   '清心福全,奶茶,珍珠奶茶（大杯/無糖）,1杯,360,,,,,,0,,清心官方',
   '拿坡里,披薩,地中海漁夫披薩(大),1片,238,12,18,,,30,,,',
   '台灣SUBWAY,醬料,義大利油醋醬,1份,60,0,6,,,1,,,SUBWAY官方',
-  '台灣SUBWAY,醬料,千島醬,1份,60,0,6,,,1,,,SUBWAY官方'
+  '台灣SUBWAY,醬料,千島醬,1份,60,0,6,,,1,,,SUBWAY官方',
+  '自助餐單品基準(TFDA資料庫),主食,白飯(標準1碗),1碗 (約200g),280,5,0.6,,,62,,,衛福部食藥署TFDA資料庫'
 ].join('\r\n');
 
 async function makePack(page) {
@@ -19,7 +20,7 @@ async function makePack(page) {
   await page.route('https://cdnjs.cloudflare.com/**', r => r.fulfill({ contentType: 'application/javascript', body: '' }));
   await page.goto('/tools/foodpack.html');
   await page.setInputFiles('#fileInput', { name: '外食表.csv', mimeType: 'text/csv', buffer: Buffer.from('﻿' + CSV) });
-  await expect(page.locator('#loadNote')).toContainText('讀到 8 列');
+  await expect(page.locator('#loadNote')).toContainText('讀到 9 列');
   return page;
 }
 
@@ -29,17 +30,17 @@ test('整理工具：自動對欄位、合併同店同名、標出要確認的�
   await makePack(page);
   await expect(page.locator('#pkName')).toHaveValue('外食表');
   await expect(page.locator('[data-askby=serving]')).toHaveClass(/is-active/);
-  await expect(page.locator('#checkSummary')).toContainText('收 7 樣、合併重複 1 樣、要確認 1 樣');
+  await expect(page.locator('#checkSummary')).toContainText('收 8 樣、合併重複 1 樣、要確認 1 樣');
   await expect(page.locator('#checkBody')).toContainText('地中海漁夫披薩(大)」熱量 238，用三大營養素算是 330');
   await expect(page.locator('#checkBody')).toContainText('珍珠奶茶：50嵐、清心福全');
   await page.check('[data-drop] >> nth=1');
-  await expect(page.locator('#checkSummary')).toContainText('收 6 樣');
+  await expect(page.locator('#checkSummary')).toContainText('收 7 樣');
   await page.fill('#pkEdition', '2026-11');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#dlJson')]);
   expect(dl.suggestedFilename()).toBe('食物資料_外食表_2026-11.json');
   const file = JSON.parse(await (await dl.createReadStream()).toArray().then(b => Buffer.concat(b).toString()));
   expect(file).toMatchObject({ app: 'diet-tracker-foods', pack: { name: '外食表', edition: '2026-11', askBy: 'serving' } });
-  expect(file.foods).toHaveLength(6);
+  expect(file.foods).toHaveLength(7);
   expect(file.foods.find(f => f.name === '漢 堡').perServing).toMatchObject({ kcal: 260, sfa: 3.1 });
   // 欄位改錯會說明
   await page.selectOption('[data-map="4"]', '');
@@ -171,4 +172,81 @@ test('套餐裡有資料庫的食物：選套餐時記錄照樣帶來源', async
   await page.click('#foodCartSaveBtn');
   const logs = (await appState(page)).logs[await page.evaluate(() => window.__dietApp.ui.date)];
   expect(logs.filter(e => e.comboId === combo.id).map(e => e.src)).toEqual(['pk_test', 'pk_test']);
+});
+
+async function readDownload(dl) {
+  const chunks = await (await dl.createReadStream()).toArray();
+  return Buffer.concat(chunks).toString();
+}
+
+test('整理工具：提示衛福部也有的品項（預設留著）；關掉再打開可以接著做', async ({ page }) => {
+  await makePack(page);
+  await expect(page.locator('#checkBody')).toContainText('衛福部資料庫也有（1）');
+  await expect(page.locator('#checkBody')).toContainText('白飯(標準1碗)');
+  await page.fill('#pkOrg', '自己整理');
+  await page.check('[data-drop] >> nth=0');   // 勾掉 SUBWAY 的油醋醬
+  await expect(page.locator('#saveNote')).toContainText('已自動存進度');
+  await page.reload();
+  await expect(page.locator('#resumeBox')).toBeVisible();
+  await expect(page.locator('#resumeText')).toContainText('「外食表」，9 列');
+  await page.click('#resumeBtn');
+  await expect(page.locator('#checkSummary')).toContainText('收 7 樣');
+  await expect(page.locator('#pkOrg')).toHaveValue('自己整理');
+  await page.reload();
+  await page.click('#resumeDiscardBtn');
+  await page.reload();
+  await expect(page.locator('#resumeBox')).toBeHidden();
+});
+
+test('分享我的食物 → 另一個人匯入：新的加進來，同名數字不同的問要不要換', async ({ page, browser }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const s = window.__dietApp.state;
+    s.customFoods = [
+      { id: 'cf_a', name: '堅果包', serving: { g: 35, label: '1 包' }, per100g: { kcal: 285.71, p: 8.57 }, updatedAt: 1 },
+      { id: 'cf_b', name: '巷口牛肉麵', serving: { label: '1 碗' }, perServing: { kcal: 650 }, updatedAt: 1 }
+    ];
+  });
+  await page.click('.mobile-nav-tab[data-tab=library]');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#myFoodShareBtn')]);
+  const shared = JSON.parse(await readDownload(dl));
+  expect(shared.pack).toBeUndefined();
+  expect(shared.foods.map(f => f.name)).toEqual(['堅果包', '巷口牛肉麵']);
+  const [csv] = await Promise.all([page.waitForEvent('download'), page.click('#myFoodCsvBtn')]);
+  expect(await readDownload(csv)).toContain('堅果包,,,,每份,35,1 包,100');
+
+  // 另一個人：已經有「堅果包」但數字不同
+  const other = await browser.newPage();
+  await openApp(other);
+  await other.evaluate(() => { window.__dietApp.state.customFoods = [{ id: 'cf_x', name: '堅果包', serving: { g: 30 }, per100g: { kcal: 300 }, updatedAt: 1 }]; });
+  await other.click('.mobile-nav-tab[data-tab=library]');
+  await other.setInputFiles('#packImportInput', { name: 'my.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(shared)) });
+  await expect(other.locator('#confirmMessage')).toContainText('共 1 樣新的：「巷口牛肉麵」');
+  await other.click('#confirmOkBtn');
+  await expect(other.locator('#confirmTitle')).toHaveText('有 1 樣和你的同名');
+  await other.click('#confirmCancelBtn');   // 保留我的
+  let foods = (await appState(other)).customFoods;
+  expect(foods.map(f => f.name)).toEqual(['堅果包', '巷口牛肉麵']);
+  expect(foods[0]).toMatchObject({ id: 'cf_x', per100g: { kcal: 300 } });
+  expect(foods[1].id).not.toBe('cf_b');
+  // 再匯入一次：沒有新的，直接問同名的；這次換掉
+  await other.setInputFiles('#packImportInput', { name: 'my.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(shared)) });
+  await expect(other.locator('#confirmTitle')).toHaveText('有 1 樣和你的同名');
+  await other.click('#confirmOkBtn');
+  foods = (await appState(other)).customFoods;
+  expect(foods[0]).toMatchObject({ id: 'cf_x', serving: { g: 35, label: '1 包' }, per100g: { kcal: 285.71 } });
+  // 第三次：都有了
+  await other.setInputFiles('#packImportInput', { name: 'my.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(shared)) });
+  await expect(other.locator('#toastMsg')).toContainText('這些食物你都有了（2 樣）');
+});
+
+test('資料庫可以整包分享，對方匯入得到一樣的資料庫', async ({ page }) => {
+  await openApp(page);
+  await importPackFile(page);
+  await page.click('#confirmOkBtn');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-pack-share=pk_test]')]);
+  expect(dl.suggestedFilename()).toBe('食物資料_外食連鎖店_2026.json');
+  const file = JSON.parse(await readDownload(dl));
+  expect(file.pack).toMatchObject({ id: 'pk_test', name: '外食連鎖店', edition: '2026' });
+  expect(file.foods).toHaveLength(4);
 });

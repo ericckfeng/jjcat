@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   guessMapping, parseServing, splitVariant, rowsToFoods, findDuplicates, mergeExact,
-  buildPack, packFromFile, packRows, searchPacks, groupHits, hashId, PACK_CSV_HEAD
+  buildPack, packFromFile, packRows, searchPacks, groupHits, hashId, PACK_CSV_HEAD,
+  myFoodsFile, packToFile, isMyFoodsFile, planMyFoodsImport, tfdaOverlap
 } from '../../js/packs.js';
 
 // 和使用者給的外食表同樣的欄位
@@ -148,4 +149,47 @@ test('查食物：品項、店家都找得到；同一個品項收成一組，�
   assert.deepEqual(groups[0].brands, ['50嵐', '清心福全']);
   assert.deepEqual(groupHits(searchPacks(packs, '麥當勞')).map(g => g.base), ['漢堡', '沒熱量的', '可樂'].filter(b => foods.some(f => f.base === b)));
   assert.deepEqual(searchPacks(packs, '珍珠', { packId: 'other' }), []);
+});
+
+test('分享我的食物：沒有 pack 的資料庫檔，不帶修改時間；資料庫也能整包分享', () => {
+  const foods = [{ id: 'cf_1', name: '堅果包', serving: { g: 35 }, per100g: { kcal: 285.71 }, updatedAt: 9, futureField: 1 }];
+  const file = myFoodsFile(foods, { now: 0 });
+  assert.deepEqual(file, { app: 'diet-tracker-foods', version: 1, exportedAt: '1970-01-01T00:00:00.000Z', foods: [{ id: 'cf_1', name: '堅果包', serving: { g: 35 }, per100g: { kcal: 285.71 } }] });
+  assert.equal(isMyFoodsFile(file), true);
+  const pf = packToFile({ id: 'pk_1', name: '外食', foods, updatedAt: 3 }, { now: 0 });
+  assert.equal(isMyFoodsFile(pf), false);
+  assert.deepEqual(pf.pack, { id: 'pk_1', name: '外食' });
+  assert.equal(packFromFile(pf).pack.foods.length, 1);
+});
+
+test('匯入別人分享的我的食物：新的加進來（新 id）、同名數字不同的等使用者決定、一樣的不動', () => {
+  const local = [
+    { id: 'cf_a', name: '堅果包', serving: { g: 35 }, per100g: { kcal: 285.71 }, aliases: ['堅果'], updatedAt: 1 },
+    { id: 'cf_b', name: '無糖豆漿', perServing: { kcal: 120 }, updatedAt: 1 }
+  ];
+  const incoming = [
+    { id: 'x1', name: '堅果包', serving: { g: 30 }, per100g: { kcal: 300 } },
+    { id: 'x2', name: '無糖 豆漿', perServing: { kcal: 120 } },
+    { id: 'x3', name: '烤地瓜', serving: { g: 150 }, per100g: { kcal: 127 }, updatedAt: 5 },
+    { id: 'x4', name: '烤地瓜', perServing: { kcal: 1 } },
+    { id: 'x5', name: '沒數字的' }
+  ];
+  let n = 0;
+  const plan = planMyFoodsImport(local, incoming, { makeId: (p) => p + '_new' + (++n), now: 7 });
+  assert.deepEqual(plan.add, [{ id: 'cf_new1', name: '烤地瓜', serving: { g: 150 }, per100g: { kcal: 127 }, updatedAt: 7 }]);
+  assert.equal(plan.same, 1);
+  assert.equal(plan.update.length, 1);
+  assert.equal(plan.update[0].old, local[0]);
+  assert.deepEqual(plan.update[0].food, { id: 'cf_a', name: '堅果包', aliases: ['堅果'], serving: { g: 30 }, per100g: { kcal: 300 }, updatedAt: 7 });
+});
+
+test('和衛福部重複：沒有店家（或來源是衛福部）的同名品項才算；連鎖店的不算', () => {
+  const tfda = [{ id: 'T1', name: '白飯', aliases: ['米飯'] }, { id: 'T2', name: '漢堡' }];
+  const foods = [
+    { id: 'a', name: '白飯(標準1碗)', base: '白飯', brand: '自助餐單品基準(TFDA資料庫)' },
+    { id: 'b', name: '米飯', base: '米飯' },
+    { id: 'c', name: '漢堡', base: '漢堡', brand: '台灣麥當勞', source: '官方' },
+    { id: 'd', name: '滷肉飯', base: '滷肉飯' }
+  ];
+  assert.deepEqual(tfdaOverlap(foods, tfda).map(x => [x.food.id, x.tfda.id]), [['a', 'T1'], ['b', 'T1']]);
 });

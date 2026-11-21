@@ -27,6 +27,14 @@
       <p class="text-base text-stone-600 leading-relaxed">把試算表（例如連鎖店外食營養表、營養師給的份量表）整理成「飲控隨身記」用的資料庫檔：對好欄位、合併重複的、標出要確認的數字，再到 App「我的食物 → 匯入食物資料庫」。表格只在這台電腦的瀏覽器裡處理，不會上傳到任何地方。</p>
     </header>
 
+    <div id="resumeBox" class="hidden step space-y-2 border-emerald-300 bg-emerald-50">
+      <p id="resumeText" class="text-base"></p>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" id="resumeBtn" class="btn-primary px-4">接著做</button>
+        <button type="button" id="resumeDiscardBtn" class="btn-secondary px-4">不要了，重新開始</button>
+      </div>
+    </div>
+
     <section class="step space-y-3">
       <h2>1. 讀入表格</h2>
       <p class="text-base text-stone-600">Excel（.xlsx）或 CSV。第一列要是欄位名稱，之後一列一樣食物。Google 試算表可以「檔案 → 下載 → Microsoft Excel」，或貼上分享連結（要設成「知道連結的人都能檢視」）。</p>
@@ -79,6 +87,7 @@
         <button type="button" id="dlCsv" class="btn-secondary btn-xl">下載 CSV（給人看、給營養師）</button>
       </div>
       <p id="outNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
+      <p id="saveNote" class="text-sm muted"></p>
     </section>
   </main>
   <script type="module" src="foodpack.js"></script>

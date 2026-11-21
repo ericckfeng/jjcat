@@ -15,7 +15,8 @@ import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, sho
 import { buildInsights } from './insights.js';
 import { APP_REV, APP_LABEL, parseLatest, requiredRev, minRevToWrite, deviceName, deviceRecord, upsertDevice, deviceRows } from './version.js';
 import { customFoodFromForm, formFromCustomFood, servingNutrients, servingKcal, servingText, searchMine, sortByUse, isPerServing, formFromManual } from './myfoods.js';
-import { packFromFile, searchPacks, groupHits } from './packs.js';
+import { packFromFile, searchPacks, groupHits, packRows, myFoodsFile, packToFile, isMyFoodsFile, planMyFoodsImport } from './packs.js';
+import { toCsv } from './lookup.js';
 import { comboFromCart, resolveCombo, comboTotals, comboSummary, searchCombos, sortCombos } from './combos.js';
 import { HAND_REFS, AMOUNTS, LOOKUP_CATS, lookupCat, cleanAmount, amountText, sizeText, estimateLookup, buildLookupCsv, readFilledCsv, AI_LOOKUP_PROMPT } from './lookup.js';
 import { partyTemplate, startCounts, partyEntries, partyTotals } from './party.js';
@@ -3014,7 +3015,8 @@ function renderPackList() {
   $('packList').innerHTML = packs.length ? packs.map(p => `<div class="flex items-center gap-2 bg-stone-50 rounded-xl p-3">
       <span class="min-w-0 flex-1"><span class="block text-lg font-semibold text-stone-900 leading-snug break-words">${esc(p.name)}</span>
       <span class="block text-sm text-stone-500 break-words">${esc([p.org, p.edition, (p.foods || []).length + ' 樣'].filter(Boolean).join('・'))}</span></span>
-      <button type="button" data-pack-del="${esc(p.id)}" class="chip-btn chip-lg shrink-0">刪除</button></div>`).join('')
+      <span class="shrink-0 flex flex-col gap-1"><button type="button" data-pack-share="${esc(p.id)}" class="chip-btn chip-lg">分享</button>
+      <button type="button" data-pack-del="${esc(p.id)}" class="chip-btn chip-lg">刪除</button></span></div>`).join('')
     : '<p class="rounded-2xl bg-stone-50 text-stone-600 p-4 text-base leading-relaxed">還沒有。用「整理工具」把試算表（例如連鎖店外食營養表）做成資料庫檔，再按「匯入」。</p>';
 }
 function afterPackChange() {
@@ -3046,9 +3048,64 @@ $('packImportInput').addEventListener('change', async (e) => {
   e.target.value = '';
   if (!file) return;
   let data;
-  try { data = JSON.parse(await file.text()); } catch (err) { showToast('檔案無法讀取，請選整理工具做的資料庫檔（.json）'); return; }
-  importPack(data);
+  try { data = JSON.parse(await file.text()); } catch (err) { showToast('檔案無法讀取，請選食物檔（.json）'); return; }
+  if (isMyFoodsFile(data)) importMyFoods(data); else importPack(data);
 });
+$('myFoodImportBtn').addEventListener('click', () => $('packImportInput').click());
+
+// 分享檔案：手機可以直接傳 LINE（分享選單），不行就下載
+async function shareFile(fileName, content, mime, downloadedMsg) {
+  const file = new File([content], fileName, { type: mime });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: fileName }); return; }
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+  }
+  downloadBlob(fileName, content, mime);
+  showToast(downloadedMsg);
+}
+const fileSafe = (s) => String(s).replace(/[\\/:*?"<>|\s]+/g, '_');
+$('myFoodShareBtn').addEventListener('click', () => {
+  const foods = customFoods();
+  if (!foods.length) { showToast('還沒有我的食物可以分享'); return; }
+  shareFile('我的食物_' + todayStr() + '.json', JSON.stringify(myFoodsFile(foods)), 'application/json',
+    '已下載。對方在「我的食物 → 匯入別人分享的食物」選這個檔案');
+});
+$('myFoodCsvBtn').addEventListener('click', () => {
+  const foods = customFoods();
+  if (!foods.length) { showToast('還沒有我的食物'); return; }
+  shareFile('我的食物_' + todayStr() + '.csv', '\ufeff' + toCsv(packRows({ pack: { name: '我的食物' }, foods })), 'text/csv', '已下載表格（CSV）');
+});
+$('packList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pack-share]');
+  const pack = b && foodPacks().find(p => p.id === b.getAttribute('data-pack-share'));
+  if (!pack) return;
+  shareFile(fileSafe('食物資料_' + pack.name + (pack.edition ? '_' + pack.edition : '')) + '.json', JSON.stringify(packToFile(pack)), 'application/json',
+    '已下載。對方在「我的食物 → 匯入食物資料庫」選這個檔案');
+});
+// 別人分享的我的食物：新的先問要不要加；同名但數字不同的再問一次要不要換（預設留自己的）
+function importMyFoods(data) {
+  const plan = planMyFoodsImport(customFoods(), data.foods, { makeId: uid, now: now() });
+  const names = (list) => list.slice(0, 5).map(f => '「' + f.name + '」').join('') + (list.length > 5 ? '等' : '');
+  if (!plan.add.length && !plan.update.length) { showToast(plan.same ? '這些食物你都有了（' + plan.same + ' 樣）' : '檔案裡沒有可以加的食物'); return; }
+  const askUpdate = () => {
+    if (!plan.update.length) return;
+    const olds = plan.update.map(u => u.old);
+    openConfirm('有 ' + olds.length + ' 樣和你的同名', names(olds) + '的數字和你存的不一樣。要換成檔案裡的數字嗎？已經記的飲食記錄不會改變。', () => {
+      const list = customFoods();
+      plan.update.forEach(({ old, food }) => { const i = list.indexOf(old); if (i >= 0) list[i] = food; });
+      afterMyFoodChange();
+      showToast('已更新 ' + plan.update.length + ' 樣');
+    }, '換成檔案裡的', null, '保留我的');
+  };
+  if (!plan.add.length) { askUpdate(); return; }
+  openConfirm('加入我的食物', '共 ' + plan.add.length + ' 樣新的：' + names(plan.add) + '。' + (plan.same ? '另外 ' + plan.same + ' 樣你已經有了。' : ''), () => {
+    customFoods().push(...plan.add);
+    afterMyFoodChange();
+    showToast('已加入 ' + plan.add.length + ' 樣到我的食物');
+    askUpdate();
+  }, '加入');
+}
 $('packList').addEventListener('click', (e) => {
   const b = e.target.closest('[data-pack-del]');
   if (!b) return;
@@ -3868,7 +3925,7 @@ $('importJsonInput').addEventListener('change', async (e) => {
   if (!file) return;
   let data;
   try { data = JSON.parse(await file.text()); } catch (err) { showToast('檔案無法讀取，請確認是 JSON 備份檔'); return; }
-  if (data && data.app === 'diet-tracker-foods') { importPack(data); return; }   // 選到食物資料庫檔也可以
+  if (data && data.app === 'diet-tracker-foods') { if (isMyFoodsFile(data)) importMyFoods(data); else importPack(data); return; }   // 選到食物檔也可以
   if (requiredRev(data)) { showToast('這個備份檔是較新版的 App 做的，請先更新 App（設定 → 關於）再匯入'); return; }
   openConfirm('匯入備份', '會把「' + file.name + '」合併到目前資料，相同的記錄不會重複；目標設定會改成備份檔裡的設定。', async () => {
     try {

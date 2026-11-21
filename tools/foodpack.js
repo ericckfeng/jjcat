@@ -1,6 +1,6 @@
 // 食物資料庫整理工具：試算表 → 資料庫檔（js/packs.js 的格式）
 // 獨立頁面，不碰 App 的 localStorage；兩邊靠檔案交接。
-import { PACK_FIELDS, FIELD_LABEL, guessMapping, rowsToFoods, findDuplicates, mergeExact, buildPack, packRows } from '../js/packs.js';
+import { PACK_FIELDS, FIELD_LABEL, guessMapping, rowsToFoods, findDuplicates, mergeExact, buildPack, packRows, tfdaOverlap } from '../js/packs.js';
 import { parseCsv, toCsv } from '../js/lookup.js';
 
 const $ = (id) => document.getElementById(id);
@@ -21,6 +21,43 @@ function note(id, tone, text) {
   el.textContent = text || '';
 }
 
+// 衛福部資料：用來提示「這一樣衛福部資料庫也有」（載入失敗就不提示）
+let tfda = null;
+fetch('../tfda_foods.json').then(r => (r.ok ? r.json() : null)).then(d => { tfda = d && d.foods; if (st.rows.length) update(); }).catch(() => {});
+
+/* ---------------- 存進度 ---------------- */
+// 整理到一半關掉頁面，下次打開可以接著做。存在這台電腦的瀏覽器（和 App 的資料分開）
+const SAVE_KEY = 'foodpack_tool_v1';
+const META_IDS = ['pkName', 'pkOrg', 'pkEdition', 'pkUrl', 'pkNote'];
+function saveProgress() {
+  if (!st.rows.length) return;
+  const data = { fileName: st.fileName, head: st.head, rows: st.rows, mapping: st.mapping, askBy: st.askBy, drop: [...st.drop],
+    meta: Object.fromEntries(META_IDS.map(id => [id, $(id).value])), savedAt: Date.now() };
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); $('saveNote').textContent = '已自動存進度（' + new Date().toLocaleTimeString('zh-TW', { hour12: false }) + '）'; }
+  catch (e) { $('saveNote').textContent = '表格太大，沒辦法存進度；關掉頁面前記得先下載。'; }
+}
+function readProgress() {
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (e) { return null; }
+}
+function clearProgress() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 無法存取 */ } }
+const saved = readProgress();
+if (saved && saved.rows && saved.rows.length) {
+  $('resumeText').textContent = '上次整理到一半：「' + (saved.meta && saved.meta.pkName || saved.fileName || '表格') + '」，' + saved.rows.length + ' 列（' + new Date(saved.savedAt).toLocaleString('zh-TW', { hour12: false }) + '）。';
+  $('resumeBox').classList.remove('hidden');
+}
+$('resumeBtn').addEventListener('click', () => {
+  const s = readProgress();
+  $('resumeBox').classList.add('hidden');
+  if (!s) return;
+  Object.assign(st, { fileName: s.fileName || '', head: s.head, rows: s.rows, mapping: s.mapping, askBy: s.askBy || 'serving', drop: new Set(s.drop || []), sheets: null });
+  META_IDS.forEach(id => { $(id).value = (s.meta && s.meta[id]) || ''; });
+  note('loadNote', 'ok', '接著上次的：' + st.rows.length + ' 列、' + st.head.length + ' 欄。');
+  ['stepMap', 'stepInfo', 'stepCheck', 'stepOut'].forEach(id => $(id).classList.remove('hidden'));
+  renderMap();
+  update();
+});
+$('resumeDiscardBtn').addEventListener('click', () => { clearProgress(); $('resumeBox').classList.add('hidden'); });
+
 /* ---------------- 1. 讀入 ---------------- */
 function sheetRows(ws) {
   // raw: false → 拿到儲存格顯示的文字（數字照表上的樣子），defval 讓空白格也佔位
@@ -36,7 +73,9 @@ function useRows(all, name) {
   st.drop = new Set();
   // 有「店家」欄的通常是外食表：問幾份；有「每份克數」沒有店家的：問幾克
   st.askBy = st.mapping.includes('brand') || !st.mapping.includes('servingG') ? 'serving' : 'grams';
-  if (!$('pkName').value) $('pkName').value = name.replace(/\.(xlsx|xls|csv|tsv|txt)$/i, '').replace(/_/g, ' ');
+  META_IDS.forEach(id => { $(id).value = ''; });   // 新的表：資訊重填
+  $('pkName').value = name.replace(/\.(xlsx|xls|csv|tsv|txt)$/i, '').replace(/_/g, ' ');
+  $('resumeBox').classList.add('hidden');
   note('loadNote', 'ok', '讀到 ' + st.rows.length + ' 列、' + st.head.length + ' 欄。');
   ['stepMap', 'stepInfo', 'stepCheck', 'stepOut'].forEach(id => $(id).classList.remove('hidden'));
   renderMap();
@@ -152,6 +191,11 @@ function update() {
   if (blank.length) parts.push(sec(`看不懂的數字，當成空白（${blank.length}）`, blank.map(p => `<div>第 ${p.row} 列：${esc(FIELD_LABEL[p.field])}「${esc(p.value)}」</div>`).join('')));
   if (dup.crossBrand.length) parts.push(sec(`不同店的同一個品項（${dup.crossBrand.length} 組，不合併）`, '<p class="muted text-sm">各家數字不同，不會平均。App 查食物時收成一列，點進去選哪一家、哪一種。</p>' +
     dup.crossBrand.map(g => `<div><b>${esc(g[0].base)}</b>：${esc([...new Set(g.map(f => f.brand || '（沒填店家）'))].join('、'))}</div>`).join('')));
+  const overlap = tfda ? tfdaOverlap(merged, tfda) : [];
+  if (overlap.length) {
+    parts.push(sec(`衛福部資料庫也有（${overlap.length}）`, '<p class="muted text-sm">App 查食物時，衛福部資料庫本來就有這些（每 100 g 的數字）。表裡的是一份的數字，留著記的時候比較方便；不想重複出現就勾掉。</p>' +
+      overlap.map(({ food: f, tfda: t }) => `<label class="flex gap-2 items-start"><input type="checkbox" class="mt-1.5" data-drop="${esc(f.id)}" ${st.drop.has(f.id) ? 'checked' : ''}/> <span>拿掉 ${esc(who(f))}<span class="muted">　衛福部：${esc(t.name)}</span></span></label>`).join('')));
+  }
   $('checkBody').innerHTML = parts.join('');
 
   const meta = { name: $('pkName').value, org: $('pkOrg').value, edition: $('pkEdition').value, url: $('pkUrl').value, note: $('pkNote').value, askBy: st.askBy };
@@ -169,6 +213,7 @@ function update() {
       <td class="n">${num(p.kcal)}</td><td class="n">${num(p.p)}</td><td class="n">${num(p.f)}</td><td class="n">${num(p.c)}</td><td class="n">${num(p.sugar)}</td><td class="n">${num(p.na)}</td></tr>`;
   }).join('');
   $('previewMore').textContent = foods.length > 50 ? '只列前 50 樣，共 ' + foods.length + ' 樣。' : '';
+  saveProgress();
 }
 $('checkBody').addEventListener('change', (e) => {
   const c = e.target.closest('[data-drop]');
@@ -189,7 +234,7 @@ const baseFile = () => ('食物資料_' + st.file.pack.name + (st.file.pack.edit
 $('dlJson').addEventListener('click', () => {
   if (!st.file) return;
   download(baseFile() + '.json', JSON.stringify(st.file), 'application/json');
-  note('outNote', 'ok', '已下載。到 App「我的食物」分頁 →「匯入食物資料庫」選這個檔案。');
+  note('outNote', 'ok', '已下載。到 App「我的食物」分頁 →「匯入食物資料庫」選這個檔案。進度還留著，要修改可以直接改完再下載一次。');
 });
 $('dlCsv').addEventListener('click', () => {
   if (!st.file) return;

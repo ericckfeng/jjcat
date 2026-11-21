@@ -65,7 +65,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 
 - **狀態**：`state`（要同步的資料＋只存本機的 `meta`）存 `localStorage['diet_tracker_v2']`；照片另外存 IndexedDB。
 - **儲存**：改到「要同步的資料」一律呼叫 `persist()`（會標記 dirty 並排程同步）；只改本機設定用 `persistLocal()`。每日欄位用 `setDayField(field, value, date)`，它會寫入欄位時間戳 `_t`。新增／修改飲食記錄或常吃清單要更新 `updatedAt`；刪除要呼叫 `tombstone('e:'+id)` 或 `tombstone('q:'+id)`。
-- **同步**：`doSync()` 下載雲端 JSON → `mergeData(local, remote)` → 上傳照片（只傳新的）→ 下載缺的照片 → 有變才上傳合併結果。照片以 `photoKey`（編輯換照片時變成 `id-時間`）區分版本。
+- **同步**：`doSync()` 下載雲端 JSON → `mergeData(local, remote)` → 上傳照片（只傳新的）→ 下載缺的照片 → 有變才上傳合併結果。照片以 `photoKey`（編輯換照片時變成 `id-時間`）區分版本。一筆最多 3 張照片：第 2、3 張的 key 在記錄的 `morePhotos`（`x_<id>_<時間>`，不能有「-」，原因見 `DATA_FORMAT.md`），新增、刪除、複製記錄時要一起處理（`deleteEntryPhotos`、`morePhotoKeys`）。
 - **睡眠**：昨晚的睡眠記在**起床那天**（`nightDate() === ui.date`），補眠也記在當天；這樣才能和當天吃多少比較。
 - **全螢幕輸入頁**：`openScreen(id)` 會 `history.pushState`，手機返回鍵可關閉。新增輸入頁照現有 `scr-*` 的結構做。
 

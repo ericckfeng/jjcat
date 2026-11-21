@@ -32,9 +32,9 @@
 | localStorage | `diet_gdrive_pending` | 跳轉去 Google 登入前暫存的 `{ state, action, silent, at }` |
 | sessionStorage | `diet_reauth_at` | 防止登入無限重試 |
 | localStorage | `diet_silent_at`、`diet_silent_fail` | 登入過期時自動換新（打開 App、切回 App 時，沒在輸入才跳轉）：上次試的時間（10 分鐘內不重試）、上次 Google 要求自己登入的時間（6 小時內不再自動試）。自己登入成功會清掉 `diet_silent_fail` |
-| IndexedDB | 資料庫 `diet-tracker` v1，store `photos` | key＝飲食記錄的 `id`，value＝JPEG 的 data URL |
+| IndexedDB | 資料庫 `diet-tracker` v1，store `photos` | key＝飲食記錄的 `id`（第 1 張照片）或 `morePhotos` 裡的 key（第 2、3 張），value＝JPEG 的 data URL |
 | Google 雲端硬碟 | `飲控隨身記/飲控隨身記備份.json` | 同步資料（不含照片） |
-| Google 雲端硬碟 | `飲控隨身記/照片/<photoKey>.jpg` | 照片，`appProperties.itemId` = photoKey |
+| Google 雲端硬碟 | `飲控隨身記/照片/<photoKey>.jpg` | 照片，`appProperties.itemId` = photoKey（第 2、3 張就是 `morePhotos` 裡的 key） |
 
 ## `state` 結構（localStorage `diet_tracker_v2`）
 
@@ -84,7 +84,9 @@
 | `p` `c` `f` | 蛋白質、碳水、脂肪（公克，可為 `null`） |
 | `ex` | 六大類份數 `{ grain, prot, veg, fruit, dairy, oil }`，只存非零值，可為 `null` |
 | `updatedAt` | 最後修改時間（舊資料可能沒有，視為 0） |
-| `grams` | （選填，v11 起）從「查食物」記錄時輸入的公克數 |
+| `grams` | （選填，v11 起）從「查食物」記錄時輸入的公克數；Rev. 41 起「照營養標示算」也會寫（吃了幾克 × 份數） |
+| `label` | （選填，Rev. 41 起）用「照營養標示算」記的：`{ g, kcal, p?, c?, f? }`＝標示上「每 g 克」的數字，沒填的營養素不寫（不是 0）。這筆的熱量＝`label` 換算 `grams` 的結果（使用者之後手動改過熱量就不一定相等）。之後可以拿來建「我的食物」 |
+| `morePhotos` | （選填，Rev. 41 起）第 2、3 張照片的 key 清單，例如 `['x_item_abc_mi5k2x1']`，只有 `hasPhoto` 為 true 時才有意義。格式 `x_<記錄 id>_<時間>`，**不能有「-」**：舊版 App 清雲端照片時把「-」前面那段當記錄 id，記錄還在就刪；`x_` 開頭的對不到記錄，舊版不會誤刪。照片內容不會改，換照片＝換新 key |
 | `foodId` | （選填，v11 起）食物資料庫的 id（`tfda_foods.json` 的 TFDA 整合編號） |
 | `backfill` | （選填，v32 起）`true`＝事後補記：`time` 是記錄的時間、不是吃的時間。記在過去的日期時自動標。報告的夜間進食不算這些。（v33 起，晚上 10 點到清晨 5 點記的會問吃的時間，直接改 `time`，不再標 `backfill`） |
 | `ai` | （選填，v27 起）這筆是 AI 估算的：`'photo'` 拍照、`'text'` 用說的／打字。沒有 `foodId` |
@@ -132,7 +134,7 @@
 ## 匯出／同步檔案格式
 
 - **雲端同步檔**（`飲控隨身記備份.json`）：`{ app: 'diet-tracker', version, targets, targetsAt, profile, profileAt, logs, days, quickItems, tomb }`，不含照片。
-- **下載的完整備份**：同上，另加 `exportedAt` 和 `photos: { entryId: dataURL }`。
+- **下載的完整備份**：同上，另加 `exportedAt` 和 `photos: { entryId: dataURL }`。Rev. 41 起第 2、3 張也放在 `photos` 裡，key 就是 `morePhotos` 的 key（舊版匯入時用不到、會略過）。
 - 兩種檔案都會帶著其他最上層資料（相容性規則 5）。
 - **最上層 `devices`**（Rev. 39 起）：`[{ id: deviceId, rev, ver, name, updatedAt }]`，每台裝置用的版本，給「關於 → 我的裝置」看。清單形狀，照規則 5 合併；移除用 `tomb['devices:<id>']`。每台只在版本、名字變了或超過 20 小時才更新自己那一筆（避免每次同步都改到資料、兩台來回上傳）。
   - 這是第一個最上層新資料，但**只是資訊**：v9 以前的 App 同步時會丟掉它，不影響任何記錄，新版裝置下次同步會再寫回去，所以不用等 11/26。
@@ -155,6 +157,7 @@
 | v3（App v19） | 2026-11-19 | 每日欄位新增 `bmr`（InBody 基礎代謝）。每日 CSV 最後加一欄。 |
 | v3（App v22） | 2026-11-19 | `targets.bank`（熱量銀行開關）。 |
 | v3（Rev. 39） | 2026-11-19 | 版本改成「日期-序號（Rev.）」。最上層新增 `devices`、`minRev`（見上方）；`meta.deviceName`、`meta.cloud.blockedRev`。 |
+| v3（Rev. 41） | 2026-11-21 | 記錄新增 `label`（照營養標示算）、`morePhotos`（一筆最多 3 張照片）。**沒有調 `DATA_MIN_REV`**：兩個都是記錄裡的欄位，舊版會原樣保留；舊版看不到第 2、3 張、不會同步它們，但也不會刪（見 `morePhotos` 的 key 格式）。舊版「複製前一天」會連 `morePhotos` 一起複製，兩筆共用同一張照片，不會壞。 |
 | v3（App v23） | 2026-11-19 | 每日欄位新增 `smm`（骨骼肌）；`targets.bodyFat`（目標體脂率）；`targets.calc.bmrSource` 可為 `ffm`。每日 CSV 最後再加一欄骨骼肌。 |
 | v3（App v24） | 2026-11-19 | 每日欄位新增 `vfl`、`pa`、`ecw`。每日 CSV 最後加三欄。 |
 | v3（App v25） | 2026-11-19 | 每日欄位新增 `vfa`（內臟脂肪面積）。每日 CSV 最後加一欄。 |

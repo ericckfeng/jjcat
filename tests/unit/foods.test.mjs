@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   nutrientsFor, baseGrams, cookConversion, exchangeGroup, exchangesFor,
-  normalize, expandQuery, baseName, searchFoods, isBreakfastTime, energyDensity, densityApplies, isGlutinous, kjToKcal
+  normalize, expandQuery, baseName, searchFoods, isBreakfastTime, energyDensity, densityApplies, isGlutinous, kjToKcal, scaleLabel
 } from '../../js/foods.js';
 
 const foods = JSON.parse(readFileSync(new URL('../../tfda_foods.json', import.meta.url), 'utf8')).foods;
@@ -168,4 +168,19 @@ test('千焦耳換成大卡', () => {
   assert.equal(kjToKcal(4184), 1000);
   assert.equal(kjToKcal(552), 132);
   assert.equal(kjToKcal(0), 0);
+});
+
+/* ---- 照營養標示算 ---- */
+test('scaleLabel：每 35 克 100 大卡、脂肪 10 克，吃 7 克 → 20 大卡、脂肪 2 克', () => {
+  assert.deepEqual(scaleLabel({ g: 35, kcal: 100, f: 10 }, 7), { kcal: 20, p: null, c: null, f: 2 });
+  assert.deepEqual(scaleLabel({ g: 30, kcal: 132, p: 2.7, c: 19.6, f: 4.8 }, 45), { kcal: 198, p: 4.1, c: 29.4, f: 7.2 });
+  assert.deepEqual(scaleLabel({ g: '100', kcal: '250', p: '0' }, '0'), { kcal: 0, p: 0, c: null, f: null });
+});
+test('scaleLabel：標示克數、熱量沒填或不合理時不算', () => {
+  assert.equal(scaleLabel({ g: 0, kcal: 100 }, 7), null);
+  assert.equal(scaleLabel({ g: '', kcal: 100 }, 7), null);
+  assert.equal(scaleLabel({ g: 35, kcal: '' }, 7), null);
+  assert.equal(scaleLabel({ g: 35, kcal: 100 }, ''), null);
+  assert.equal(scaleLabel({ g: 35, kcal: 100 }, -1), null);
+  assert.equal(scaleLabel(null, 7), null);
 });

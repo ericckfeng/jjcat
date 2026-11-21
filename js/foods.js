@@ -290,3 +290,19 @@ export function isGlutinous(food) {
   const text = [name, ...(food.aliases || []), food.note || ''].join(' ');
   return GLUTINOUS.test(text);
 }
+
+// 照營養標示算吃了多少：label＝標示上「每 g 克」的熱量和營養素，grams＝實際吃了幾克
+// 例：每 35 克 100 大卡、脂肪 10 克，吃 7 克 → 20 大卡、脂肪 2 克。沒填的營養素回傳 null（不要當成 0）
+export function scaleLabel(label, grams) {
+  const g = Number(label && label.g);
+  const eat = Number(grams);
+  const kcal = Number(label && label.kcal);
+  if (!(g > 0) || grams === '' || grams == null || !Number.isFinite(eat) || eat < 0 || label.kcal === '' || label.kcal == null || !Number.isFinite(kcal) || kcal < 0) return null;
+  const m = eat / g;
+  const val = (k) => {
+    const v = label[k];
+    if (v === '' || v == null || !Number.isFinite(Number(v))) return null;
+    return r1(Number(v) * m);
+  };
+  return { kcal: Math.round(kcal * m), p: val('p'), c: val('c'), f: val('f') };
+}

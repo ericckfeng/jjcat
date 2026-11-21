@@ -9,7 +9,7 @@ import * as cloud from './cloud.js';
 import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VERSION } from './sync.js';
 import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, muscleChange, sumLimbs, calcSmi, smiLow, latestSmi, SMI_CUTOFF, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
 import { mascotSVG, buildMascotMessages } from './mascot.js';
-import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS, energyDensity, isGlutinous, kjToKcal } from './foods.js';
+import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS, energyDensity, isGlutinous, kjToKcal, scaleLabel } from './foods.js';
 import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, shouldAskWhen, eatenAt, MEAL_TIME_CHIPS } from './meals.js';
 import { buildInsights } from './insights.js';
 import { APP_REV, APP_LABEL, parseLatest, requiredRev, minRevToWrite, deviceName, deviceRecord, upsertDevice, deviceRows } from './version.js';
@@ -238,6 +238,10 @@ async function mergeImport(data) {
           setLocalPhotoKey(it.id, it.photoKey || it.id);
           it.hasPhoto = true;
           photos++;
+          for (const k of morePhotoKeys(it)) {
+            const src = photoMap[k];
+            if (typeof src === 'string' && src.startsWith('data:image')) { await savePhoto(k, src); photos++; }
+          }
         }
         cur.push(it);
         added++;
@@ -440,7 +444,7 @@ document.addEventListener('click', (e) => {
 });
 
 /* ---------------- 新增／刪除記錄 ---------------- */
-async function addEntry({ name, nutr, mult = 1, meal, photo = null, pending = false, saveFav = false, extra = null }) {
+async function addEntry({ name, nutr, mult = 1, meal, photo = null, morePhotos = [], pending = false, saveFav = false, extra = null }) {
   const s = scaleNutr(nutr, mult);
   const it = {
     id: uid('item'), name: name.trim(), kcal: s.kcal, multiplier: mult, meal, time: nowTime(),
@@ -449,6 +453,10 @@ async function addEntry({ name, nutr, mult = 1, meal, photo = null, pending = fa
   };
   if (ui.date !== todayStr()) it.backfill = true;   // 記在過去的日期：時間是記錄的時間，不是吃的時間
   if (photo) await savePhoto(it.id, photo);
+  if (photo && morePhotos.length) {
+    it.morePhotos = [];
+    for (const src of morePhotos) { const k = newPhotoKey(it.id); await savePhoto(k, src); it.morePhotos.push(k); }
+  }
   (state.logs[ui.date] || (state.logs[ui.date] = [])).push(it);
   if (saveFav && (num(nutr.kcal) || 0) > 0 && !state.quickItems.some(q => q.name === it.name)) {
     state.quickItems.unshift({
@@ -473,12 +481,15 @@ async function deleteEntry(id) {
   const [item] = list.splice(idx, 1);
   const date = ui.date;
   const photo = item.hasPhoto ? await getPhoto(item.id) : null;
-  if (item.hasPhoto) await deletePhoto(item.id);
+  const more = [];
+  for (const k of morePhotoKeys(item)) more.push([k, await getPhoto(k)]);
+  await deleteEntryPhotos(item);
   tombstone('e:' + item.id);
   persist();
   renderAll();
   showToast('已刪除「' + item.name + '」', '復原', async () => {
     if (photo) await savePhoto(item.id, photo);
+    for (const [k, src] of more) if (src) await savePhoto(k, src);
     delete state.tomb['e:' + item.id];
     touch(item);
     (state.logs[date] || (state.logs[date] = [])).splice(idx, 0, item);
@@ -915,7 +926,7 @@ function openScreen(id) {
   if (id === 'scr-data') { renderCloud(); renderBackupInfo(); }   // 關掉自動同步的人也要看得到雲端區塊
   if (id === 'scr-weekly') renderWeekly();
   if (id === 'scr-ai') resetAi();
-  if (id === 'scr-manual') setBox('aiLabelNote', null, '');
+  if (id === 'scr-manual') setBox('add-lb-note', null, '');
   if (id === 'scr-aikey') renderAiKey();
   if (id === 'scr-sleep') renderSleepScreen();
   if (id === 'scr-photo') resetPhotoQuick();
@@ -1239,6 +1250,7 @@ function renderLogs() {
       const thumb = item.hasPhoto
         ? `<button type="button" data-view-photo="${esc(item.id)}" class="view-photo-btn relative shrink-0" title="放大照片">
              <img data-photo-id="${esc(item.id)}" alt="餐點照片" class="w-14 h-14 rounded-xl object-cover border border-stone-200 bg-stone-100" />
+             ${morePhotoKeys(item).length ? `<span class="absolute -bottom-1 -right-1 px-1.5 rounded-full bg-stone-800 text-white text-xs font-bold">+${morePhotoKeys(item).length}</span>` : ''}
            </button>`
         : '';
       const nl = nutrLine(item);
@@ -1747,7 +1759,7 @@ function setBox(id, tone, text) {
 function renderAiUi() {
   const on = Boolean(aiKey());
   $('aiTile').classList.toggle('hidden', !on);
-  $('aiLabelWrap').classList.toggle('hidden', !on);
+  document.querySelectorAll('[data-lb-photo]').forEach(b => { b.textContent = labelPhotoText(); });
   $('aiStatusText').textContent = on ? '已開啟（Key 只存在這支手機）' : '關閉・用自己的免費 Google API Key';
 }
 
@@ -1936,32 +1948,36 @@ if (SpeechRec) {
 }
 
 // 拍營養標示 → 填進「自己輸入」
-$('aiLabelBtn').addEventListener('click', () => $('aiLabelInput').click());
-$('aiLabelInput').addEventListener('change', async (e) => {
-  const file = e.target.files && e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
-  const btn = $('aiLabelBtn');
+// 拍營養標示（自己輸入、修改記錄）：有開 AI 就順便讀出數字，填進「照營養標示算」
+async function readLabelByAi(prefix, photo) {
+  const btn = document.querySelector(`[data-lb-photo="${prefix}"]`);
+  const note = prefix + '-lb-note';
   btn.disabled = true; btn.textContent = 'AI 讀取中…';
   try {
-    const photo = await compressImage(file, 1280);   // 標示的字小，解析度高一點
     const lb = normalizeLabel(await callGemini({ key: aiKey(), request: buildRequest({ prompt: LABEL_PROMPT, imageDataUrl: photo, schema: LABEL_SCHEMA }) }));
-    if (!lb) { setBox('aiLabelNote', 'err', '找不到營養標示。請把「營養標示」的表格拍清楚、拍正一點再試。'); return; }
-    if (!$('foodNameInput').value.trim() && lb.name) $('foodNameInput').value = lb.name;
-    $('foodKcalInput').value = lb.kcal;
-    if (lb.kj) { $('foodKjInput').value = lb.kj; $('kjResult').textContent = '＝ ' + lb.kcal + ' 大卡'; $('kjDetails').open = true; }
-    else { $('foodKjInput').value = ''; $('kjResult').textContent = ''; }
-    $('addNutrDetails').open = true;
-    writeNutrFields('add', { p: lb.p, c: lb.c, f: lb.f, ex: null });
+    if (!lb) { setBox(note, 'err', '找不到營養標示。照片已經存了，可以對照照片自己填；或把表格拍清楚、拍正一點再試。'); return; }
+    const nameEl = $(prefix === 'add' ? 'foodNameInput' : 'editLogNameInput');
+    if (!nameEl.value.trim() && lb.name) nameEl.value = lb.name;
     const per = lb.servingG ? '每份 ' + lb.servingG + ' 公克' + (lb.servings ? '、這包有 ' + lb.servings + ' 份' : '') + '。' : '';
     const kj = lb.kj ? '（標示是 ' + lb.kj + ' 千焦耳，已換成大卡）' : '';
-    setBox('aiLabelNote', 'info', 'AI 讀到：' + per + '每份 ' + lb.kcal + ' 大卡' + kj + '。已填好，請對照包裝確認；吃了幾份在下面選。');
+    if (lb.servingG) {
+      fillLabelCalc(prefix, { label: { g: lb.servingG, kcal: lb.kcal, p: lb.p, c: lb.c, f: lb.f } });
+      if (!$(prefix + '-lb-eat').value) $(prefix + '-lb-eat').value = lb.servingG;
+      applyLabelCalc(prefix);
+      setBox(note, 'info', 'AI 讀到：' + per + '每份 ' + lb.kcal + ' 大卡' + kj + '。請對照包裝確認；吃的不是 1 份就改「我吃了幾克」。');
+    } else {
+      // 標示沒寫每份幾克：直接填一份的數字
+      $(KCAL_FIELD[prefix]).value = lb.kcal;
+      writeNutrFields(prefix, { p: lb.p, c: lb.c, f: lb.f, ex: null });
+      if (prefix === 'add') $('addNutrDetails').open = true;
+      setBox(note, 'info', 'AI 讀到：每份 ' + lb.kcal + ' 大卡' + kj + '，已填好（標示沒寫每份幾克）。請對照包裝確認。');
+    }
   } catch (err) {
-    setBox('aiLabelNote', 'err', aiErrorText(err));
+    setBox(note, 'err', aiErrorText(err) + '\n照片已經存了，可以對照照片自己填。');
   } finally {
-    btn.disabled = false; btn.textContent = '📷 拍營養標示，AI 幫我填';
+    btn.disabled = false; btn.textContent = labelPhotoText();
   }
-});
+}
 
 /* ---------------- 版本：有沒有新版、我的裝置 ---------------- */
 // 網站上的 version.json 是目前最新版；比這一版新就在首頁提示更新
@@ -2225,8 +2241,7 @@ document.addEventListener('click', (e) => {
 $('portionGroup').addEventListener('click', (e) => {
   const b = e.target.closest('[data-portion]');
   if (!b) return;
-  $('portionSelect').value = b.getAttribute('data-portion');
-  document.querySelectorAll('#portionGroup [data-portion]').forEach(x => x.classList.toggle('is-active', x === b));
+  setPortion(b.getAttribute('data-portion'));
 });
 $('libraryMealSelect').addEventListener('change', (e) => { ui.meal = e.target.value; renderMealSelector(); });
 $('dismissInstallBtn').addEventListener('click', () => { state.meta.installHintDismissed = true; persistLocal(); renderBanners(); });
@@ -2285,24 +2300,167 @@ $('foodKjInput').addEventListener('input', (e) => {
   if (ok) $('foodKcalInput').value = kjToKcal(kj);
 });
 
-let draftPhoto = null;
-function updateDraftPhotoUI() {
-  $('photoDraftPreviewWrap').classList.toggle('hidden', !draftPhoto);
-  $('clearPhotoDraftBtn').classList.toggle('hidden', !draftPhoto);
-  if (draftPhoto) $('photoDraftPreviewImg').src = draftPhoto;
+/* ---------------- 一筆記錄的照片（最多 3 張） ---------------- */
+// 第 1 張是原本就有的照片（IndexedDB key＝記錄 id，雲端用 photoKey）；第 2、3 張的 key 存在 morePhotos，
+// 格式 x_<記錄id>_<時間>，IndexedDB 和雲端都用這個 key。key 裡不能有「-」：舊版 App 清雲端照片時，
+// 把「-」前面那段當記錄 id，那筆記錄還在就刪掉；x_ 開頭的對不到記錄，舊版不會誤刪。
+const MAX_PHOTOS = 3;
+const PHOTO_INPUT = { add: 'foodPhotoInput', edit: 'editLogPhotoInput' };
+// [{ src, key }]：key＝'@main' 原本的第 1 張、'x_…' 原本的第 2、3 張、null 新拍的
+const formPhotos = { add: [], edit: [] };
+function newPhotoKey(id) { return 'x_' + id + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
+function morePhotoKeys(it) {
+  return it && it.hasPhoto && Array.isArray(it.morePhotos) ? it.morePhotos.filter(k => typeof k === 'string' && k.startsWith('x_')) : [];
 }
-$('triggerPhotoBtn').addEventListener('click', () => $('foodPhotoInput').click());
-$('foodPhotoInput').addEventListener('change', async (e) => {
+async function entryPhotos(it) {
+  const out = [];
+  if (it.hasPhoto) { const src = await getPhoto(it.id); if (src) out.push(src); }
+  for (const k of morePhotoKeys(it)) { const src = await getPhoto(k); if (src) out.push(src); }
+  return out;
+}
+async function deleteEntryPhotos(it) {
+  for (const k of morePhotoKeys(it)) await deletePhoto(k);
+  if (it.hasPhoto) await deletePhoto(it.id);
+}
+function renderPhotoStrip(prefix) {
+  const list = formPhotos[prefix];
+  $(prefix + '-photos').innerHTML = list.map((ph, i) =>
+    `<div class="ph"><img src="${ph.src}" alt="照片 ${i + 1}" /><button type="button" class="ph-x" data-ph-del="${prefix}:${i}" aria-label="移除第 ${i + 1} 張照片">✕</button></div>`).join('')
+    + (list.length < MAX_PHOTOS ? `<button type="button" class="ph-add" data-ph-add="${prefix}">📷<br>加照片</button>` : '');
+}
+async function addFormPhoto(prefix, file, maxDim) {
+  if (formPhotos[prefix].length >= MAX_PHOTOS) { showToast('最多 3 張照片，請先移除一張'); return null; }
+  const src = await compressImage(file, maxDim);
+  formPhotos[prefix].push({ src, key: null });
+  renderPhotoStrip(prefix);
+  return src;
+}
+document.addEventListener('click', (e) => {
+  const add = e.target.closest('[data-ph-add]');
+  if (add) { $(PHOTO_INPUT[add.getAttribute('data-ph-add')]).click(); return; }
+  const del = e.target.closest('[data-ph-del]');
+  if (del) {
+    const [prefix, i] = del.getAttribute('data-ph-del').split(':');
+    formPhotos[prefix].splice(Number(i), 1);
+    renderPhotoStrip(prefix);
+  }
+});
+Object.entries(PHOTO_INPUT).forEach(([prefix, id]) => $(id).addEventListener('change', async (e) => {
   const file = e.target.files && e.target.files[0];
   e.target.value = '';
   if (!file) return;
-  try {
-    draftPhoto = await compressImage(file);
-    updateDraftPhotoUI();
-    showToast('已附上照片');
-  } catch (err) { showToast('照片讀取失敗'); }
+  try { if (await addFormPhoto(prefix, file)) showToast('已附上照片'); } catch (err) { showToast('照片讀取失敗'); }
+}));
+// 修改記錄存檔時：依畫面上的照片更新這筆的第 1 張和 morePhotos，拿掉的照片從這台刪除
+async function saveEditPhotos(item) {
+  const list = formPhotos.edit;
+  const out = { hasPhoto: item.hasPhoto, photoKey: item.photoKey };
+  const first = list[0];
+  if (!first) {
+    if (item.hasPhoto) { await deletePhoto(item.id); setLocalPhotoKey(item.id, null); }
+    out.hasPhoto = false;
+  } else if (first.key !== '@main') {
+    out.photoKey = item.id + '-' + now();
+    await savePhoto(item.id, first.src);
+    setLocalPhotoKey(item.id, out.photoKey);
+    out.hasPhoto = true;
+  }
+  const more = [];
+  for (const ph of list.slice(1)) {
+    if (ph.key && ph.key.startsWith('x_')) more.push(ph.key);
+    else { const k = newPhotoKey(item.id); await savePhoto(k, ph.src); more.push(k); }
+  }
+  for (const k of morePhotoKeys(item)) if (!more.includes(k)) await deletePhoto(k);
+  out.morePhotos = more;
+  return out;
+}
+
+/* ---------------- 照營養標示算（自己輸入、修改記錄都有） ---------------- */
+// 標示寫「每 35 克 100 大卡」、吃了 7 克 → 自動算好填進熱量和營養素，不用拿計算機
+const LB_FIELDS = [['kcal', '熱量（大卡）'], ['p', '蛋白質（克）'], ['f', '脂肪（克）'], ['c', '碳水（克）']];
+function labelPhotoText() { return aiKey() ? '📷 拍營養標示，AI 幫我填（照片會一起存）' : '📷 拍營養標示（照片會跟這筆一起存）'; }
+function labelCalcHTML(prefix) {
+  const inp = (k, ph) => `<input id="${prefix}-lb-${k}" data-lb="${prefix}" type="number" inputmode="decimal" min="0" step="any" placeholder="${ph}" class="field tabular-nums" />`;
+  return `<details id="${prefix}-lb" class="lb-calc">
+    <summary>🧮 照營養標示算（不用拿計算機）</summary>
+    <div class="lb-body">
+      <p class="text-base text-stone-600 leading-relaxed">例如標示寫「每 35 克 100 大卡、脂肪 10 克」，你吃了 7 克，會自動算出 20 大卡、脂肪 2 克，填進${prefix === 'add' ? '下面的欄位' : '這筆記錄'}。</p>
+      <input id="${prefix}-lb-file" type="file" accept="image/*" capture="environment" class="hidden" />
+      <button type="button" data-lb-photo="${prefix}" class="btn-secondary w-full bg-white">${labelPhotoText()}</button>
+      <p id="${prefix}-lb-note" class="hidden rounded-2xl whitespace-pre-line break-words p-3 text-base leading-relaxed"></p>
+      <div class="lb-line">標示上寫：每 ${inp('g', '克')} 克</div>
+      <div class="lb-grid">${LB_FIELDS.map(([k, t]) => `<label><span>${t}</span>${inp(k, '')}</label>`).join('')}</div>
+      <div class="lb-line">我吃了 ${inp('eat', '克')} 克
+        <button type="button" data-lb-one="${prefix}" class="chip-btn chip-lg">吃了 1 份</button></div>
+      <div id="${prefix}-lb-out" class="lb-out" aria-live="polite"></div>
+    </div>
+  </details>`;
+}
+document.querySelectorAll('[data-label-calc]').forEach(el => { el.innerHTML = labelCalcHTML(el.getAttribute('data-label-calc')); });
+function readLabel(prefix) {
+  const v = (k) => $(prefix + '-lb-' + k).value.trim();
+  return { g: v('g'), kcal: v('kcal'), p: v('p'), c: v('c'), f: v('f'), eat: v('eat') };
+}
+function applyLabelCalc(prefix) {
+  const l = readLabel(prefix);
+  const r = scaleLabel(l, l.eat);
+  const out = $(prefix + '-lb-out');
+  if (!r) { out.textContent = ''; return; }
+  $(KCAL_FIELD[prefix]).value = r.kcal;
+  MACRO_KEYS.forEach(k => { if (r[k] != null) $(prefix + '-' + k).value = r[k]; });
+  if (prefix === 'add') { setPortion(1); $('addNutrDetails').open = true; }   // 算出來的就是吃的量
+  const parts = [r.kcal + ' 大卡'].concat(['p', 'f', 'c'].filter(k => r[k] != null).map(k => MACRO_META[k].label + ' ' + r[k] + ' 克'));
+  out.textContent = '＝ ' + parts.join('、') + (prefix === 'add' ? '（已填進下面）' : '（已填好）');
+}
+// 這筆要存的標示資料：算得出來才存（之後可以再改、也能變成「我的食物」）
+function labelExtra(prefix, mult) {
+  const l = readLabel(prefix);
+  if (!scaleLabel(l, l.eat)) return null;
+  const label = { g: Number(l.g), kcal: Number(l.kcal) };
+  ['p', 'c', 'f'].forEach(k => { if (l[k] !== '') label[k] = Number(l[k]); });
+  return { label, grams: Math.round(Number(l.eat) * mult * 10) / 10 };
+}
+function fillLabelCalc(prefix, item) {
+  const lb = item && item.label;
+  ['g', 'kcal', 'p', 'c', 'f'].forEach(k => { $(prefix + '-lb-' + k).value = lb && lb[k] != null ? lb[k] : ''; });
+  $(prefix + '-lb-eat').value = lb && item.grams != null ? item.grams : '';
+  $(prefix + '-lb-out').textContent = '';
+  setBox(prefix + '-lb-note', null, '');
+  $(prefix + '-lb').open = Boolean(lb);
+}
+function resetLabelCalc(prefix) { fillLabelCalc(prefix, null); }
+function setPortion(v) {
+  $('portionSelect').value = String(v);
+  document.querySelectorAll('#portionGroup [data-portion]').forEach(x => x.classList.toggle('is-active', x.getAttribute('data-portion') === String(v)));
+}
+document.addEventListener('input', (e) => {
+  const prefix = e.target.getAttribute && e.target.getAttribute('data-lb');
+  if (prefix) applyLabelCalc(prefix);
 });
-$('clearPhotoDraftBtn').addEventListener('click', () => { draftPhoto = null; updateDraftPhotoUI(); });
+document.addEventListener('click', (e) => {
+  const one = e.target.closest('[data-lb-one]');
+  if (one) {
+    const prefix = one.getAttribute('data-lb-one');
+    const g = $(prefix + '-lb-g').value;
+    if (!g) { showToast('先填標示上「每幾克」'); return; }
+    $(prefix + '-lb-eat').value = g;
+    applyLabelCalc(prefix);
+    return;
+  }
+  const ph = e.target.closest('[data-lb-photo]');
+  if (ph) $(ph.getAttribute('data-lb-photo') + '-lb-file').click();
+});
+['add', 'edit'].forEach(prefix => $(prefix + '-lb-file').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  let src = null;
+  try { src = await addFormPhoto(prefix, file, 1280); } catch (err) { showToast('照片讀取失敗'); return; }   // 標示的字小，解析度高一點
+  if (!src) return;
+  if (aiKey()) readLabelByAi(prefix, src);
+  else showToast('已附上營養標示照片，對照著填下面的數字');
+}));
+renderPhotoStrip('add');
 
 $('addFoodForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -2311,40 +2469,36 @@ $('addFoodForm').addEventListener('submit', async (e) => {
   const kcal = hasKcal ? Number(kcalRaw) : 0;
   const pendingChecked = $('pendingVerifyCheck').checked;
   const nutr = readNutrFields('add');
-  if (!hasKcal && !draftPhoto && !pendingChecked) {
+  const photos = formPhotos.add.map(p => p.src);
+  if (!hasKcal && !photos.length && !pendingChecked) {
     showToast('請輸入熱量，或先拍照／勾選「暫估待修」');
     return;
   }
   if (!Number.isFinite(kcal) || kcal < 0) return;
   const rawName = $('foodNameInput').value.trim();
   const mealLabel = MEAL_META[ui.meal].label;
-  const name = rawName || (draftPhoto ? mealLabel + '拍照待查' : mealLabel + '快記');
+  const name = rawName || (photos.length ? mealLabel + '拍照待查' : mealLabel + '快記');
+  const mult = Number($('portionSelect').value) || 1;
   await addEntry({
-    name, nutr: { kcal, ...nutr }, mult: Number($('portionSelect').value) || 1, meal: ui.meal,
-    photo: draftPhoto, pending: pendingChecked || (!hasKcal && Boolean(draftPhoto)), saveFav: $('saveFavCheck').checked
+    name, nutr: { kcal, ...nutr }, mult, meal: ui.meal,
+    photo: photos[0] || null, morePhotos: photos.slice(1),
+    pending: pendingChecked || (!hasKcal && photos.length > 0), saveFav: $('saveFavCheck').checked,
+    extra: labelExtra('add', mult)
   });
   $('addFoodForm').reset();
-  $('portionSelect').value = '1';
-  document.querySelectorAll('#portionGroup [data-portion]').forEach(x => x.classList.toggle('is-active', x.getAttribute('data-portion') === '1'));
+  setPortion(1);
   writeNutrFields('add', null);
+  resetLabelCalc('add');
   $('addNutrDetails').open = false;
   $('kjDetails').open = false;
   $('kjResult').textContent = '';
-  draftPhoto = null;
-  updateDraftPhotoUI();
+  formPhotos.add = [];
+  renderPhotoStrip('add');
   closeScreen();
 });
 
 /* ---------------- 事件：明細（看照片／修改／刪除） ---------------- */
-let editPhoto = { src: null, changed: false };
 let lightboxItemId = null;
-function updateEditPhotoUI() {
-  const has = Boolean(editPhoto.src);
-  $('editLogPhotoImg').classList.toggle('hidden', !has);
-  $('removeEditPhotoBtn').classList.toggle('hidden', !has);
-  $('editLogNoPhotoHint').classList.toggle('hidden', has);
-  if (has) $('editLogPhotoImg').src = editPhoto.src;
-}
 let editingId = null;
 async function openEditModal(id) {
   const item = (state.logs[ui.date] || []).find(i => i.id === id);
@@ -2356,18 +2510,13 @@ async function openEditModal(id) {
   $('editLogTimeInput').value = item.time || '';
   $('editLogPendingCheck').checked = Boolean(item.pending);
   writeNutrFields('edit', item);
-  editPhoto = { src: item.hasPhoto ? await getPhoto(item.id) : null, changed: false };
-  updateEditPhotoUI();
+  formPhotos.edit = [];
+  if (item.hasPhoto) { const src = await getPhoto(item.id); if (src) formPhotos.edit.push({ src, key: '@main' }); }
+  for (const k of morePhotoKeys(item)) { const src = await getPhoto(k); if (src) formPhotos.edit.push({ src, key: k }); }
+  renderPhotoStrip('edit');
+  fillLabelCalc('edit', item);
   openModal('editLogModal');
 }
-$('triggerEditPhotoBtn').addEventListener('click', () => $('editLogPhotoInput').click());
-$('editLogPhotoInput').addEventListener('change', async (e) => {
-  const file = e.target.files && e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
-  try { editPhoto = { src: await compressImage(file), changed: true }; updateEditPhotoUI(); } catch (err) { showToast('照片讀取失敗'); }
-});
-$('removeEditPhotoBtn').addEventListener('click', () => { editPhoto = { src: null, changed: true }; updateEditPhotoUI(); });
 $('editLogForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const list = state.logs[ui.date] || [];
@@ -2377,18 +2526,15 @@ $('editLogForm').addEventListener('submit', async (e) => {
   if (idx === -1 || !name || !Number.isFinite(kcal) || kcal < 0) return;
   const n = readNutrFields('edit');
   const item = list[idx];
-  const newPhotoKey = editPhoto.changed && editPhoto.src ? item.id + '-' + now() : item.photoKey;
-  if (editPhoto.changed) {
-    if (editPhoto.src) await savePhoto(item.id, editPhoto.src); else await deletePhoto(item.id);
-    setLocalPhotoKey(item.id, editPhoto.src ? newPhotoKey : null);
-  }
+  const photoFields = await saveEditPhotos(item);
   list[idx] = {
     ...item, name, kcal, meal: $('editLogMealSelect').value, time: $('editLogTimeInput').value || item.time,
     pending: $('editLogPendingCheck').checked, p: n.p, c: n.c, f: n.f, ex: n.ex,
-    hasPhoto: editPhoto.changed ? Boolean(editPhoto.src) : item.hasPhoto,
-    photoKey: newPhotoKey,
+    ...photoFields,
+    ...(labelExtra('edit', 1) || {}),
     updatedAt: now()
   };
+  if (!list[idx].morePhotos || !list[idx].morePhotos.length) delete list[idx].morePhotos;
   persist();
   renderAll();
   closeModal('editLogModal');
@@ -2403,7 +2549,8 @@ $('mealLogContainer').addEventListener('click', async (e) => {
     lightboxItemId = item.id;
     $('lightboxFoodTitle').textContent = item.name + (item.pending ? '（暫估待修）' : '');
     $('lightboxFoodSub').textContent = MEAL_META[item.meal].label + '・目前 ' + item.kcal + ' kcal';
-    $('lightboxImg').src = (await getPhoto(item.id)) || '';
+    $('lightboxImgs').innerHTML = (await entryPhotos(item)).map((src, i) =>
+      `<img src="${src}" alt="照片 ${i + 1}" class="max-h-[60vh] w-auto object-contain" />`).join('');
     openModal('photoLightboxModal');
     return;
   }
@@ -2430,7 +2577,7 @@ $('clearDayBtn').addEventListener('click', () => {
   const list = state.logs[ui.date] || [];
   if (!list.length) { showToast('本日沒有記錄'); return; }
   openConfirm('清空本日記錄', '確定要刪除 ' + ui.date + ' 的 ' + list.length + ' 筆飲食記錄嗎？（身體數據與備註會保留）', async () => {
-    for (const it of list) { if (it.hasPhoto) await deletePhoto(it.id); tombstone('e:' + it.id); }
+    for (const it of list) { await deleteEntryPhotos(it); tombstone('e:' + it.id); }
     delete state.logs[ui.date];
     persist();
     renderAll();
@@ -3266,7 +3413,7 @@ function renderBackupInfo() {
 }
 function photoIdList() {
   const ids = [];
-  Object.values(state.logs).forEach(list => (list || []).forEach(it => { if (it.hasPhoto) ids.push(it.id); }));
+  Object.values(state.logs).forEach(list => (list || []).forEach(it => { if (it.hasPhoto) ids.push(it.id, ...morePhotoKeys(it)); }));
   return ids;
 }
 function buildPayload() {
@@ -3513,7 +3660,11 @@ async function doSync({ auto, first }) {
   // 照片：本機是最新版本、雲端沒有 → 上傳；本機沒有或是舊版本、雲端有 → 下載
   const cloudPhotoMap = await cloud.listPhotos();
   const keyToId = new Map();
-  Object.values(merged.logs).forEach(list => (list || []).forEach(it => { if (it.hasPhoto) keyToId.set(photoKeyOf(it), it.id); }));
+  const moreKeys = new Set();   // 第 2、3 張：IndexedDB 和雲端都用同一個 key，內容不會改（換照片＝換 key）
+  Object.values(merged.logs).forEach(list => (list || []).forEach(it => {
+    if (it.hasPhoto) keyToId.set(photoKeyOf(it), it.id);
+    morePhotoKeys(it).forEach(k => moreKeys.add(k));
+  }));
   const toUpload = [];
   const toDownload = [];
   for (const [key, id] of keyToId) {
@@ -3521,12 +3672,18 @@ async function doSync({ auto, first }) {
     if (haveCurrent && !cloudPhotoMap.has(key)) toUpload.push(key);
     else if (!haveCurrent && cloudPhotoMap.has(key)) toDownload.push([key, cloudPhotoMap.get(key)]);
   }
+  for (const key of moreKeys) {
+    const have = Boolean(await getPhoto(key));
+    if (have && !cloudPhotoMap.has(key)) toUpload.push(key);
+    else if (!have && cloudPhotoMap.has(key)) toDownload.push([key, cloudPhotoMap.get(key)]);
+  }
   if (toUpload.length) {
-    await cloud.uploadPhotos(toUpload, (key) => getPhoto(keyToId.get(key)), (n, total) => setCloudStatus(`上傳照片 ${n}/${total}…`, 'busy'));
+    await cloud.uploadPhotos(toUpload, (key) => getPhoto(keyToId.has(key) ? keyToId.get(key) : key), (n, total) => setCloudStatus(`上傳照片 ${n}/${total}…`, 'busy'));
   }
   if (toDownload.length) {
     const got = await cloud.downloadPhotos(toDownload, (n, total) => setCloudStatus(`下載照片 ${n}/${total}…`, 'busy'));
     for (const [key, dataUrl] of Object.entries(got)) {
+      if (moreKeys.has(key) && !keyToId.has(key)) { await savePhoto(key, dataUrl); continue; }
       const id = keyToId.get(key);
       await savePhoto(id, dataUrl);
       setLocalPhotoKey(id, key);
@@ -3535,10 +3692,13 @@ async function doSync({ auto, first }) {
   // 清掉雲端上已刪除記錄或舊版本的照片
   {
     for (const [key, fileId] of cloudPhotoMap) {
-      if (keyToId.has(key)) continue;
-      const entryId = key.split('-')[0];
+      if (keyToId.has(key) || moreKeys.has(key)) continue;
+      // 第 2、3 張（x_<記錄id>_<時間>）：記錄已刪除，或記錄還在但不用這張了 → 刪掉（這台也一起刪）。
+      // 記錄還沒同步到雲端的（別台剛拍、資料還沒上傳）先不動
+      const entryId = key.startsWith('x_') ? key.slice(2, key.lastIndexOf('_')) : key.split('-')[0];
       if (merged.tomb['e:' + entryId] || Object.values(merged.logs).some(l => (l || []).some(it => it.id === entryId))) {
         await cloud.deleteFile(fileId);
+        if (key.startsWith('x_')) await deletePhoto(key);
       }
     }
   }
@@ -3554,7 +3714,13 @@ async function doSync({ auto, first }) {
   let finalData = merged;
   if (stableStringify(nowLocal) !== localStr) { finalData = mergeData(nowLocal, merged); syncAgain = true; }
   const changedLocally = stableStringify(finalData) !== stableStringify(nowLocal);
-  if (changedLocally) applySyncData(finalData);
+  if (changedLocally) {
+    // 別台拿掉或刪掉的第 2、3 張照片，這台也刪
+    const usedKeys = (d) => new Set(Object.values(d.logs || {}).flatMap(l => (l || []).flatMap(morePhotoKeys)));
+    const keep = usedKeys(finalData);
+    for (const k of usedKeys(nowLocal)) if (!keep.has(k)) await deletePhoto(k);
+    applySyncData(finalData);
+  }
   c.knownModified = modifiedTime;
   c.lastSync = now();
   c.lastBackup = c.lastSync;

@@ -32,6 +32,7 @@ export function copyEntries(items, { makeId, at, meal } = {}) {
   return (items || []).map(it => {
     const copy = { ...it, id: makeId('item'), hasPhoto: false, updatedAt: at };
     delete copy.photoKey;
+    delete copy.morePhotos;   // 第 2、3 張照片也不複製
     if (meal) copy.meal = meal;
     if (it.groupId) {
       if (!groups.has(it.groupId)) groups.set(it.groupId, makeId('grp'));

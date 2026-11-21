@@ -20,12 +20,14 @@ test('全部品項都沒有營養素時是 null，不是 0', () => {
 test('複製記錄：新 id、新時間、不帶照片，其他欄位（含未知欄位）保留', () => {
   let n = 0;
   const makeId = (p) => p + '_' + (++n);
-  const src = [{ id: 'item_a', name: '白飯 200g', kcal: 364, meal: 'lunch', time: '12:10', hasPhoto: true, photoKey: 'item_a-1', grams: 200, foodId: 'A01', updatedAt: 5, future: 'x' }];
+  const src = [{ id: 'item_a', name: '白飯 200g', kcal: 364, meal: 'lunch', time: '12:10', hasPhoto: true, photoKey: 'item_a-1', morePhotos: ['x_item_a_1'], label: { g: 100, kcal: 182 }, grams: 200, foodId: 'A01', updatedAt: 5, future: 'x' }];
   const [c] = copyEntries(src, { makeId, at: 99 });
   assert.equal(c.id, 'item_1');
   assert.equal(c.updatedAt, 99);
   assert.equal(c.hasPhoto, false);
   assert.equal('photoKey' in c, false);
+  assert.equal('morePhotos' in c, false);
+  assert.deepEqual(c.label, { g: 100, kcal: 182 });
   assert.equal(c.grams, 200); assert.equal(c.foodId, 'A01'); assert.equal(c.future, 'x'); assert.equal(c.time, '12:10');
   assert.equal(src[0].id, 'item_a', '不改到原本的記錄');
   assert.equal(src[0].photoKey, 'item_a-1');

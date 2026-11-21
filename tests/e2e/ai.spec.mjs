@@ -32,12 +32,15 @@ async function enableAi(page) {
   await closeScreens(page);
 }
 
-test('預設關閉：首頁沒有 AI，自己輸入沒有拍標示；不會連到 Gemini', async ({ page }) => {
+test('預設關閉：首頁沒有 AI，拍營養標示只存照片、不會連到 Gemini', async ({ page }) => {
   const calls = await mockGemini(page, () => reply({}));
   await openApp(page);
   await expect(page.locator('#aiTile')).toBeHidden();
   await page.click('[data-screen=scr-manual]');
-  await expect(page.locator('#aiLabelWrap')).toBeHidden();
+  await page.click('#add-lb summary');
+  await expect(page.locator('[data-lb-photo=add]')).not.toContainText('AI');
+  await page.setInputFiles('#add-lb-file', photo);
+  await expect(page.locator('#add-photos .ph')).toHaveCount(1);
   expect(calls).toHaveLength(0);
 });
 
@@ -144,16 +147,20 @@ test('拍營養標示：填進自己輸入的名稱、熱量、營養素', async
   const today = await page.evaluate(() => window.__dietApp.ui.date);
   await enableAi(page);
   await page.click('[data-screen=scr-manual]');
-  await expect(page.locator('#aiLabelWrap')).toBeVisible();
-  await page.setInputFiles('#aiLabelInput', photo);
-  await expect(page.locator('#aiLabelNote')).toContainText('每份 30 公克、這包有 6 份');
+  await page.click('#add-lb summary');
+  await expect(page.locator('[data-lb-photo=add]')).toContainText('AI 幫我填');
+  await page.setInputFiles('#add-lb-file', photo);
+  await expect(page.locator('#add-lb-note')).toContainText('每份 30 公克、這包有 6 份');
+  await expect(page.locator('#add-lb-g')).toHaveValue('30');
+  await expect(page.locator('#add-lb-eat')).toHaveValue('30');
   await expect(page.locator('#foodNameInput')).toHaveValue('高纖蘇打餅');
   await expect(page.locator('#foodKcalInput')).toHaveValue('132');
   await expect(page.locator('#add-p')).toHaveValue('2.7');
   await page.click('[data-portion="2"]');
   await page.click('[form=addFoodForm][type=submit]');
+  await expect(page.locator('#scr-manual')).toBeHidden();   // 存照片要一點時間，關掉才算存好
   const it = (await appState(page)).logs[today].find(x => x.name === '高纖蘇打餅');
-  expect(it).toMatchObject({ kcal: 264, p: 5.4, c: 39.2, f: 9.6 });
+  expect(it).toMatchObject({ kcal: 264, p: 5.4, c: 39.2, f: 9.6, hasPhoto: true, grams: 60, label: { g: 30, kcal: 132, p: 2.7, c: 19.6, f: 4.8 } });
 });
 
 test('拍營養標示：只有千焦耳的，換成大卡', async ({ page }) => {
@@ -161,10 +168,10 @@ test('拍營養標示：只有千焦耳的，換成大卡', async ({ page }) => 
   await openApp(page);
   await enableAi(page);
   await page.click('[data-screen=scr-manual]');
-  await page.setInputFiles('#aiLabelInput', photo);
-  await expect(page.locator('#aiLabelNote')).toContainText('1650 千焦耳');
+  await page.click('#add-lb summary');
+  await page.setInputFiles('#add-lb-file', photo);
+  await expect(page.locator('#add-lb-note')).toContainText('1650 千焦耳');
   await expect(page.locator('#foodKcalInput')).toHaveValue('394');
-  await expect(page.locator('#foodKjInput')).toHaveValue('1650');
 });
 
 test('設定：檢查 AI 能不能用（文字＋照片），失敗時列出代碼，可以複製結果', async ({ page }) => {

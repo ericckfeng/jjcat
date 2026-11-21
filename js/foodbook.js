@@ -137,3 +137,69 @@ export function bookSummary(project) {
     flagged: items.filter(it => checkBookItem(it).some(f => f.level !== 'info')).length
   };
 }
+
+/* ---------------- 用自己的 AI 整理（複製提示詞 → 貼回答） ---------------- */
+export const BOOK_TABLE_HEAD = ['頁碼', '名稱', '份量說明', '重量(g)', '熱量(kcal)', '蛋白質(g)', '脂肪(g)', '醣類(g)', '糖(g)', '鈉(mg)', '膳食纖維(g)',
+  '全穀雜糧(份)', '豆魚蛋肉(份)', '蔬菜(份)', '水果(份)', '乳品(份)', '油脂與堅果種子(份)', '書上熱量每公克', '書上醣類每公克', '有湯汁', '份數從圖估讀', '備註'];
+// categories：{ 頁碼: 'grain', ... } 依章節定份數的頁
+export function bookTablePrompt({ categories = {} } = {}) {
+  const cats = Object.entries(categories).filter(([, c]) => c);
+  return [
+    '我會給你食物營養書的頁面、衛教單張或營養師的表格（照片或 PDF）。請把每一頁上每一樣食物（或菜餚）的數字讀出來，整理成一張表，給「飲控隨身記」App 匯入用。',
+    '',
+    '輸出規則：',
+    '1. 只輸出一個 CSV，放在 ```csv 程式碼區塊裡，不要其他說明文字。第一列是欄位名稱，之後一列一樣食物。',
+    '2. 欄位固定是這些，順序不要改：',
+    BOOK_TABLE_HEAD.join(','),
+    '3. 頁碼：這一樣在第幾頁（PDF 的頁碼；照片就是我給你的第幾張，從 1 開始）。',
+    '4. 只填頁面上印的數字，只寫數字、不加單位。沒印的留空白，不要自己估、不要填 0。重量是一份的重量（公克），份量說明寫「1 碗」「3 顆」這類說法。',
+    '5. 六大類份數：頁面有印數字就照填；只有長條圖、沒有數字時，從圖估讀到 0.5 份，並在「份數從圖估讀」填「是」。',
+    '6. 頁面上印的「熱量／公克」「醣類／公克」照原數字填在「書上熱量每公克」「書上醣類每公克」，不要自己計算。',
+    '7. 這道菜有湯汁（湯麵、湯品、燴飯等）在「有湯汁」填「是」。',
+    '8. 備註用你自己的話寫一句簡短說明（例如主要食材），不要照抄書上的長段文字。不要描述菜餚照片。',
+    '9. 目錄、說明這類沒有食物數字的頁面跳過。欄位內容有逗號的，整格用雙引號包起來。',
+    '10. 資料很多、一次寫不完時，每次最多 60 列，寫完後在程式碼區塊外面說「還有，請說繼續」；我說「繼續」時接著寫，不要重複欄位名稱那一列。',
+    ...(cats.length ? ['', '依章節定份數：' + cats.map(([p, c]) => '第 ' + p + ' 頁每一樣的重量就是「' + EX_LABEL[c] + '」1 份').join('；') + '。'] : [])
+  ].join('\n');
+}
+
+// 貼上的表格（packs.js 的 parsePastedTable 的結果）→ [{ page: 頁碼或 null, obj: 和 AI 回傳一樣形狀的 { items } }]
+// 之後每一頁照 normalizeBookPage 整理（章節類別、長條圖取到 0.5 都一樣）
+const BOOK_COLS = [
+  ['page', ['頁碼', '第幾頁']], ['printed_kcal_per_g', ['書上熱量', '熱量每公克', '熱量/公克', '熱量／公克']], ['printed_carbs_per_g', ['書上醣類', '醣類每公克', '醣類/公克', '醣類／公克']],
+  ['exchanges_from_chart', ['從圖估讀', '長條圖']], ['has_soup', ['湯汁']], ['name', ['名稱', '品項', '品名', '菜名']], ['serving_label', ['份量說明', '份量']],
+  ['weight_g', ['重量', '克數']], ['kcal', ['熱量']], ['protein', ['蛋白質']], ['fat', ['脂肪']], ['carbs', ['醣類', '碳水']], ['sugar', ['糖']],
+  ['sodium_mg', ['鈉']], ['fiber', ['纖維']], ['ex_grain', ['全穀', '主食']], ['ex_protein', ['豆魚蛋肉', '肉類']], ['ex_vegetable', ['蔬菜']],
+  ['ex_fruit', ['水果']], ['ex_dairy', ['乳品', '奶類']], ['ex_oil', ['油脂與堅果', '油脂類', '油脂(份)']], ['note', ['備註']]
+];
+const yes = (v) => /^(是|有|y|yes|true|1|✓|✔|v)$/i.test(String(v || '').trim());
+const cellNum = (v) => { const s = String(v == null ? '' : v).replace(/,/g, '').trim(); if (!s) return null; const n = Number(s); return Number.isFinite(n) && n >= 0 ? n : null; };
+export function bookItemsFromTable(rows) {
+  if (!rows || rows.length < 2) return [];
+  const used = new Set();
+  const idx = {};
+  rows[0].forEach((h, i) => {
+    const t = String(h || '').replace(/\s/g, '');
+    for (const [key, words] of BOOK_COLS) {
+      if (used.has(key)) continue;
+      if (key === 'sugar' && /醣/.test(t)) continue;
+      if (words.some(w => t.includes(w))) { used.add(key); idx[key] = i; return; }
+    }
+  });
+  if (idx.name == null) return [];
+  const get = (r, k) => (idx[k] == null ? '' : r[idx[k]]);
+  const byPage = new Map();
+  rows.slice(1).forEach(r => {
+    const name = String(get(r, 'name') || '').trim();
+    if (!name) return;
+    const p = cellNum(get(r, 'page'));
+    const page = p >= 1 ? Math.round(p) : null;
+    const it = { name, serving_label: String(get(r, 'serving_label') || '').trim(), note: String(get(r, 'note') || '').trim(),
+      has_soup: yes(get(r, 'has_soup')), exchanges_from_chart: yes(get(r, 'exchanges_from_chart')), exchanges: {} };
+    ['weight_g', 'kcal', 'protein', 'fat', 'carbs', 'sugar', 'sodium_mg', 'fiber', 'printed_kcal_per_g', 'printed_carbs_per_g'].forEach(k => { const n = cellNum(get(r, k)); if (n != null) it[k] = n; });
+    ['grain', 'protein', 'vegetable', 'fruit', 'dairy', 'oil'].forEach(k => { const n = cellNum(get(r, 'ex_' + k)); if (n != null) it.exchanges[k] = n; });
+    if (!byPage.has(page)) byPage.set(page, []);
+    byPage.get(page).push(it);
+  });
+  return [...byPage.entries()].map(([page, items]) => ({ page, obj: { rotation: 0, items } }));
+}

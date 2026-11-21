@@ -135,3 +135,42 @@ test('沒有 Key、Key 不對會說明；沒熱量的不能按校對好', async 
   await page.click('[data-check]');
   await expect(page.locator('#reviewSummary')).toContainText('已校對 1 樣');
 });
+
+test('用自己的 AI：提示詞帶章節份數 → 貼回答 → 依頁碼對回照片；找不到照片的也收；接在後面', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await openTool(page);
+  await page.setInputFiles('#photoInput', [photo('p1.png'), photo('p2.png')]);
+  await page.fill('#catFrom', '2'); await page.fill('#catTo', '2');
+  await page.selectOption('#catPick', 'grain');
+  await page.click('#catApplyBtn');
+  await expect(page.locator('#pageRows')).toContainText('第 1 張照片・p1.png');
+  await page.click('#copyPromptBtn');
+  const prompt = await page.evaluate(() => navigator.clipboard.readText());
+  expect(prompt).toContain('頁碼,名稱,份量說明,重量(g)');
+  expect(prompt).toContain('第 2 頁每一樣的重量就是「全穀雜糧」1 份');
+  const head = '頁碼,名稱,份量說明,重量(g),熱量(kcal),蛋白質(g),脂肪(g),醣類(g),糖(g),鈉(mg),膳食纖維(g),全穀雜糧(份),豆魚蛋肉(份),蔬菜(份),水果(份),乳品(份),油脂與堅果種子(份),書上熱量每公克,書上醣類每公克,有湯汁,份數從圖估讀,備註';
+  await page.fill('#pasteText', '以下是結果\n```csv\n' + head + '\n1,牛肉麵,1 碗,600,540,30,18,64,,,,4.2,2.4,,,,2,1.6,,是,是,牛腱\n2,白飯,1/4 碗,40,70,,,15,,,,,,,,,,,,,,\n```');
+  await page.click('#pasteLoadBtn');
+  await expect(page.locator('#pasteNote')).toContainText('讀入 2 樣。往下對照照片校對');
+  await expect(page.locator('#pageRows')).toContainText('完成，1 樣');
+  await expect(page.locator('#reviewSummary')).toContainText('共 2 樣');
+  const noodle = page.locator('[data-item]', { has: page.locator('input[value="牛肉麵"]') });
+  await expect(noodle).toContainText('第 1 頁');
+  await expect(noodle.locator('[data-flags]')).toContainText('從長條圖估讀');
+  await expect(noodle.locator('[data-ex=prot]')).toHaveValue('2.5');
+  const rice = page.locator('[data-item]', { has: page.locator('input[value="白飯"]') });
+  await expect(rice.locator('[data-ex=grain]')).toHaveValue('1');
+  // 說了「繼續」後的下一段沒有欄位名稱那一列（照提示詞的規則）；第 5 頁沒照片也收
+  await page.fill('#pasteText', '```csv\n5,滷肉飯,,250,450,12,15,66,,,,,,,,,,1.4,,,,\n```');
+  await page.click('#pasteAppendBtn');
+  await expect(page.locator('#pasteNote')).toContainText('接上 1 樣。其中 1 樣找不到對應的照片');
+  await expect(page.locator('#pageRows')).toContainText('第 5 頁（沒有照片）');
+  await expect(page.locator('#reviewSummary')).toContainText('共 3 樣');
+  // 讀入（換掉）同一頁：不會重複
+  await page.fill('#pasteText', '```csv\n' + head + '\n1,牛肉麵,1 碗,600,550,30,18,64,,,,4,2.5,,,,2,,,是,,牛腱\n```');
+  await page.click('#pasteLoadBtn');
+  await expect(page.locator('#reviewSummary')).toContainText('共 3 樣');
+  await expect(page.locator('input[value="牛肉麵"]')).toHaveCount(1);
+  // 有 Key 時「繼續辨識」不會去辨識沒照片的那一頁
+  await expect(page.locator('#runBtn')).toHaveText('✔ 全部辨識好了');
+});

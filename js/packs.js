@@ -53,7 +53,8 @@ export const PACK_FIELDS = [
   ['note', '備註', ['備註', '說明'], ['來源']],
   ['source', '資料來源', ['資料來源', '來源']],
   ['edition', '版本', ['版本', '年份']],
-  ['url', '出處', ['出處', '網址']]
+  ['url', '出處', ['出處', '網址']],
+  ['page', '頁碼', ['頁碼', '第幾頁']]
 ];
 export const FIELD_LABEL = Object.fromEntries(PACK_FIELDS.map(([k, l]) => [k, l]));
 
@@ -373,4 +374,68 @@ export function tfdaOverlap(foods, tfda) {
     if (t) out.push({ food: f, tfda: t });
   });
   return out;
+}
+
+/* ---------------- 用自己的 AI 整理（複製提示詞 → 貼回答） ---------------- */
+// ChatGPT、Claude、Gemini 等聊天 App 都可以：不用 API Key、不受 API 額度限制。回答照標準 CSV 範本，工具照一般流程檢查。
+export function packPrompt() {
+  return [
+    '請把我給你的資料（照片、截圖、PDF、網頁或表格）整理成一張食物營養表，給「飲控隨身記」App 匯入用。',
+    '',
+    '輸出規則：',
+    '1. 只輸出一個 CSV，放在 ```csv 程式碼區塊裡，不要其他說明文字。第一列是欄位名稱，之後一列一樣食物。',
+    '2. 欄位固定是這些，順序不要改：',
+    PACK_CSV_HEAD.join(','),
+    '3. 數字照資料上印的填，只寫數字、不加單位。資料上沒有的欄位留空白，不要自己估、不要填 0（真的是 0 才填 0）。',
+    '4. 計量方式：資料是「一份」的數字填「每份」，並在每份克數填一份幾克（不知道就留空）；資料是每 100 公克的填「每100g」。份量說明寫「1 碗」「1 杯 (大杯)」這類說法。',
+    '5. 有店家或品牌的（例如連鎖店菜單）填在「店家」；同一品項有大小杯、甜度等不同規格的，寫在名稱最後的括號裡，例如「珍珠奶茶(大杯/無糖)」，一種規格一列。',
+    '6. 六大類份數（全穀雜糧、豆魚蛋肉、蔬菜、水果、乳品、油脂與堅果種子）資料上有才填。',
+    '7. 資料來源寫資料的出處（例如「某某店官方營養標示」）；備註用你自己的話簡短寫，不要照抄長段文字。',
+    '8. 欄位內容有逗號的，整格用雙引號包起來。',
+    '9. 資料很多、一次寫不完時，每次最多 80 列，寫完後在程式碼區塊外面說「還有，請說繼續」；我說「繼續」時接著寫，不要重複欄位名稱那一列。'
+  ].join('\n');
+}
+
+// 貼上的文字 → 二維陣列。接受：```csv 區塊、Markdown 表格（| a | b |）、Excel 複製的（Tab 分隔）、一般 CSV；
+// AI 在表格前後多寫的說明會略過（從含「名稱」或「品項」的那一列開始，沒有就從第一列）
+export function parsePastedTable(text) {
+  let s = String(text || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+  const fences = [...s.matchAll(/```[a-zA-Z]*\s*\n([\s\S]*?)```/g)].map(m => m[1]);
+  if (fences.length) s = fences.join('\n');
+  const lines = s.split('\n');
+  const isPipe = (l) => /^\s*\|.*\|\s*$/.test(l);
+  let rows;
+  if (lines.filter(isPipe).length >= 2) {
+    rows = lines.filter(isPipe).filter(l => !/^\s*\|?\s*:?-{3,}/.test(l))
+      .map(l => l.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim()));
+  } else if (lines.some(l => l.includes('\t'))) {
+    rows = lines.filter(l => l.trim()).map(l => l.split('\t').map(c => c.trim().replace(/^"(.*)"$/, '$1')));
+  } else {
+    rows = csvRows(s);
+  }
+  rows = rows.filter(r => r.some(c => c !== ''));
+  const h = rows.findIndex(r => r.some(c => /名稱|品項|品名/.test(c)));
+  return h > 0 ? rows.slice(h) : rows;
+}
+// RFC 4180 CSV（只用逗號分隔；引號裡的逗號、換行照留）
+function csvRows(s) {
+  const rows = [];
+  let row = [], cell = '', q = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (q) {
+      if (ch === '"') { if (s[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(cell.trim()); cell = ''; }
+    else if (ch === '\n') { row.push(cell.trim()); rows.push(row); row = []; cell = ''; }
+    else cell += ch;
+  }
+  if (cell !== '' || row.length) { row.push(cell.trim()); rows.push(row); }
+  return rows;
+}
+// 接在後面再貼一段：第二段開頭如果又有欄位名稱那一列，拿掉
+export function appendPasted(prev, next) {
+  if (!prev || !prev.length) return next;
+  const same = next.length && next[0].join('|') === prev[0].join('|');
+  return [...prev, ...(same ? next.slice(1) : next)];
 }

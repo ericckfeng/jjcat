@@ -43,6 +43,26 @@
         <input id="sheetUrl" type="url" class="field flex-1" placeholder="或貼上 Google 試算表連結" />
         <button type="button" id="sheetUrlBtn" class="btn-secondary shrink-0 px-4">讀取</button>
       </div>
+      <details id="pasteBox" class="rounded-xl border border-stone-200">
+        <summary class="px-3 py-2 font-semibold cursor-pointer">沒有表格檔？用你自己的 AI（ChatGPT、Claude、Gemini…）整理</summary>
+        <div class="p-3 space-y-3">
+          <ol class="list-decimal pl-5 space-y-1 text-base text-stone-700">
+            <li>按「複製提示詞」。</li>
+            <li>打開你常用的 AI，貼上提示詞，再附上資料：菜單照片、截圖、PDF 或網址都可以。</li>
+            <li>AI 回答後，把整段回答複製，貼在下面，按「讀入」。一次寫不完的，對 AI 說「繼續」，再把新的回答貼上、按「接在後面」。</li>
+          </ol>
+          <div class="flex flex-wrap gap-2 items-center">
+            <button type="button" id="copyPromptBtn" class="btn-primary px-4">📋 複製提示詞</button>
+            <span id="copyNote" class="text-sm muted"></span>
+          </div>
+          <details id="promptView"><summary class="text-sm muted cursor-pointer">看提示詞內容</summary><pre id="promptText" class="whitespace-pre-wrap text-sm bg-stone-50 rounded-lg p-2 mt-1 select-all"></pre></details>
+          <textarea id="pasteText" rows="8" class="field font-mono text-sm" placeholder="把 AI 的回答貼在這裡（整段貼上就好，前後的說明文字會自動略過）"></textarea>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" id="pasteLoadBtn" class="btn-secondary px-4">讀入</button>
+            <button type="button" id="pasteAppendBtn" class="btn-secondary px-4">接在後面</button>
+          </div>
+        </div>
+      </details>
       <label id="sheetPickWrap" class="hidden block"><span class="scr-label">要用哪一個工作表？</span><select id="sheetPick" class="field"></select></label>
       <p id="loadNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
     </section>

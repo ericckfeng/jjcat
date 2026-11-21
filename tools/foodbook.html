@@ -44,8 +44,8 @@
     </div>
 
     <section class="step space-y-3">
-      <h2>1. Gemini API Key</h2>
-      <p class="text-base text-stone-600 leading-relaxed">用你自己的 Key（和 App 裡的可以是同一把，這裡要另外貼）。只存在這台電腦的瀏覽器；照片從這台電腦直接傳給 Google 辨識。免費方案每天有次數上限，用完了明天按「繼續」接著做。</p>
+      <h2>1. Gemini API Key（選用）</h2>
+      <p class="text-base text-stone-600 leading-relaxed">有 Key 的話，第 3 步可以自動一頁一頁辨識。<b>沒有 Key、或免費次數用完，可以改用第 3 步下面的「用你自己的 AI」</b>，不用 Key。<br>用你自己的 Key（和 App 裡的可以是同一把，這裡要另外貼）。只存在這台電腦的瀏覽器；照片從這台電腦直接傳給 Google 辨識。免費方案每天有次數上限，用完了明天按「繼續」接著做。</p>
       <input id="aiKey" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" class="field font-mono" placeholder="AIza…" />
       <p class="text-sm muted">沒有 Key：到 <a class="underline" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> 建立（免費）。</p>
     </section>
@@ -87,6 +87,27 @@
         <button type="button" id="stopBtn" class="hidden btn-secondary btn-xl px-6">暫停</button>
       </div>
       <p id="runNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
+    </section>
+
+    <section class="step space-y-3">
+      <h2>或：用你自己的 AI（不用 Key）</h2>
+      <p class="text-base text-stone-600 leading-relaxed">用你平常的 ChatGPT、Claude、Gemini 等 AI（免費版或付費版都可以）。付費版通常可以一次讀整本 PDF。</p>
+      <ol class="list-decimal pl-5 space-y-1 text-base text-stone-700">
+        <li>先在上面第 2 步加入同樣的照片或 PDF（校對時要對照）。依章節定份數的話，先在第 3 步設好。</li>
+        <li>按「複製提示詞」，貼到 AI 的對話框，<b>再附上同樣的照片（照順序）或 PDF</b>。</li>
+        <li>AI 回答後，把整段回答貼在下面，按「讀入」。一次寫不完的，對 AI 說「繼續」，再貼上新的回答、按「接在後面」。</li>
+      </ol>
+      <div class="flex flex-wrap gap-2 items-center">
+        <button type="button" id="copyPromptBtn" class="btn-primary px-4">📋 複製提示詞</button>
+        <span id="copyNote" class="text-sm muted"></span>
+      </div>
+      <details id="promptView"><summary class="text-sm muted cursor-pointer">看提示詞內容</summary><pre id="promptText" class="whitespace-pre-wrap text-sm bg-stone-50 rounded-lg p-2 mt-1 select-all"></pre></details>
+      <textarea id="pasteText" rows="8" class="field font-mono text-sm" placeholder="把 AI 的回答貼在這裡（整段貼上就好）"></textarea>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" id="pasteLoadBtn" class="btn-secondary px-4">讀入（換掉這些頁原本的）</button>
+        <button type="button" id="pasteAppendBtn" class="btn-secondary px-4">接在後面</button>
+      </div>
+      <p id="pasteNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
     </section>
 
     <section id="stepReview" class="step space-y-3 hidden">

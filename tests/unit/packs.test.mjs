@@ -193,3 +193,22 @@ test('和衛福部重複：沒有店家（或來源是衛福部）的同名品�
   ];
   assert.deepEqual(tfdaOverlap(foods, tfda).map(x => [x.food.id, x.tfda.id]), [['a', 'T1'], ['b', 'T1']]);
 });
+
+test('貼上 AI 的回答：```csv 區塊、Markdown 表格、Excel（Tab）都讀得懂；前面的說明略過；分段貼可以接起來', async () => {
+  const { parsePastedTable, appendPasted, packPrompt, guessMapping, rowsToFoods, PACK_CSV_HEAD } = await import('../../js/packs.js');
+  const csv = '好的，以下是整理結果：\n```csv\n名稱,店家,計量方式,每份克數,份量說明,熱量(kcal),蛋白質(g)\n漢堡,麥當勞,每份,102,1份,260,12.2\n"薯條(中, 大)",麥當勞,每份,,1包,330,\n```\n還有，請說繼續';
+  const a = parsePastedTable(csv);
+  assert.deepEqual(a, [['名稱', '店家', '計量方式', '每份克數', '份量說明', '熱量(kcal)', '蛋白質(g)'], ['漢堡', '麥當勞', '每份', '102', '1份', '260', '12.2'], ['薯條(中, 大)', '麥當勞', '每份', '', '1包', '330', '']]);
+  const md = '以下是表格：\n\n| 名稱 | 熱量(kcal) |\n|---|---|\n| 可樂 | 140 |\n| 雪碧 | 150 |';
+  assert.deepEqual(parsePastedTable(md), [['名稱', '熱量(kcal)'], ['可樂', '140'], ['雪碧', '150']]);
+  assert.deepEqual(parsePastedTable('名稱\t熱量\n奶茶\t1,200'), [['名稱', '熱量'], ['奶茶', '1,200']]);
+  // 第二段（說了「繼續」之後）沒有欄位名稱 → 直接接上；有的話拿掉
+  const b = parsePastedTable('```csv\n冰炫風,麥當勞,每份,,1杯,340,8\n```');
+  assert.equal(appendPasted(a, b).length, 4);
+  assert.equal(appendPasted(a, parsePastedTable(csv)).length, 5);
+  // 照提示詞的欄位回答 → 整理工具一般流程
+  assert.ok(packPrompt().includes(PACK_CSV_HEAD.join(',')));
+  const { foods } = rowsToFoods(a.slice(1), guessMapping(a[0]));
+  assert.deepEqual(foods.map(f => [f.brand, f.name, f.perServing.kcal]), [['麥當勞', '漢堡', 260], ['麥當勞', '薯條(中, 大)', 330]]);
+  assert.equal(guessMapping(['頁碼', '名稱'])[0], 'page');
+});

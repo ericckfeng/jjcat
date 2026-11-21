@@ -1,8 +1,8 @@
 // AI 建檔小工具：書頁／衛教單張／掃描 PDF → AI 讀數字 → 對照照片校對 → 食物資料庫檔
 // 獨立頁面，不碰 App 的 localStorage。進度（頁面、照片、讀出來的品項）存在這台電腦的 IndexedDB「foodbook-tool」。
-import { BOOK_SCHEMA, EX_LABEL, bookPrompt, normalizeBookPage, checkBookItem, bookToPack, bookSummary } from '../js/foodbook.js';
+import { BOOK_SCHEMA, EX_LABEL, bookPrompt, normalizeBookPage, checkBookItem, bookToPack, bookSummary, bookTablePrompt, bookItemsFromTable } from '../js/foodbook.js';
 import { buildRequest, callGemini } from '../js/ai.js';
-import { packRows } from '../js/packs.js';
+import { packRows, parsePastedTable } from '../js/packs.js';
 import { toCsv } from '../js/lookup.js';
 
 const $ = (id) => document.getElementById(id);
@@ -162,10 +162,11 @@ function renderPages() {
   $('pageRows').innerHTML = P.pages.map((p, i) => {
     const n = P.items.filter(it => it.pageId === p.id && !it.removed).length;
     const st = p.status === 'done' ? (n ? '完成，' + n + ' 樣' : '完成，這頁沒有食物') : p.status === 'error' ? '失敗：' + esc(p.error || '') : STATUS[p.status] || '';
-    return `<tr><td class="tabular-nums">${i + 1}</td><td>${esc(p.label)}${p.note ? '<br><span class="text-sm muted">' + esc(p.note) + '</span>' : ''}</td>
+    const label = p.kind === 'photo' ? '第 ' + (photos().indexOf(p) + 1) + ' 張照片・' + p.label : p.label;
+    return `<tr><td class="tabular-nums">${i + 1}</td><td>${esc(label)}${p.note ? '<br><span class="text-sm muted">' + esc(p.note) + '</span>' : ''}</td>
       <td><select data-page-cat="${p.id}" class="field py-1 w-auto">${catOptions(p.category)}</select></td>
       <td class="${p.status === 'error' ? 'text-rose-700' : ''}">${st}</td>
-      <td class="whitespace-nowrap">${p.status === 'done' || p.status === 'error' ? `<button type="button" data-page-redo="${p.id}" class="chip-btn">重新辨識</button>` : ''}
+      <td class="whitespace-nowrap">${p.kind !== 'paste' && (p.status === 'done' || p.status === 'error') ? `<button type="button" data-page-redo="${p.id}" class="chip-btn">重新辨識</button>` : ''}
         <button type="button" data-page-del="${p.id}" class="chip-btn">刪除</button></td></tr>`;
   }).join('');
 }
@@ -267,6 +268,59 @@ $('runBtn').addEventListener('click', async () => {
   render();
 });
 $('stopBtn').addEventListener('click', () => { stopAsked = true; note('runNote', 'info', '這一頁做完就暫停。'); });
+
+/* ---------------- 用自己的 AI（複製提示詞 → 貼回答） ---------------- */
+// 頁碼：PDF 的頁碼；只有照片時是照片的順序（第幾張）
+const hasPdf = () => P.pages.some(p => p.kind === 'pdf');
+const photos = () => P.pages.filter(p => p.kind === 'photo');
+function noOf(p) { return p.kind === 'pdf' ? p.pdfPage : p.kind === 'photo' && !hasPdf() ? photos().indexOf(p) + 1 : p.pasteNo; }
+function pageForNo(n) {
+  if (n == null) return null;
+  return P.pages.find(p => p.kind === 'pdf' && p.pdfPage === n) || (!hasPdf() && photos()[n - 1]) || P.pages.find(p => p.kind === 'paste' && p.pasteNo === n) || null;
+}
+function tablePrompt() {
+  const categories = {};
+  P.pages.forEach(p => { const n = noOf(p); if (p.category && n) categories[n] = p.category; });
+  return bookTablePrompt({ categories });
+}
+$('promptText').textContent = tablePrompt();
+$('copyPromptBtn').addEventListener('click', async () => {
+  const text = tablePrompt();
+  $('promptText').textContent = text;
+  try { await navigator.clipboard.writeText(text); $('copyNote').textContent = '已複製，貼到 AI 的對話框，再附上照片或 PDF。'; }
+  catch (e) { $('promptView').open = true; $('copyNote').textContent = '沒辦法自動複製：請在下面的提示詞上全選、複製。'; }
+});
+function loadPasted(append) {
+  let rows = parsePastedTable($('pasteText').value);
+  const hasHead = rows.length && rows[0].some(c => /名稱|品項|品名/.test(c));
+  // 說了「繼續」之後的回答不會再有欄位名稱那一列：用上一段的
+  if (!hasHead && append && P.pasteHead) rows = [P.pasteHead, ...rows];
+  else if (hasHead) P.pasteHead = rows[0];
+  const groups = bookItemsFromTable(rows);
+  if (!groups.length) { note('pasteNote', 'err', '讀不到表格：請把 AI 的整段回答貼上（第一段要有欄位名稱那一列）。'); return; }
+  let n = 0, noPhoto = 0;
+  const cleared = new Set();
+  groups.forEach(({ page, obj }) => {
+    let p = pageForNo(page);
+    if (!p) {
+      // 工具裡沒有這一頁的照片：一樣收進來，校對時沒有照片可以對照
+      p = { id: uid('pg'), kind: 'paste', pasteNo: page, label: page ? '第 ' + page + ' 頁（沒有照片）' : '沒寫頁碼的', status: 'done', category: '', rotation: 0 };
+      P.pages.push(p);
+    }
+    if (p.kind === 'paste') noPhoto += obj.items.length;
+    if (!append && !cleared.has(p.id)) { P.items = P.items.filter(it => it.pageId !== p.id); cleared.add(p.id); }
+    const r = normalizeBookPage(obj, { category: p.category });
+    const cat = p.category ? EX_LABEL[p.category] : '';
+    r.items.forEach(it => P.items.push({ ...it, id: uid('it'), pageId: p.id, category: cat, checked: false, removed: false }));
+    p.status = 'done'; p.error = ''; p.note = p.note || '用自己的 AI 讀的';
+    n += r.items.length;
+  });
+  $('pasteText').value = '';
+  note('pasteNote', 'ok', (append ? '接上 ' : '讀入 ') + n + ' 樣。' + (noPhoto ? '其中 ' + noPhoto + ' 樣找不到對應的照片（頁碼對不上，或還沒在第 2 步加入），校對時沒有照片可以對照。' : '往下對照照片校對。'));
+  save(); render();
+}
+$('pasteLoadBtn').addEventListener('click', () => loadPasted(false));
+$('pasteAppendBtn').addEventListener('click', () => loadPasted(true));
 
 /* ---------------- 校對 ---------------- */
 const NUM_FIELDS = [['weightG', '重量 g'], ['kcal', '熱量 kcal'], ['p', '蛋白質 g'], ['f', '脂肪 g'], ['c', '醣類 g'], ['sugar', '糖 g'], ['na', '鈉 mg'], ['fiber', '纖維 g']];
@@ -404,6 +458,7 @@ function render() {
   renderPages();
   renderReview();
   renderOut();
+  $('promptText').textContent = tablePrompt();
 }
 (async () => {
   let saved = null;

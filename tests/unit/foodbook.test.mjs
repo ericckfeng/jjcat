@@ -76,3 +76,24 @@ test('進度摘要', () => {
   const s = bookSummary({ pages: [{ status: 'done' }, { status: 'todo' }, { status: 'error' }], items });
   assert.deepEqual(s, { pages: 3, done: 1, failed: 1, todo: 2, items: 3, checked: 1, flagged: 3 });
 });
+
+test('用自己的 AI：提示詞含欄位和章節份數；貼回的表格依頁碼分開，照一般整理規則', async () => {
+  const { bookTablePrompt, bookItemsFromTable, BOOK_TABLE_HEAD } = await import('../../js/foodbook.js');
+  const { parsePastedTable } = await import('../../js/packs.js');
+  const p = bookTablePrompt({ categories: { 3: 'grain', 4: '' } });
+  assert.ok(p.includes(BOOK_TABLE_HEAD.join(',')));
+  assert.match(p, /第 3 頁每一樣的重量就是「全穀雜糧」1 份。$/);
+  assert.doesNotMatch(bookTablePrompt(), /依章節/);
+  const rows = parsePastedTable('```csv\n' + BOOK_TABLE_HEAD.join(',') + '\n' +
+    '2,牛肉麵,1 碗,600,540,30,18,64,,,,4.2,2.4,,,,2,1.6,,是,是,牛腱\n' +
+    '2,滷肉飯,,250,450,12,15,66,,,,,,,,,,1.4,,,,\n' +
+    '3,白飯,1/4 碗,40,70,,,15,,,,,,,,,,,,,,\n' +
+    ',沒頁碼的,,,100,,,,,,,,,,,,,,,,,\n```');
+  const pages = bookItemsFromTable(rows);
+  assert.deepEqual(pages.map(x => [x.page, x.obj.items.length]), [[2, 2], [3, 1], [null, 1]]);
+  const noodle = normalizeBookPage(pages[0].obj).items[0];
+  assert.deepEqual(noodle, { name: '牛肉麵', weightG: 600, servingLabel: '1 碗', kcal: 540, p: 30, f: 18, c: 64, sugar: null, na: null, fiber: null,
+    ex: { grain: 4, prot: 2.5, oil: 2 }, exFromChart: true, kcalPerG: 1.6, carbPerG: null, hasSoup: true, note: '牛腱' });
+  assert.deepEqual(normalizeBookPage(pages[1].obj, { category: 'grain' }).items[0].ex, { grain: 1 });
+  assert.deepEqual(bookItemsFromTable([['熱量'], ['100']]), [], '沒有名稱欄不收');
+});

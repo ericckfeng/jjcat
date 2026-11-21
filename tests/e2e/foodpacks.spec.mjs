@@ -250,3 +250,30 @@ test('資料庫可以整包分享，對方匯入得到一樣的資料庫', async
   expect(file.pack).toMatchObject({ id: 'pk_test', name: '外食連鎖店', edition: '2026' });
   expect(file.foods).toHaveLength(4);
 });
+
+test('整理工具：用自己的 AI → 貼上回答（含說明文字、分兩段）→ 一般流程', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await stubCdn(page);
+  await page.route('https://cdnjs.cloudflare.com/**', r => r.fulfill({ contentType: 'application/javascript', body: '' }));
+  await page.goto('/tools/foodpack.html');
+  await page.click('#pasteBox summary');
+  await page.click('#copyPromptBtn');
+  await expect(page.locator('#copyNote')).toContainText('已複製');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('名稱,別名,分類,店家,計量方式');
+  await page.fill('#pasteText', '好的！整理如下：\n```csv\n名稱,別名,分類,店家,計量方式,每份克數,份量說明,熱量(kcal),蛋白質(g)\n漢堡,,主餐,麥當勞,每份,102,1份,260,12.2\n大麥克,,主餐,麥當勞,每份,,1份,530,28\n```\n還有，請說繼續');
+  await page.click('#pasteLoadBtn');
+  await expect(page.locator('#loadNote')).toContainText('讀到 2 列');
+  await expect(page.locator('#pkName')).toHaveValue('AI 整理的表');
+  await page.fill('#pkName', '麥當勞菜單');
+  await page.fill('#pasteText', '```csv\n薯條(中),,點心,麥當勞,每份,,1包,330,\n```');
+  await page.click('#pasteAppendBtn');
+  await expect(page.locator('#loadNote')).toContainText('接上 1 列，共 3 列');
+  await expect(page.locator('#pkName')).toHaveValue('麥當勞菜單');
+  await expect(page.locator('#checkSummary')).toContainText('收 3 樣');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#dlJson')]);
+  const file = JSON.parse(await readDownload(dl));
+  expect(file.foods.map(f => [f.brand, f.name, f.perServing.kcal])).toEqual([['麥當勞', '漢堡', 260], ['麥當勞', '大麥克', 530], ['麥當勞', '薯條(中)', 330]]);
+  await page.fill('#pasteText', '我沒辦法讀這張圖片');
+  await page.click('#pasteLoadBtn');
+  await expect(page.locator('#loadNote')).toContainText('讀不到表格');
+});

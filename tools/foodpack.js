@@ -1,6 +1,6 @@
 // 食物資料庫整理工具：試算表 → 資料庫檔（js/packs.js 的格式）
 // 獨立頁面，不碰 App 的 localStorage；兩邊靠檔案交接。
-import { PACK_FIELDS, FIELD_LABEL, guessMapping, rowsToFoods, findDuplicates, mergeExact, buildPack, packRows, tfdaOverlap } from '../js/packs.js';
+import { PACK_FIELDS, FIELD_LABEL, guessMapping, rowsToFoods, findDuplicates, mergeExact, buildPack, packRows, tfdaOverlap, packPrompt, parsePastedTable, appendPasted } from '../js/packs.js';
 import { parseCsv, toCsv } from '../js/lookup.js';
 
 const $ = (id) => document.getElementById(id);
@@ -64,17 +64,19 @@ function sheetRows(ws) {
   return window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '', blankrows: false })
     .map(r => r.map(c => String(c).trim()));
 }
-function useRows(all, name) {
+function useRows(all, name, { keepMeta = false } = {}) {
   const rows = all.filter(r => r.some(c => c !== ''));
   if (rows.length < 2) { note('loadNote', 'err', '「' + name + '」沒有資料（第一列是欄位名稱，之後一列一樣食物）'); return; }
   st.head = rows[0];
   st.rows = rows.slice(1);
-  st.mapping = guessMapping(st.head);
-  st.drop = new Set();
+  if (!keepMeta || st.mapping.length !== st.head.length) st.mapping = guessMapping(st.head);   // 接在後面：保留改過的欄位對照
+  if (!keepMeta) st.drop = new Set();
   // 有「店家」欄的通常是外食表：問幾份；有「每份克數」沒有店家的：問幾克
-  st.askBy = st.mapping.includes('brand') || !st.mapping.includes('servingG') ? 'serving' : 'grams';
-  META_IDS.forEach(id => { $(id).value = ''; });   // 新的表：資訊重填
-  $('pkName').value = name.replace(/\.(xlsx|xls|csv|tsv|txt)$/i, '').replace(/_/g, ' ');
+  if (!keepMeta) st.askBy = st.mapping.includes('brand') || !st.mapping.includes('servingG') ? 'serving' : 'grams';
+  if (!keepMeta) {
+    META_IDS.forEach(id => { $(id).value = ''; });   // 新的表：資訊重填
+    $('pkName').value = name.replace(/\.(xlsx|xls|csv|tsv|txt)$/i, '').replace(/_/g, ' ');
+  }
   $('resumeBox').classList.add('hidden');
   note('loadNote', 'ok', '讀到 ' + st.rows.length + ' 列、' + st.head.length + ' 欄。');
   ['stepMap', 'stepInfo', 'stepCheck', 'stepOut'].forEach(id => $(id).classList.remove('hidden'));
@@ -133,6 +135,29 @@ $('sheetUrlBtn').addEventListener('click', async () => {
   }
   note('loadNote', 'err', '讀不到。請確認試算表「共用」設成「知道連結的任何人都能檢視」；還是不行的話，用「檔案 → 下載 → Microsoft Excel」再選檔案。');
 });
+
+// 用自己的 AI 整理：複製提示詞 → 把回答貼回來
+let pastedRows = null;
+$('promptText').textContent = packPrompt();
+async function copyText(text, noteId, viewId) {
+  try { await navigator.clipboard.writeText(text); $(noteId).textContent = '已複製，貼到 AI 的對話框。'; }
+  catch (e) { $(viewId).open = true; $(noteId).textContent = '沒辦法自動複製：請在下面的提示詞上全選、複製。'; }
+}
+$('copyPromptBtn').addEventListener('click', () => copyText(packPrompt(), 'copyNote', 'promptView'));
+function loadPasted(append) {
+  const rows = parsePastedTable($('pasteText').value);
+  if (rows.length < (append && pastedRows ? 1 : 2)) { note('loadNote', 'err', '讀不到表格：請把 AI 的整段回答貼上（要有欄位名稱那一列）。'); return; }
+  const before = append && pastedRows ? pastedRows.length - 1 : 0;
+  pastedRows = append ? appendPasted(pastedRows, rows) : rows;
+  st.fileName = 'AI 整理的表';
+  st.sheets = null;
+  $('sheetPickWrap').classList.add('hidden');
+  useRows(pastedRows, 'AI 整理的表', { keepMeta: append });
+  $('pasteText').value = '';
+  if (append) note('loadNote', 'ok', '接上 ' + (pastedRows.length - 1 - before) + ' 列，共 ' + (pastedRows.length - 1) + ' 列。');
+}
+$('pasteLoadBtn').addEventListener('click', () => loadPasted(false));
+$('pasteAppendBtn').addEventListener('click', () => loadPasted(true));
 
 /* ---------------- 2. 欄位對照 ---------------- */
 function renderMap() {

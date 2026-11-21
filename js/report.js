@@ -105,6 +105,7 @@ export function periodSummary(ctx, dates) {
     sleep: slept.length ? { avgMin: slept.reduce((a, r) => a + r.total, 0) / slept.length, days: slept.length, shortDays: slept.filter(r => r.total < 360).length, kcalShort: mean(bad), kcalGood: mean(good) } : null,
     water: s.avgWater != null ? { avg: s.avgWater, goal: goals.length ? goals.reduce((a, b) => a + b, 0) / goals.length : null } : null,
     exercise: { totalMin: s.exMinTotal, days: dates.filter(d => Number(dd(d).exMin) > 0 || dd(d).exercise).length },
+    steps: s.stepsDays ? { avg: s.avgSteps, days: s.stepsDays, metDays: s.stepsMetDays, target: Number(tg.steps) || null } : (Number(tg.steps) ? { avg: null, days: 0, metDays: 0, target: Number(tg.steps) } : null),
     questions: dates.filter(d => String(dd(d).question || '').trim()).length,
     noBowelDays: dates.filter(d => dd(d).bowel != null && Number(dd(d).bowel) === 0).length,
     smi: (() => {
@@ -132,7 +133,7 @@ export async function buildReportHTML(ctx, opts) {
   const has = (field) => dates.some(d => days[d] && days[d][field] != null && days[d][field] !== '');
   const anyMacro = s.macroDays > 0 || MACRO_KEYS.some(k => tg[k]);
   const anyEx = s.exDays > 0 || EX_KEYS.some(k => tg.ex && tg.ex[k]);
-  const cols = { weight: has('weight'), waist: has('waist'), water: has('water'), exercise: has('exercise') || has('exMin') };
+  const cols = { weight: has('weight'), waist: has('waist'), water: has('water'), exercise: has('exercise') || has('exMin'), steps: has('steps') };
   cols.bmi = cols.weight && Boolean(height);
   cols.sleep = dates.some(d => daySleep(days[d]).total > 0);
   cols.sleepQ = has('sleepQ');
@@ -162,6 +163,7 @@ export async function buildReportHTML(ctx, opts) {
   const lastBmi = w.length ? calcBmi(w[w.length - 1].w, height) : null;
   h += stat('體重', w.length ? w[w.length - 1].w + ' kg' : '–', (wc ? '7 天平均 ' + wc.first + '→' + wc.last + ' kg（' + signed(wc.delta) + '）' : (tg.weight ? '目標 ' + tg.weight + ' kg' : '')) + (lastBmi ? '・BMI ' + lastBmi + ' ' + bmiCategory(lastBmi).label : ''));
   h += stat('喝水／運動', s.avgWater != null ? fmt(s.avgWater) + ' ml' : '–', '運動共 ' + s.exMinTotal + ' 分鐘');
+  if (s.stepsDays || tg.steps) h += stat('平均步數', s.avgSteps != null ? fmt(s.avgSteps) + ' 步' : '–', (tg.steps ? '下限 ' + fmt(tg.steps) + ' 步・達到 ' + (s.stepsMetDays || 0) + ' 天' : '') + (s.stepsDays ? (tg.steps ? '・' : '') + s.stepsDays + ' 天有記' : '・還沒有記步數'));
   // 夜間進食：只記錄供參考（晚上 10 點到早上 7 點，不含早餐與補記）
   const night = nightSummary(state.logs, dates);
   if (night.days) h += stat('夜間進食', night.days + ' 天', night.entries + ' 筆・共 ' + fmt(night.kcal) + ' kcal（22:00～07:00）');
@@ -192,6 +194,7 @@ export async function buildReportHTML(ctx, opts) {
   extraCols.forEach(m => { h += `<th>${m.label}</th>`; });
   if (cols.water) h += '<th>喝水</th>';
   if (cols.exercise) h += '<th>運動</th>';
+  if (cols.steps) h += '<th>步數</th>';
   if (cols.sleep) h += '<th>睡眠(時)</th>';
   if (cols.sleepQ) h += '<th>睡眠品質</th>';
   if (night.days) h += '<th>夜間(kcal)</th>';
@@ -224,6 +227,7 @@ export async function buildReportHTML(ctx, opts) {
     extraCols.forEach(m => { h += `<td>${dd[m.key] ?? ''}</td>`; });
     if (cols.water) h += `<td>${dd.water != null ? fmt(dd.water) : ''}</td>`;
     if (cols.exercise) h += `<td class="l">${esc(dd.exercise || '')}${dd.exMin ? ' ' + dd.exMin + '分' : ''}</td>`;
+    if (cols.steps) h += `<td class="${tg.steps && dd.steps != null && dd.steps < tg.steps ? 'under' : ''}">${dd.steps != null ? fmt(dd.steps) : ''}</td>`;
     if (cols.sleep) { const sr = sleepRows[i]; h += `<td class="${sr.total && sr.total < 360 ? 'under' : ''}">${sr.total ? r1(sr.total / 60) + (sr.nap ? '*' : '') : ''}</td>`; }
     if (cols.sleepQ) h += `<td>${dd.sleepQ != null ? sleepQualityLabel(dd.sleepQ) : ''}</td>`;
     if (night.days) h += `<td>${night.byDate[d] != null ? fmt(night.byDate[d]) : ''}</td>`;
@@ -239,6 +243,7 @@ export async function buildReportHTML(ctx, opts) {
   extraCols.forEach(() => { h += '<td></td>'; });
   if (cols.water) h += `<td>${s.avgWater != null ? fmt(s.avgWater) : ''}</td>`;
   if (cols.exercise) h += `<td>${s.exMinTotal ? s.exMinTotal + '分' : ''}</td>`;
+  if (cols.steps) h += `<td>${s.avgSteps != null ? fmt(s.avgSteps) : ''}</td>`;
   if (cols.sleep) h += `<td>${avgSleep != null ? r1(avgSleep / 60) : ''}</td>`;
   if (cols.sleepQ) h += '<td></td>';
   if (night.days) h += `<td>${fmt(night.kcal)}</td>`;
@@ -290,6 +295,7 @@ export async function buildReportHTML(ctx, opts) {
       EXTRA_MEASURES.forEach(m => { if (dd[m.key] != null) chips.push(m.label + ' ' + dd[m.key] + ' ' + m.short); });
       if (dd.water != null) chips.push('喝水 ' + fmt(dd.water) + ' ml');
       if (dd.exercise || dd.exMin) chips.push('運動 ' + esc(dd.exercise || '') + (dd.exMin ? ' ' + dd.exMin + ' 分' : ''));
+      if (dd.steps != null) chips.push('🚶 ' + fmt(dd.steps) + ' 步');
       const sr = daySleep(dd);
       if (sr.night) chips.push('😴 睡眠 ' + fmtDuration(sr.night) + (dd.sleepBed && dd.sleepWake ? '（' + dd.sleepBed + '–' + dd.sleepWake + '）' : '') + (sr.quality ? '・' + sleepQualityLabel(sr.quality) : ''));
       if (sr.nap) chips.push('💤 補眠 ' + fmtDuration(sr.nap));
@@ -359,6 +365,7 @@ export function buildReportText(ctx, opts) {
   const extra = [];
   if (s.avgWater != null) extra.push('平均喝水 ' + fmt(s.avgWater) + ' ml');
   if (s.exMinTotal) extra.push('運動共 ' + s.exMinTotal + ' 分鐘');
+  if (s.stepsDays) extra.push('平均每天走 ' + fmt(s.avgSteps) + ' 步' + (state.targets.steps ? '（達到 ' + fmt(state.targets.steps) + ' 步 ' + s.stepsMetDays + '/' + s.stepsDays + ' 天）' : ''));
   const sl = dates.map(d => daySleep(state.days[d])).filter(r => r.total > 0);
   const nt = nightSummary(state.logs, dates);
   if (nt.days) extra.push('夜間進食（22:00～07:00）' + nt.days + ' 天、' + nt.entries + ' 筆、共 ' + fmt(nt.kcal) + ' kcal');

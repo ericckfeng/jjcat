@@ -772,6 +772,7 @@
         <label class="block"><span class="scr-label">目標體重 (kg)</span><input id="tgt-weight" type="number" inputmode="decimal" step="0.1" min="20" max="300" class="field tabular-nums" /></label>
         <label class="block"><span class="scr-label">每天喝水 (ml)</span><input id="tgt-water" type="number" inputmode="numeric" step="any" min="0" max="6000" class="field tabular-nums" placeholder="可留空" /></label>
       </div>
+      <label class="block"><span class="scr-label">每天至少走幾步（醫生、營養師給的下限）</span><input id="tgt-steps" type="number" inputmode="numeric" step="100" min="0" max="50000" class="field tabular-nums" placeholder="可留空，例如：6000" /></label>
     </div>
     <div class="scr-foot"><button type="button" id="saveTargetBtn" class="btn-primary btn-xl w-full">儲存目標</button></div>
   </div>
@@ -1037,6 +1038,13 @@
   <div id="scr-exercise" class="screen hidden" role="dialog" aria-label="運動">
     <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>🏃 運動</h2></div>
     <div class="scr-body">
+      <div class="rounded-2xl bg-white border border-stone-200 p-3 space-y-2">
+        <label class="block"><span class="scr-label">🚶 今天走了幾步</span>
+          <input id="daySteps" data-day-num="steps" type="number" inputmode="numeric" min="0" max="100000" step="1" class="field tabular-nums text-2xl" placeholder="例如：6500" />
+        </label>
+        <p id="stepsGoalText" class="text-base leading-relaxed"></p>
+        <p class="text-sm text-stone-500 leading-relaxed">步數可以看手機的「健康」App（iPhone）或「Google Fit」、手環，睡前抄下來就好。</p>
+      </div>
       <div>
         <div class="scr-label">做了什麼運動？</div>
         <div id="exercisePresets" class="grid grid-cols-3 gap-2">

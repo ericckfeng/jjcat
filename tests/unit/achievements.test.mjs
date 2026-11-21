@@ -67,3 +67,10 @@ test('慶祝：只慶祝這台裝置還沒看過的；第一次用這個功能�
   assert.deepEqual(newBadges(r.badges, ['streak-3']).map(b => b.id), ['streak-7']);
   assert.deepEqual(newBadges(r.badges, ['streak-3', 'streak-7']), []);
 });
+
+test('走路達標：累計走到下限的天數', () => {
+  const r = computeBadges({ facts: facts('2026-11-01', 7, { walk: true }), today: '2026-11-07' });
+  assert.equal(r.stats.walk, 7);
+  assert.equal(get(r, 'walk-7').earnedOn, '2026-11-07');
+  assert.equal(get(r, 'walk-7').title, '走路達標 7 天');
+});

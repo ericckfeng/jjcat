@@ -11,6 +11,7 @@
 //   sleep: { avgMin, days, shortDays, kcalShort, kcalGood } | null,   // kcalShort／kcalGood：睡不夠／睡飽那幾天的平均熱量（各至少 2 天，否則 null）
 //   water: { avg, goal } | null,     // goal：這段期間每天喝水目標的平均（沒設是 null）
 //   exercise: { totalMin, days },
+//   steps: { avg, days, metDays, target } | null（target：醫生、營養師給的每天步數下限）
 //   questions,                        // 「想問營養師」有寫的天數
 //   noBowelDays,                      // 排便記「無」的天數
 //   muscle: { smm1, smm2, delta, weightDelta } | null   // 最近兩次骨骼肌（最近一次在期間內才有）
@@ -105,6 +106,11 @@ export function buildHighlights(input, { limit = 5 } = {}) {
   const ex = x.exercise;
   if (ex && ex.totalMin > 0) add(50, 'good', `運動 ${ex.days} 天，共 ${n0(ex.totalMin)} 分鐘`);
   else if (x.days >= 7) add(40, 'info', '這段期間沒有運動記錄');
+  const st = x.steps;
+  if (st && st.days > 0) {
+    const met = st.target ? `，達到 ${n0(st.target)} 步的有 ${st.metDays}/${st.days} 天` : '';
+    add(st.target && st.metDays < st.days * 0.5 ? 60 : 48, st.target && st.metDays < st.days * 0.5 ? 'warn' : 'good', `平均每天走 ${n0(st.avg)} 步${met}`);
+  } else if (st && st.target && x.days >= 7) add(42, 'info', `有步數下限 ${n0(st.target)} 步，但這段期間沒有記步數`);
 
   return out.sort((a, b) => b.pri - a.pri).slice(0, limit).map(({ tone, text }) => ({ tone, text }));
 }
@@ -143,6 +149,9 @@ export function buildWeekly(input) {
   if (x.targetP > 0 && x.macroDays >= 3 && x.avgP >= x.targetP * 0.85) add(70, '蛋白質吃得夠 💪');
   if (x.exDays >= 3 && (tex.veg > 0 ? (avgEx.veg || 0) >= tex.veg * 0.8 : (avgEx.veg || 0) >= 3)) add(70, '青菜吃得夠 🥬');
   if (x.waterMetDays >= 4) add(65, `有 ${x.waterMetDays} 天水喝夠了 💧`);
+  const st = x.steps;
+  if (st && st.target && st.metDays >= 4) add(72, `有 ${st.metDays} 天走到 ${n0(st.target)} 步 🚶`);
+  else if (st && !st.target && st.days >= 4) add(45, `記了 ${st.days} 天步數，平均 ${n0(st.avg)} 步 🚶`);
   const s = x.sleep;
   if (s && s.days >= 3 && s.avgMin >= 420) add(55, `平均睡 ${n1(s.avgMin / 60)} 小時，睡得很好 😴`);
 
@@ -158,6 +167,7 @@ export function buildWeekly(input) {
     [x.targetKcal > 0 && x.avgKcal != null && x.avgKcal < x.targetKcal * 0.85, '三餐都要吃，吃夠了比較不會想吃零食'],
     [x.exDays >= 2 && (tex.veg > 0 ? (avgEx.veg || 0) < tex.veg * 0.8 : (avgEx.veg || 0) < 3), '每天多吃一碗青菜，午餐、晚餐各加一份'],
     [s && s.days > 0 && (s.avgMin < 360 || s.shortDays >= 3), '每天早 30 分鐘上床，睡飽比較不嘴饞'],
+    [Boolean(x.steps && x.steps.target && x.steps.days >= 3 && x.steps.metDays < x.steps.days * 0.5), '每天飯後散步 15 分鐘，比較容易走到醫生給的步數'],
     [x.water && x.water.avg != null && x.water.avg < (x.water.goal || 1500) * 0.8, '起床先喝一杯水，三餐飯前再各喝一杯'],
     [x.exDays >= 2 && tex.fruit > 0 && (avgEx.fruit || 0) < tex.fruit * 0.8, '每天吃一份水果，大約一個拳頭大'],
     [x.exDays >= 2 && tex.oil > 0 && (avgEx.oil || 0) > tex.oil * 1.2, '少吃油炸，改選蒸、煮、滷的'],

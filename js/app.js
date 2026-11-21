@@ -932,6 +932,7 @@ function openScreen(id) {
   if (id === 'scr-data') { renderCloud(); renderBackupInfo(); }   // 關掉自動同步的人也要看得到雲端區塊
   if (id === 'scr-weekly') renderWeekly();
   if (id === 'scr-badges') renderBadges();
+  if (id === 'scr-exercise') renderStepsGoal();
   if (id === 'scr-ai') { resetAi(); ['aiFallbackBtn', 'aiPasteFallbackBtn', 'aiPasteWrap'].forEach(x => $(x).classList.add('hidden')); $('aiPasteText').value = ''; }
   if (id === 'scr-manual') { setBox('add-lb-note', null, ''); manualBarcode = ''; }
   if (id === 'scr-aikey') renderAiKey();
@@ -982,7 +983,9 @@ function renderTiles() {
   $('tileWater').textContent = wg
     ? (d.water || 0) + ' / ' + wg + ' ml' + ((d.water || 0) >= wg ? ' ✓' : '')
     : (d.water || 0) + ' ml' + (d.water ? '（約 ' + r1(d.water / 250) + ' 杯）' : '');
-  $('tileExercise').textContent = d.exercise || d.exMin ? (d.exercise || '運動') + (d.exMin ? ' ' + d.exMin + ' 分' : '') : '還沒記';
+  const exTxt = d.exercise || d.exMin ? (d.exercise || '運動') + (d.exMin ? ' ' + d.exMin + ' 分' : '') : '';
+  const stepTxt = num(d.steps) ? fmt(num(d.steps)) + ' 步' + (state.targets.steps ? (num(d.steps) >= state.targets.steps ? ' ✓' : ' / ' + fmt(state.targets.steps)) : '') : '';
+  $('tileExercise').textContent = [stepTxt, exTxt].filter(Boolean).join('・') || (state.targets.steps ? '目標 ' + fmt(state.targets.steps) + ' 步' : '還沒記');
   const bits = [];
   if (d.mood != null) bits.push(MOOD_OPTIONS[d.mood]);
   if (d.question) bits.push('有問題要問');
@@ -1151,6 +1154,16 @@ function renderExercisePresets() {
 }
 $('dayExercise').addEventListener('input', () => setTimeout(renderExercisePresets, 0));
 $('dayExMin').addEventListener('input', () => setTimeout(renderExercisePresets, 0));
+// 步數：和醫生、營養師給的下限比
+function renderStepsGoal() {
+  const steps = num(getDay(ui.date, false).steps);
+  const goal = state.targets.steps;
+  const el = $('stepsGoalText');
+  if (!goal) { el.className = 'text-base leading-relaxed text-stone-600'; el.textContent = '醫生或營養師有給「每天至少走幾步」的話，可以填在右上 ⚙️ 設定 → 每日目標。'; return; }
+  el.className = 'text-base leading-relaxed font-semibold ' + (steps >= goal ? 'text-emerald-700' : 'text-stone-700');
+  el.textContent = steps == null ? '每天至少走 ' + fmt(goal) + ' 步' : steps >= goal ? '✓ 達到每天 ' + fmt(goal) + ' 步了，很棒！' : '每天至少 ' + fmt(goal) + ' 步，還差 ' + fmt(goal - steps) + ' 步，飯後散步一下 🚶';
+}
+$('daySteps').addEventListener('input', () => setTimeout(renderStepsGoal, 0));
 
 /* 拍照記 */
 /* ---------------- 拍照記・待查 ---------------- */
@@ -1557,6 +1570,7 @@ function rangeStats(dates) {
   const weights = dates.map(d => ({ d, w: num((state.days[d] || {}).weight) })).filter(x => x.w != null);
   const waters = dates.map(d => num((state.days[d] || {}).water)).filter(v => v != null);
   const exMins = dates.map(d => num((state.days[d] || {}).exMin) || 0);
+  const stepsList = dates.map(d => num((state.days[d] || {}).steps)).filter(v => v != null && v > 0);
   const target = state.targets.kcal;
   return {
     totals,
@@ -1574,6 +1588,10 @@ function rangeStats(dates) {
     weights,
     avgWater: waters.length ? waters.reduce((a, b) => a + b, 0) / waters.length : null,
     exMinTotal: exMins.reduce((a, b) => a + b, 0),
+    // 步數：有記的天數平均；達到下限（醫生、營養師給的）的天數
+    avgSteps: stepsList.length ? stepsList.reduce((a, b) => a + b, 0) / stepsList.length : null,
+    stepsDays: stepsList.length,
+    stepsMetDays: state.targets.steps ? stepsList.filter(v => v >= state.targets.steps).length : null,
     pending: totals.reduce((s, t) => s + t.pending, 0)
   };
 }
@@ -1597,7 +1615,8 @@ function renderTrends() {
     statTile('平均攝取', s.avgKcal != null ? fmt(s.avgKcal) + ' kcal' : '–', '目標 ' + fmt(target)),
     statTile('記錄天數', s.loggedDays + ' / ' + n, '超標 ' + s.overDays + ' 天'),
     statTile('體重變化（平均）', wDelta != null ? (wDelta > 0 ? '+' : '') + wDelta + ' kg' : (w1 ? w1.w + ' kg' : '–'), w1 ? '最新 ' + w1.w + ' kg' : ''),
-    statTile('平均喝水', s.avgWater != null ? fmt(s.avgWater) + ' ml' : '–', '運動共 ' + s.exMinTotal + ' 分')
+    statTile('平均喝水', s.avgWater != null ? fmt(s.avgWater) + ' ml' : '–', '運動共 ' + s.exMinTotal + ' 分'),
+    ...(s.stepsDays || state.targets.steps ? [statTile('平均步數', s.avgSteps != null ? fmt(s.avgSteps) + ' 步' : '–', state.targets.steps ? '達到 ' + fmt(state.targets.steps) + ' 步：' + (s.stepsMetDays || 0) + ' 天' : s.stepsDays + ' 天有記')] : [])
   ].join('');
 
   // 身體數據、睡眠的文字摘要不靠 Chart.js；圖表函式自己會檢查 Chart 在不在
@@ -1883,7 +1902,8 @@ function currentBadges() {
     const d = state.days[date] || {};
     const water = num(d.water) || 0;
     return { date, food: (state.logs[date] || []).length > 0, water: water > 0 && water >= (dayWaterGoal(date) || 1500),
-      weigh: num(d.weight) != null, sleep: daySleep(d).night > 0, move: Boolean(num(d.exMin) > 0 || String(d.exercise || '').trim()) };
+      weigh: num(d.weight) != null, sleep: daySleep(d).night > 0, move: Boolean(num(d.exMin) > 0 || String(d.exercise || '').trim() || num(d.steps) > 0),
+      walk: num(d.steps) > 0 && num(d.steps) >= (state.targets.steps || 1) };
   });
   const weights = dates.filter(date => num((state.days[date] || {}).weight) != null).map(date => ({ date, kg: num(state.days[date].weight) }));
   return computeBadges({ facts, weights, dir: weightDir(), today });
@@ -2460,6 +2480,7 @@ function renderMascot() {
   mascotMsgs = castMessages(buildMascotMessages({
     isToday, hour: new Date().getHours(), count: t.count, kcal: t.kcal, targetKcal: state.targets.kcal,
     meals: MEAL_KEYS.filter(k => t.meals[k] > 0).length, streak, weight: w, newBadge: fresh[0] || null,
+    steps: num(d.steps), stepsTarget: state.targets.steps || null,
     targetWeight: num(state.targets.weight), bmi, water: num(d.water) || 0, waterGoal: dayWaterGoal(ui.date),
     protein: t.macroItems ? t.p : 0, proteinTarget: num(state.targets.p),
     lastNight: daySleep(getDay(ui.date, false)),
@@ -3690,7 +3711,7 @@ function renderSettings() {
   $('setProfileSub').textContent = [pr.name, pr.sex === 'm' ? '男' : pr.sex === 'f' ? '女' : '', age ? age + ' 歲' : '', pr.height ? pr.height + ' 公分' : '']
     .filter(Boolean).join('・') || '名字、性別、出生年、身高';
   const t = state.targets;
-  $('setTargetsSub').textContent = '每天 ' + (t.kcal || 1800).toLocaleString() + ' kcal' + (t.mealEx ? '・有每餐份數' : '') + (t.calc ? '・依體重試算' : '');
+  $('setTargetsSub').textContent = '每天 ' + (t.kcal || 1800).toLocaleString() + ' kcal' + (t.steps ? '・走 ' + t.steps.toLocaleString() + ' 步' : '') + (t.mealEx ? '・有每餐份數' : '') + (t.calc ? '・依體重試算' : '');
   $('setFeaturesSub').textContent = '字體 ' + FONT_SIZES[FONT_SIZES[state.meta.fontSize] ? state.meta.fontSize : 'l'].label
     + '・角色 ' + (Object.entries({ sprout: '小芽', cat: '小貓', doc: '營養師' }).filter(([k]) => palsOn()[k]).map(([, v]) => v).join('、') || '關') + '・熱量銀行 ' + (t.bank ? '開' : '關');
   const c = state.meta.cloud;
@@ -4019,6 +4040,7 @@ function fillTargetFields() {
   EX_KEYS.forEach(k => { $('tgt-ex-' + k).value = (t.ex && t.ex[k]) ?? ''; });
   $('tgt-weight').value = t.weight ?? '';
   $('tgt-water').value = t.water ?? '';
+  $('tgt-steps').value = t.steps ?? '';
 }
 $('openTargetBtn').addEventListener('click', () => openScreen('scr-targets'));
 document.querySelectorAll('.preset-btn').forEach(btn => btn.addEventListener('click', () => { $('tgt-kcal').value = btn.getAttribute('data-preset'); }));
@@ -4037,11 +4059,14 @@ $('saveTargetBtn').addEventListener('click', () => {
   const ex = {};
   EX_KEYS.forEach(k => { const v = num($('tgt-ex-' + k).value); if (v) ex[k] = v; });
   const water = num($('tgt-water').value);
+  const steps = num($('tgt-steps').value);
+  if (steps != null && (steps < 500 || steps > 50000)) { showError('步數下限請填 500～50000，或留空'); return; }
   const next = {
     ...state.targets,   // 保留新版 App 加的欄位（例如試算記錄 calc）
     kcal: Math.round(kcal),
     p: num($('tgt-p').value), c: num($('tgt-c').value), f: num($('tgt-f').value),
-    ex, weight: num($('tgt-weight').value), water: water > 0 ? Math.round(water) : null
+    ex, weight: num($('tgt-weight').value), water: water > 0 ? Math.round(water) : null,
+    steps: steps > 0 ? Math.round(steps) : null
   };
   // 手動改過熱量、營養素或喝水，就不再是試算的數字：拿掉試算記錄（之後不會提醒重算）
   if (['kcal', 'p', 'c', 'f', 'water'].some(k => (next[k] ?? null) !== (state.targets[k] ?? null))) delete next.calc;
@@ -4320,12 +4345,12 @@ $('exportCsvBtn').addEventListener('click', () => {
 });
 $('exportDaysCsvBtn').addEventListener('click', () => {
   const dates = Array.from(new Set([...Object.keys(state.logs), ...Object.keys(state.days)])).sort();
-  const rows = [['日期', '總熱量', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '體重(kg)', 'BMI', '腰圍(cm)', '臀圍(cm)', '上臂圍(cm)', '大腿圍(cm)', '胸圍(cm)', '體脂率(%)', '喝水(ml)', '運動', '運動分鐘', '上床', '起床', '夜間睡眠(分)', '補眠(分)', '總睡眠(小時)', '睡眠品質(1-5)', '飢餓感(1-5)', '心情(1-5)', '排便', '備註', '想問營養師', '體脂機基礎代謝(kcal)', '骨骼肌(kg)', '內臟脂肪等級', '相位角(°)', '細胞外水分比', '內臟脂肪面積(cm²)', '四肢肌肉量(kg)', 'SMI(kg/m²)']];
+  const rows = [['日期', '總熱量', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '體重(kg)', 'BMI', '腰圍(cm)', '臀圍(cm)', '上臂圍(cm)', '大腿圍(cm)', '胸圍(cm)', '體脂率(%)', '喝水(ml)', '運動', '運動分鐘', '上床', '起床', '夜間睡眠(分)', '補眠(分)', '總睡眠(小時)', '睡眠品質(1-5)', '飢餓感(1-5)', '心情(1-5)', '排便', '備註', '想問營養師', '體脂機基礎代謝(kcal)', '骨骼肌(kg)', '內臟脂肪等級', '相位角(°)', '細胞外水分比', '內臟脂肪面積(cm²)', '四肢肌肉量(kg)', 'SMI(kg/m²)', '步數']];
   dates.forEach(date => {
     const t = dayTotals(date);
     const d = state.days[date] || {};
     rows.push([date, t.kcal, t.macroItems ? t.p : '', t.macroItems ? t.c : '', t.macroItems ? t.f : '', ...EX_KEYS.map(k => (t.exItems ? t.ex[k] : '')),
-      d.weight, calcBmi(d.weight, state.profile.height), d.waist, d.hip, d.arm, d.thigh, d.chest, d.bodyFat, d.water, d.exercise, d.exMin, d.sleepBed, d.sleepWake, d.sleepMin, daySleep(d).nap || '', daySleep(d).total ? r1(daySleep(d).total / 60) : '', d.sleepQ, d.hunger, d.mood, d.bowel != null ? BOWEL_LABELS[d.bowel] : '', d.note, d.question, d.bmr, d.smm, d.vfl, d.pa, d.ecw, d.vfa, d.asm, calcSmi(d.asm, state.profile.height)]);
+      d.weight, calcBmi(d.weight, state.profile.height), d.waist, d.hip, d.arm, d.thigh, d.chest, d.bodyFat, d.water, d.exercise, d.exMin, d.sleepBed, d.sleepWake, d.sleepMin, daySleep(d).nap || '', daySleep(d).total ? r1(daySleep(d).total / 60) : '', d.sleepQ, d.hunger, d.mood, d.bowel != null ? BOWEL_LABELS[d.bowel] : '', d.note, d.question, d.bmr, d.smm, d.vfl, d.pa, d.ecw, d.vfa, d.asm, calcSmi(d.asm, state.profile.height), d.steps]);
   });
   downloadBlob('每日身體與備註_' + todayStr() + '.csv', toCSV(rows), 'text/csv;charset=utf-8');
   showToast('已匯出每日 CSV');

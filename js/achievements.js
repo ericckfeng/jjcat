@@ -19,6 +19,8 @@ export const BADGE_GROUPS = [
     title: (n) => '量體重 ' + n + ' 天', hint: '早上起床量最準' },
   { id: 'sleep', emoji: '😴', name: '記錄睡眠', unit: '天', levels: [7, 30, 100],
     title: (n) => '記錄睡眠 ' + n + ' 天', hint: '填上床和起床時間' },
+  { id: 'walk', emoji: '🚶', name: '走路達標', unit: '天', levels: [7, 30, 100, 200],
+    title: (n) => '走路達標 ' + n + ' 天', hint: '走到每天的步數下限（沒設下限，有記步數就算）' },
   { id: 'move', emoji: '🏃', name: '有運動', unit: '天', levels: [5, 20, 50, 100, 200],
     title: (n) => '有運動的日子 ' + n + ' 天', hint: '散步也算' },
   // 體重往目標前進（沒有方向，例如體重正常、沒設目標，就沒有這一組）
@@ -29,16 +31,16 @@ export const BADGE_GROUPS = [
 ];
 
 // facts：每一天的事實，日期遞增，只放有資料的日子
-//   [{ date, food, water, weigh, sleep, move }]（都是 true/false）
+//   [{ date, food, water, weigh, sleep, move, walk }]（都是 true/false）
 // weights：[{ date, kg }] 日期遞增；dir：-1 想減、1 想增、0 維持（不算體重前進）
 // today：今天（YYYY-MM-DD）
 // 回傳 { stats, badges }
-//   stats：{ streak, todayLogged, longest, days, water, weigh, sleep, move, kg }
+//   stats：{ streak, todayLogged, longest, days, water, weigh, sleep, move, walk, kg }
 //   badges：每一組每一級 { id, group, level, emoji, title, life, earnedOn（日期或 null）, have, need }
 export function computeBadges({ facts = [], weights = [], dir = 0, today }) {
   const earned = {};   // id → 第一次達到的日期
   const mark = (id, date) => { if (!earned[id]) earned[id] = date; };
-  const count = { days: 0, water: 0, weigh: 0, sleep: 0, move: 0 };
+  const count = { days: 0, water: 0, weigh: 0, sleep: 0, move: 0, walk: 0 };
   let run = 0, longest = 0, prev = null;
   for (const f of facts) {
     if (f.food) {
@@ -48,8 +50,8 @@ export function computeBadges({ facts = [], weights = [], dir = 0, today }) {
       count.days++;
       BADGE_GROUPS[0].levels.forEach(n => { if (run >= n) mark('streak-' + n, f.date); });
     }
-    ['water', 'weigh', 'sleep', 'move'].forEach(k => { if (f[k]) count[k]++; });
-    ['days', 'water', 'weigh', 'sleep', 'move'].forEach(k => {
+    ['water', 'weigh', 'sleep', 'move', 'walk'].forEach(k => { if (f[k]) count[k]++; });
+    ['days', 'water', 'weigh', 'sleep', 'move', 'walk'].forEach(k => {
       BADGE_GROUPS.find(g => g.id === k).levels.forEach(n => { if (count[k] >= n) mark(k + '-' + n, f.date); });
     });
   }
@@ -71,7 +73,7 @@ export function computeBadges({ facts = [], weights = [], dir = 0, today }) {
     kg = Math.max(0, Math.round((weights[weights.length - 1].kg - start) * dir * 10) / 10);
   }
   const stats = { streak, todayLogged, longest, ...count, kg };
-  const haveOf = { streak: longest, days: count.days, water: count.water, weigh: count.weigh, sleep: count.sleep, move: count.move, kg };
+  const haveOf = { streak: longest, days: count.days, water: count.water, weigh: count.weigh, sleep: count.sleep, move: count.move, walk: count.walk, kg };
   const badges = [];
   BADGE_GROUPS.forEach(g => {
     if (g.id === 'kg' && !dir) return;

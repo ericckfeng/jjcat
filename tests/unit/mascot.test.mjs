@@ -73,3 +73,14 @@ test('剛得到小成就：小芽第一句恭喜；連續記錄的成就不會�
   assert.ok(k.some(x => x.key === 'streak-7'), '別的成就：連續 7 天的訊息照樣有');
   assert.equal(buildMascotMessages({ ...base, isToday: false, newBadge: { id: 'x', group: 'days', emoji: '📒', title: 't' } }).some(x => x.key === 'badge-x'), false);
 });
+
+test('步數：達到下限稱讚；傍晚還差說還差幾步；晚上還沒記提醒；沒設下限不說', async () => {
+  const { buildMascotMessages } = await import('../../js/mascot.js');
+  const base = { isToday: true, hour: 18, count: 2, kcal: 1500, targetKcal: 1800, meals: 2, streak: { n: 0 }, weight: null, water: 0 };
+  const has = (ctx, key) => buildMascotMessages({ ...base, ...ctx }).find(m => m.key === key);
+  assert.equal(has({ steps: 6500, stepsTarget: 6000 }, 'steps-goal').text, '今天走了 6,500 步，達到目標了 🚶');
+  assert.equal(has({ steps: 4800, stepsTarget: 6000 }, 'steps-short').text, '今天走了 4,800 步，離 6,000 步還差 1,200 步，飯後散步一下 🚶');
+  assert.equal(has({ steps: 4800, stepsTarget: 6000, hour: 10 }, 'steps-short'), undefined, '早上不催');
+  assert.ok(has({ steps: null, stepsTarget: 6000, hour: 20 }, 'steps-ask'));
+  assert.equal(has({ steps: 4800, stepsTarget: null }, 'steps-short'), undefined);
+});

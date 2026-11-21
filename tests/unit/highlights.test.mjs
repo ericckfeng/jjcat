@@ -86,3 +86,16 @@ test('四肢骨骼肌指數偏低要列出來；正常不列', () => {
   assert.ok(texts({ smi: { smi: 5.4, low: true, cutoff: 5.7 } }, { limit: 10 }).includes('四肢骨骼肌指數 5.4 kg/m²，低於肌少症參考值 5.7（AWGS 2019）'));
   assert.ok(!texts({ smi: { smi: 10.5, low: false, cutoff: 7 } }, { limit: 10 }).some(t => /骨骼肌指數/.test(t)));
 });
+
+test('步數：本週重點寫平均和達到下限的天數；達到的少要提醒；週報稱讚、下週建議散步', async () => {
+  const { buildHighlights, buildWeekly } = await import('../../js/highlights.js');
+  const base = { days: 7, loggedDays: 7, avgKcal: 1700, targetKcal: 1800, overDays: 0, pending: 0 };
+  const ok = buildHighlights({ ...base, steps: { avg: 6400, days: 6, metDays: 5, target: 6000 } }).find(h => h.text.includes('步'));
+  assert.deepEqual(ok, { tone: 'good', text: '平均每天走 6,400 步，達到 6,000 步的有 5/6 天' });
+  const low = buildHighlights({ ...base, steps: { avg: 3500, days: 6, metDays: 1, target: 6000 } }).find(h => h.text.includes('步'));
+  assert.equal(low.tone, 'warn');
+  const none = buildHighlights({ ...base, steps: { avg: null, days: 0, metDays: 0, target: 6000 } }).find(h => h.text.includes('步'));
+  assert.equal(none.text, '有步數下限 6,000 步，但這段期間沒有記步數');
+  assert.ok(buildWeekly({ ...base, steps: { avg: 6400, days: 6, metDays: 5, target: 6000 } }).good.includes('有 5 天走到 6,000 步 🚶'));
+  assert.equal(buildWeekly({ ...base, avgKcal: 1750, steps: { avg: 3500, days: 6, metDays: 1, target: 6000 } }).tryNext, '每天飯後散步 15 分鐘，比較容易走到醫生給的步數');
+});

@@ -79,6 +79,7 @@ export function mascotSVG(mood = 'happy') {
     isToday, hour, count, kcal, targetKcal, meals,
     streak: { n, todayLogged },
     newBadge,   // 剛得到的小成就（js/achievements.js），沒有就是 null
+    steps, stepsTarget,   // 這天走了幾步、每天步數下限（醫生、營養師給的，沒設是 null）
     weight: { now, week, first, measuredToday } | null,
     targetWeight, bmi, bmiLabel,
     water, waterGoal,   // waterGoal：這天的喝水目標（沒設是 null）
@@ -147,6 +148,9 @@ export function buildMascotMessages(ctx) {
   if (ctx.proteinTarget && ctx.protein >= ctx.proteinTarget) {
     add(34, 'happy', `${ctx.isToday ? '今天' : '這天'}蛋白質吃到 ${Math.round(ctx.protein)} 克，達標了，肌肉會謝謝你 💪`, 'protein-goal');
   }
+  if (ctx.stepsTarget && ctx.steps >= ctx.stepsTarget) add(34, 'happy', `${ctx.isToday ? '今天' : '這天'}走了 ${ctx.steps.toLocaleString()} 步，達到目標了 🚶`, 'steps-goal');
+  else if (ctx.isToday && ctx.stepsTarget && ctx.steps > 0 && ctx.hour >= 17) add(31, 'calm', `今天走了 ${ctx.steps.toLocaleString()} 步，離 ${ctx.stepsTarget.toLocaleString()} 步還差 ${(ctx.stepsTarget - ctx.steps).toLocaleString()} 步，飯後散步一下 🚶`, 'steps-short');
+  else if (ctx.isToday && ctx.stepsTarget && ctx.steps == null && ctx.hour >= 19) add(29, 'hello', '睡前看一下手機的步數，按「運動」記下來 🚶', 'steps-ask');
   if (ctx.bmi != null && ctx.bmi >= 18.5 && ctx.bmi < 24) add(33, 'happy', `BMI ${ctx.bmi}，在健康範圍內，維持得很好`);
   if (ctx.isToday && ctx.streak.n >= 2) {
     add(32, 'happy', ctx.streak.todayLogged ? `已經連續記錄 ${ctx.streak.n} 天了 🔥` : `已經連續記錄 ${ctx.streak.n} 天，今天也記一下吧 🔥`);

@@ -60,6 +60,7 @@
 
 | 欄位 | 說明 |
 |---|---|
+| `targets.steps` | （2026-11-22 起）每天至少走幾步（醫生、營養師給的下限，整數 500～50000）。沒有＝沒設 |
 | `targets.water` | 每天喝水目標（ml）。沒有＝沒設目標（喝水頁不顯示目標，小芽用 1500 ml 判斷）。有運動的那天每 30 分鐘 +250 ml（顯示時計算，不存） |
 | `targets.calc` | 目前的目標是「依體重試算」來的：`{ at, weight, activity, goal, protein, bmrSource, bmr }`（`bmrSource`：`inbody`＝體脂機顯示的／`ffm`＝用同一天的體重＋體脂率算去脂體重再算（v23）／`formula`，v19 起）（`weight`＝試算時用的體重）。7 天平均體重和它差 2 公斤以上會提醒重算。**沒有＝手動設定（營養師的數字）**；在「每日目標」手動改熱量、營養素或喝水就會刪掉 |
 | `targets.bodyFat` | （v23 起）目標體脂率（%）。用它算出目標體重 `targets.weight`（假設去脂體重不變）。手動改目標體重就刪掉 |
@@ -121,6 +122,7 @@
 | `vfa` | （v25 起）內臟脂肪面積（cm²）。較早的 InBody 機型給面積不給等級，兩者單位不同，分開記 |
 | `water` | ml |
 | `exercise` | 文字；`exMin` 分鐘 |
+| `steps` | （2026-11-22 起）這天走了幾步（整數，使用者看手機健康 App、手環自己填）。每日 CSV 最後一欄 |
 | `hunger` `mood` | 1–5 |
 | `bowel` | 0／1／2（無／1 次／2 次以上） |
 | `note` `question` | 文字（question＝想問營養師） |
@@ -222,6 +224,7 @@
 | v3（Rev. 45，第 1 步） | 2026-11-21 | 最上層新增 `customFoods`（我的食物），「常吃的」`quickItems` 停用（不顯示、不新增，資料保留）。記錄新增 `customFoodId`、`servings`、`fiber`。`tfda_foods.json` 加回 `fiber`。**發佈時用 `python3 scripts/bump.py --min-rev`**，把 `DATA_MIN_REV` 調成這一版：還沒更新的 App 會暫停同步、提示更新。 |
 | v3（Rev. 47，第 3 步） | 2026-11-21 | 最上層新增 `combos`（套餐），記錄新增選填 `comboId`。**沒有調 `DATA_MIN_REV`**：Rev. 39 起的 App 都會原樣保留、照規則合併看不懂的最上層清單，`DATA_MIN_REV` 已經是 45。樣本：`backup-v3-combos.json`。 |
 | v3（Rev. 47，第 4 步） | 2026-11-21 | 最上層新增 `foodPacks`（食物資料庫）；記錄新增選填 `src`、`srcName`、`packFoodId`；套餐的品項可以有 `src`＋`packFoodId`。沒有調 `DATA_MIN_REV`（理由同套餐）。樣本：`backup-v3-foodpacks.json`。 |
+| v3（Rev. 52） | 2026-11-22 | 每日欄位新增 `steps`（走路步數）、`targets.steps`（每天步數下限）；每日 CSV 最後加一欄「步數」。`meta.badgesSeen`（小成就）。都是舊版會原樣保留的欄位，沒有調 `DATA_MIN_REV`。 |
 | v3（App v23） | 2026-11-19 | 每日欄位新增 `smm`（骨骼肌）；`targets.bodyFat`（目標體脂率）；`targets.calc.bmrSource` 可為 `ffm`。每日 CSV 最後再加一欄骨骼肌。 |
 | v3（App v24） | 2026-11-19 | 每日欄位新增 `vfl`、`pa`、`ecw`。每日 CSV 最後加三欄。 |
 | v3（App v25） | 2026-11-19 | 每日欄位新增 `vfa`（內臟脂肪面積）。每日 CSV 最後加一欄。 |

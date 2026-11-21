@@ -33,6 +33,8 @@
 | sessionStorage | `diet_reauth_at` | 防止登入無限重試 |
 | localStorage | `diet_silent_at`、`diet_silent_fail` | 登入過期時自動換新（打開 App、切回 App 時，沒在輸入才跳轉）：上次試的時間（10 分鐘內不重試）、上次 Google 要求自己登入的時間（6 小時內不再自動試）。自己登入成功會清掉 `diet_silent_fail` |
 | localStorage | `foodpack_tool_v1` | 整理工具（`tools/foodpack.html`）做到一半的進度：表格內容、欄位對照、資料庫資訊、勾掉的品項。只有整理工具讀寫，和 App 的資料無關；下次打開時問「接著做／重新開始」 |
+| localStorage | `foodbook_ai_key` | AI 建檔小工具（`tools/foodbook.html`）的 Gemini Key，只有小工具用，和 App 的 Key（`meta.ai`）分開 |
+| IndexedDB | 資料庫 `foodbook-tool` v1，store `kv`（`project`：頁面、讀出來的品項、資料庫資訊）、`img`（每一頁的圖片） | AI 建檔小工具做到一半的進度。只有小工具讀寫，和 App 的資料無關；「重新開始」會清掉 |
 | IndexedDB | 資料庫 `diet-tracker` v1，store `photos` | key＝飲食記錄的 `id`（第 1 張照片）或 `morePhotos` 裡的 key（第 2、3 張），value＝JPEG 的 data URL |
 | Google 雲端硬碟 | `飲控隨身記/飲控隨身記備份.json` | 同步資料（不含照片） |
 | Google 雲端硬碟 | `飲控隨身記/照片/<photoKey>.jpg` | 照片，`appProperties.itemId` = photoKey（第 2、3 張就是 `morePhotos` 裡的 key） |

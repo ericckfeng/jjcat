@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI 建檔小工具｜飲控隨身記</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="../css/app.css" />
+  <style>
+    body { background: #fafaf9; }
+    .step { background: #fff; border: 1px solid #e7e5e4; border-radius: 1rem; padding: 1rem; }
+    .step h2 { font-size: 1.15rem; font-weight: 700; color: #1c1917; margin-bottom: .5rem; }
+    .muted { color: #78716c; }
+    .tbl { width: 100%; border-collapse: collapse; font-size: .95rem; }
+    .tbl th, .tbl td { border-bottom: 1px solid #e7e5e4; padding: .35rem .4rem; text-align: left; vertical-align: middle; }
+    .tbl th { background: #f5f5f4; font-weight: 600; white-space: nowrap; }
+    .scroll-x { overflow-x: auto; }
+    .thumb { width: 7rem; height: 7rem; flex-shrink: 0; overflow: hidden; border-radius: .75rem; border: 1px solid #e7e5e4; background: #f5f5f4; display: flex; align-items: center; justify-content: center; cursor: zoom-in; }
+    .thumb img { max-width: 100%; max-height: 100%; }
+    .fld label { display: block; font-size: .85rem; color: #57534e; margin-bottom: .15rem; }
+    .fld input { width: 100%; }
+    .flag-warn { background: #fffbeb; color: #92400e; }
+    .flag-error { background: #fff1f2; color: #9f1239; }
+    .flag-info { background: #f0f9ff; color: #075985; }
+    .card-ok { border-color: #6ee7b7; background: #f0fdf4; }
+    #zoom:not(.hidden) { position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 50; display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
+    #zoom img { max-width: 96vw; max-height: 96vh; }
+  </style>
+</head>
+<body class="text-stone-800">
+  <main class="max-w-4xl mx-auto px-4 py-6 space-y-4">
+    <header class="space-y-1">
+      <h1 class="text-2xl font-bold text-stone-900">📖 AI 建檔小工具</h1>
+      <p class="text-base text-stone-600 leading-relaxed">拍書頁、衛教單張、營養師給的表格（或選掃描的 PDF），讓 AI 讀出每一樣食物的數字，<b>逐筆對照照片校對</b>後，做成「飲控隨身記」的食物資料庫檔，到 App「我的食物 → 匯入食物資料庫」。</p>
+      <p class="text-sm muted leading-relaxed">書本、機構的內容有著作權：做出來的資料庫只給自己或營養師用，不要公開分享。書上的照片只用來讓 AI 讀、讓你校對，不會放進資料庫。進度存在這台電腦的瀏覽器裡。</p>
+    </header>
+
+    <div id="resumeBox" class="hidden step space-y-2 border-emerald-300 bg-emerald-50">
+      <p id="resumeText" class="text-base"></p>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" id="resumeBtn" class="btn-primary px-4">接著做</button>
+        <button type="button" id="resetBtn" class="btn-secondary px-4">不要了，重新開始</button>
+      </div>
+    </div>
+
+    <section class="step space-y-3">
+      <h2>1. Gemini API Key</h2>
+      <p class="text-base text-stone-600 leading-relaxed">用你自己的 Key（和 App 裡的可以是同一把，這裡要另外貼）。只存在這台電腦的瀏覽器；照片從這台電腦直接傳給 Google 辨識。免費方案每天有次數上限，用完了明天按「繼續」接著做。</p>
+      <input id="aiKey" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" class="field font-mono" placeholder="AIza…" />
+      <p class="text-sm muted">沒有 Key：到 <a class="underline" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> 建立（免費）。</p>
+    </section>
+
+    <section class="step space-y-3">
+      <h2>2. 加入頁面</h2>
+      <div class="grid sm:grid-cols-2 gap-2">
+        <button type="button" id="addPhotoBtn" class="btn-primary btn-xl">📷 拍照／選照片（可多張）</button>
+        <button type="button" id="addPdfBtn" class="btn-secondary btn-xl">📄 選掃描的 PDF</button>
+      </div>
+      <input id="photoInput" type="file" accept="image/*" multiple class="hidden" />
+      <input id="pdfInput" type="file" accept="application/pdf,.pdf" class="hidden" />
+      <div id="pdfBox" class="hidden rounded-xl bg-stone-50 p-3 space-y-2">
+        <p id="pdfInfo" class="text-base"></p>
+        <div class="flex flex-wrap items-center gap-2">
+          <span>第</span><input id="pdfFrom" type="number" min="1" class="field w-24 tabular-nums" />
+          <span>到</span><input id="pdfTo" type="number" min="1" class="field w-24 tabular-nums" />
+          <span>頁</span><button type="button" id="pdfAddBtn" class="btn-secondary px-4">加入這些頁</button>
+        </div>
+        <p class="text-sm muted">PDF 一頁一頁轉成圖片再送去辨識，不會整本上傳。封面、目錄這類頁面不用加。</p>
+      </div>
+      <p id="addNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
+    </section>
+
+    <section id="stepPages" class="step space-y-3 hidden">
+      <h2>3. AI 辨識</h2>
+      <div class="rounded-xl bg-stone-50 p-3 space-y-2">
+        <p class="text-base">依章節定份數：像「每一樣的重量＝這一類 1 份」的書，選好那幾頁是哪一類，份數自動填 1。</p>
+        <div class="flex flex-wrap items-center gap-2">
+          <span>第</span><input id="catFrom" type="number" min="1" class="field w-20 tabular-nums" />
+          <span>到</span><input id="catTo" type="number" min="1" class="field w-20 tabular-nums" />
+          <span>頁是</span><select id="catPick" class="field w-auto"></select>
+          <button type="button" id="catApplyBtn" class="btn-secondary px-4">套用</button>
+        </div>
+      </div>
+      <div class="scroll-x"><table class="tbl"><thead><tr><th>頁</th><th>來源</th><th>這一頁是</th><th>狀態</th><th></th></tr></thead><tbody id="pageRows"></tbody></table></div>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" id="runBtn" class="btn-primary btn-xl px-6">開始 AI 辨識</button>
+        <button type="button" id="stopBtn" class="hidden btn-secondary btn-xl px-6">暫停</button>
+      </div>
+      <p id="runNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
+    </section>
+
+    <section id="stepReview" class="step space-y-3 hidden">
+      <h2>4. 對照照片校對</h2>
+      <p class="text-base text-stone-600">點照片可以放大。數字照頁面改好後按「校對好了」。<b>沒印的數字留空</b>（空白＝不知道，不是 0）。</p>
+      <div id="reviewSummary" class="text-base"></div>
+      <div id="reviewFilter" class="flex flex-wrap gap-2"></div>
+      <div id="itemList" class="space-y-3"></div>
+    </section>
+
+    <section id="stepOut" class="step space-y-3 hidden">
+      <h2>5. 做成資料庫檔</h2>
+      <div class="grid sm:grid-cols-2 gap-3">
+        <label class="block"><span class="scr-label">名稱（App 裡看到的）</span><input id="pkName" class="field" placeholder="例如：三總食物圖鑑" /></label>
+        <label class="block"><span class="scr-label">機構／作者</span><input id="pkOrg" class="field" placeholder="例如：三軍總醫院" /></label>
+        <label class="block"><span class="scr-label">書名／表名</span><input id="pkTitle" class="field" /></label>
+        <label class="block"><span class="scr-label">版本／年份</span><input id="pkEdition" class="field" placeholder="例如：2024" /></label>
+      </div>
+      <div>
+        <div class="scr-label">記的時候問</div>
+        <div class="grid sm:grid-cols-2 gap-2">
+          <button type="button" data-askby="grams" class="toggle-btn">吃了幾克（有印重量的，預填一份的重量）</button>
+          <button type="button" data-askby="serving" class="toggle-btn">吃了幾份</button>
+        </div>
+      </div>
+      <p id="outWarn" class="hidden rounded-2xl p-3 text-base leading-relaxed bg-amber-50 text-amber-900"></p>
+      <label id="outForceWrap" class="hidden flex gap-2 items-center text-base"><input id="outForce" type="checkbox" /> 我知道，還是要匯出</label>
+      <div class="grid sm:grid-cols-2 gap-2">
+        <button type="button" id="dlJson" class="btn-primary btn-xl">下載資料庫檔（給 App 匯入）</button>
+        <button type="button" id="dlCsv" class="btn-secondary btn-xl">下載 CSV（給營養師看）</button>
+      </div>
+      <p id="outNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
+    </section>
+  </main>
+  <div id="zoom" class="hidden"><img alt="" /></div>
+  <script type="module" src="foodbook.js"></script>
+</body>
+</html>

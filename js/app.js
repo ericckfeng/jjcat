@@ -1356,21 +1356,26 @@ function nutrLine(it) {
   return parts.join('・');
 }
 
-// 「和昨天一樣」：這天還沒記、前一天有記的餐別，各一個大按鈕
+// 「和昨天一樣」：這天還沒記、前一天有記的餐別，各一張卡片，左右滑；按一下整餐記進來，不要的再刪
 function copyMealHTML(list) {
   const prev = addDays(ui.date, -1);
   const word = ui.date === todayStr() ? '昨天' : '前一天';
-  const btns = MEAL_KEYS.filter(m => !list.some(i => i.meal === m)).map(m => {
+  const cards = MEAL_KEYS.filter(m => !list.some(i => i.meal === m)).map(m => {
     const items = mealEntries(state.logs, prev, m);
     if (!items.length) return '';
-    const names = items.map(i => i.name).join('、');
-    return `<button type="button" data-copy-meal="${m}" class="pick-row">
-      <span class="min-w-0 flex-1 text-left"><span class="block text-lg font-semibold text-stone-900">和${word}一樣的${MEAL_META[m].label}</span>
-      <span class="block text-sm text-stone-500 break-words line-clamp-2">${esc(names)}</span>
-      <span class="block text-base text-emerald-700 font-bold tabular-nums">${items.length} 樣・${sumNutr(items).kcal} kcal</span></span>
-      <span class="pick-add">記一樣的</span></button>`;
-  }).join('');
-  return btns ? `<div id="copyMealBox" class="space-y-2"><div class="sec-title px-1">吃的和${word}一樣？</div>${btns}</div>` : '';
+    const shown = items.slice(0, 4).map(i => `<li class="truncate">${esc(i.name)}</li>`).join('');
+    const more = items.length > 4 ? `<li class="text-stone-400">…還有 ${items.length - 4} 樣</li>` : '';
+    return `<button type="button" data-copy-meal="${m}" class="copy-card">
+      <span class="block text-lg font-bold text-stone-900">和${word}一樣的${MEAL_META[m].label}</span>
+      <ul class="copy-items">${shown}${more}</ul>
+      <span class="block text-base text-emerald-700 font-bold tabular-nums">${items.length} 樣・${sumNutr(items).kcal} kcal</span>
+      <span class="copy-go">全部記進來</span></button>`;
+  }).filter(Boolean);
+  if (!cards.length) return '';
+  const hint = cards.length > 1 ? '<span class="text-base font-normal text-stone-500">　左右滑看其他餐</span>' : '';
+  return `<div id="copyMealBox" class="space-y-2"><div class="sec-title px-1">吃的和${word}一樣？${hint}</div>
+    <div class="copy-strip">${cards.join('')}</div>
+    <p class="text-sm text-stone-500 px-1">按一下整餐記進來，沒吃的再刪掉。</p></div>`;
 }
 function copyMeal(meal) {
   const prev = addDays(ui.date, -1);

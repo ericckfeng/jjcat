@@ -54,6 +54,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/combos.js` | **純函式**：套餐（`combos`）：購物車 → 套餐（每樣存 `snapshot`）、選套餐時找回現在的食物（找不到用 snapshot）、合計、搜尋、排序（有單元測試） |
 | `js/packs.js` | **純函式**：食物資料庫（`foodPacks`）：試算表欄位對照、份量／規格拆解、表格 → 食物、找重複、資料庫檔與標準 CSV、查食物的搜尋與「同一個品項收成一組」（整理工具和 App 共用，有單元測試） |
 | `tools/foodpack.html`、`tools/foodpack.js` | 食物資料庫整理工具（獨立頁面，不碰 App 的 localStorage）：試算表 → 資料庫檔，App「我的食物 → 匯入食物資料庫」讀進來 |
+| `js/barcode.js` | **純函式**：條碼：號碼整理、檢查碼、UPC／EAN 比對、在我的食物和食物資料庫找條碼、Open Food Facts 回應 → 我的食物表單（有單元測試）。拍照辨識（BarcodeDetector／ZXing）在 `app.js` |
 | `js/lookup.js` | **純函式**：拍照記・待查的手掌法粗估（`LOOKUP_CATS`）、大小寫法、待查表 CSV 匯出與回填（有單元測試） |
 | `js/version.js` | **純函式**：版本號（由 `scripts/bump.py` 改）、有沒有新版、雲端要求的最低版本 `DATA_MIN_REV`、「我的裝置」清單（有單元測試） |
 | `js/nutrition.js` | 餐別、營養素、六大類代換表、預設快選 |
@@ -104,6 +105,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
   - **不要綁帳單帳戶**：沒有帳單帳戶就不可能產生費用。
   - 不要新增需要驗證的敏感權限，也不要上傳應用程式標誌（會觸發品牌驗證）。
 - 使用者資料存在**每個使用者自己的** Google 雲端硬碟「飲控隨身記」資料夾，開發者看不到。不要加任何會把使用者資料傳到第三方的功能。
+  - 例外：掃商品條碼在自己的資料找不到時，只把**條碼號碼**送到 Open Food Facts 查（`privacy.html` 三之一節）；iPhone／iPad 辨識條碼照片時從 jsDelivr 載入 ZXing。照片不上傳。
   - 例外：AI 辨識（使用者自己在設定開啟、貼自己的 Gemini API Key，預設關閉）只在使用者按下辨識時，把那張照片／那句話直接送到 Google。Key 只存在 `meta`，**不能**進同步檔或備份檔；`privacy.html` 第三節有說明。
 
 ## 個人網站

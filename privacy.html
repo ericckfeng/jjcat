@@ -19,7 +19,7 @@
 <body>
 <main>
   <h1>隱私權政策</h1>
-  <p class="muted">飲控隨身記（https://ericckfeng.github.io/jjcat/）｜最後更新：2026 年 11 月 19 日</p>
+  <p class="muted">飲控隨身記（https://ericckfeng.github.io/jjcat/）｜最後更新：2026 年 11 月 21 日</p>
 
   <h2>一、我們不收集你的資料</h2>
   <p>飲控隨身記是一個純前端的網頁 App，沒有後端伺服器。你輸入的飲食記錄、照片、體重、備註等所有資料，都只儲存在你自己裝置的瀏覽器中（localStorage 與 IndexedDB）。開發者無法看到、也不會收到任何使用者的資料。</p>
@@ -43,6 +43,10 @@
     <li>API Key 只存在你這台裝置的瀏覽器中，不會同步到雲端、不會放進備份檔，開發者也看不到。在 App 中按「關閉 AI」即會刪除。</li>
     <li>不開啟 AI 辨識，App 就不會連到 Gemini API。</li>
   </ul>
+
+  <h2>三之一、掃商品條碼（選用）</h2>
+  <p>在「查食物」按「掃商品條碼」時，App 先在你自己的「我的食物」和你匯入的食物資料庫裡找。找不到時，會把<strong>那一個條碼號碼</strong>送到 <a href="https://world.openfoodfacts.org/" target="_blank" rel="noopener noreferrer">Open Food Facts</a>（開放的食品資料庫）查營養標示。只送條碼號碼，不送照片、記錄或任何個人資料；條碼照片只在你的裝置上辨識，不會上傳。</p>
+  <p>在 iPhone、iPad 上辨識條碼照片時，會從公開 CDN（jsDelivr）載入條碼辨識程式（ZXing），這個請求不包含照片或記錄內容。</p>
 
   <h2>四、如何刪除資料</h2>
   <ul>

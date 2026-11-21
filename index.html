@@ -365,6 +365,7 @@
               <label class="block"><span class="block text-sm text-stone-600 mb-1">纖維（克）</span><input id="mf-fiber" type="number" inputmode="decimal" min="0" step="any" class="field tabular-nums text-center" /></label>
             </div>
             <div id="mf-ex" class="grid grid-cols-3 gap-2"></div>
+            <label class="block"><span class="block text-sm text-stone-600 mb-1">商品條碼（掃條碼時用）</span><input id="mf-barcode" type="text" inputmode="numeric" autocomplete="off" class="field tabular-nums" placeholder="條碼下面的數字" /></label>
           </div>
         </details>
       </div>
@@ -398,6 +399,7 @@
       <div><div class="scr-label">記到哪一餐？</div><div class="meal-picker"></div></div>
       <div id="foodCart" class="hidden rounded-2xl bg-emerald-50 border border-emerald-200 p-3 space-y-2"></div>
       <input id="foodSearch" type="search" class="field text-lg" placeholder="輸入食物，例如：雞胸肉、地瓜" autocomplete="off" />
+      <button type="button" id="scanOpenBtn" class="btn-secondary w-full">📷 掃商品條碼</button>
       <div id="foodFilter" class="flex flex-wrap gap-2"></div>
       <div id="foodMine" class="space-y-2"></div>
       <div id="foodPacks" class="space-y-2"></div>
@@ -407,6 +409,23 @@
     <div class="scr-foot">
       <button type="button" id="foodDoneBtn" data-back class="btn-primary btn-xl w-full">完成</button>
       <button type="button" id="foodCartSaveBtn" class="hidden btn-primary btn-xl w-full"></button>
+    </div>
+  </div>
+
+  <!-- 掃商品條碼（從查食物點進來） -->
+  <div id="scr-scan" class="screen hidden" role="dialog" aria-label="掃商品條碼">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>📷 掃商品條碼</h2></div>
+    <div class="scr-body">
+      <button type="button" id="scanShotBtn" class="btn-primary btn-xl w-full">📷 拍條碼</button>
+      <input id="scanFile" type="file" accept="image/*" capture="environment" class="hidden" />
+      <p class="text-base text-stone-600 leading-relaxed">對準包裝上的條碼（黑白直線）拍一張：靠近一點、拍清楚、不要反光。</p>
+      <label class="block"><span class="scr-label">或輸入條碼下面的數字</span>
+        <span class="flex gap-2">
+          <input id="scanInput" type="text" inputmode="numeric" autocomplete="off" class="field text-lg tabular-nums flex-1 min-w-0" placeholder="例如 4710088412396" />
+          <button type="button" id="scanLookupBtn" class="btn-secondary shrink-0 px-4">查詢</button>
+        </span>
+      </label>
+      <div id="scanResult" class="hidden rounded-2xl p-4 space-y-3 text-base leading-relaxed"></div>
     </div>
   </div>
 

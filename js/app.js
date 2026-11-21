@@ -17,6 +17,7 @@ import { APP_REV, APP_LABEL, parseLatest, requiredRev, minRevToWrite, deviceName
 import { customFoodFromForm, formFromCustomFood, servingNutrients, servingKcal, servingText, searchMine, sortByUse, isPerServing, formFromManual } from './myfoods.js';
 import { packFromFile, searchPacks, groupHits, packRows, myFoodsFile, packToFile, isMyFoodsFile, planMyFoodsImport } from './packs.js';
 import { toCsv } from './lookup.js';
+import { normalizeBarcode, checkDigitOk, findByBarcode, offUrl, offToForm } from './barcode.js';
 import { comboFromCart, resolveCombo, comboTotals, comboSummary, searchCombos, sortCombos } from './combos.js';
 import { HAND_REFS, AMOUNTS, LOOKUP_CATS, lookupCat, cleanAmount, amountText, sizeText, estimateLookup, buildLookupCsv, readFilledCsv, AI_LOOKUP_PROMPT } from './lookup.js';
 import { partyTemplate, startCounts, partyEntries, partyTotals } from './party.js';
@@ -921,7 +922,7 @@ function openScreen(id) {
   if (id === 'scr-data') { renderCloud(); renderBackupInfo(); }   // 關掉自動同步的人也要看得到雲端區塊
   if (id === 'scr-weekly') renderWeekly();
   if (id === 'scr-ai') resetAi();
-  if (id === 'scr-manual') setBox('add-lb-note', null, '');
+  if (id === 'scr-manual') { setBox('add-lb-note', null, ''); manualBarcode = ''; }
   if (id === 'scr-aikey') renderAiKey();
   if (id === 'scr-sleep') renderSleepScreen();
   if (id === 'scr-photo') resetPhotoQuick();
@@ -2595,7 +2596,13 @@ let addLabelByAi = false;   // 這次「自己輸入」有用 AI 讀營養標示
 // 存一樣我的食物（form＝customFoodFromForm 的表單）；同名的不重複存。回傳要接在提示後面的說明
 function saveAsMyFood(form, source) {
   const name = String(form.name || '').trim();
-  if (customFoods().some(f => f.name === name)) return '。我的食物已經有「' + name + '」，沒有重複存';
+  if (manualBarcode) form.barcode = manualBarcode;
+  const same = customFoods().find(f => f.name === name);
+  if (same) {
+    // 從掃條碼來的：同名的還沒有條碼就補上，下次掃得到
+    if (form.barcode && !same.barcode) { same.barcode = form.barcode; touch(same); return '。我的食物已經有「' + name + '」，幫它記下條碼了'; }
+    return '。我的食物已經有「' + name + '」，沒有重複存';
+  }
   if (typeof source === 'string') form.source = source;
   const { food } = customFoodFromForm(form, { id: uid('cf'), now: now() });
   if (!food) return '';
@@ -2869,15 +2876,22 @@ $('myFoodSearch').addEventListener('input', renderMyFoods);
 $('mf-ex').innerHTML = EX_KEYS.map(k => `<label class="block"><span class="block text-sm text-stone-600 mb-1">${EX_META[k].emoji} ${EX_META[k].short}（份）</span><input id="mf-ex-${k}" type="number" inputmode="decimal" min="0" step="any" class="field tabular-nums text-center" /></label>`).join('');
 const MF_FIELDS = ['name', 'servingG', 'servingLabel', 'kcal', 'p', 'f', 'c', 'sugar', 'na', 'fiber'];
 let mfEditing = null;
-function openMyFood(food, name = '') {
+let mfThenRecord = false;   // 從掃條碼來的：存好直接進「吃了多少」
+let mfSource = null;        // 新增時記的來源（'off'＝Open Food Facts）
+// prefill：掃條碼查到的表單（Open Food Facts 的數字，或只有條碼）
+function openMyFood(food, name = '', prefill = null) {
   mfEditing = food ? food.id : null;
-  const form = food ? formFromCustomFood(food) : { name, ex: {} };
+  mfThenRecord = Boolean(prefill);
+  mfSource = (prefill && prefill.source) || null;
+  const form = food ? formFromCustomFood(food) : prefill ? { ...prefill } : { name, ex: {} };
   MF_FIELDS.forEach(k => { $('mf-' + k).value = form[k] == null ? '' : form[k]; });
   EX_KEYS.forEach(k => { $('mf-ex-' + k).value = form.ex && form.ex[k] ? form.ex[k] : ''; });
-  $('mf-more').open = Boolean(food && (form.sugar !== '' || form.na !== '' || form.fiber !== '' || Object.keys(form.ex).length));
+  const barcode = (food && food.barcode) || (prefill && prefill.barcode) || '';
+  $('mf-barcode').value = barcode;
+  $('mf-more').open = Boolean((food || prefill) && (form.sugar !== '' || form.na !== '' || form.fiber !== '' || Object.keys(form.ex || {}).length || barcode));
   $('myFoodTitle').textContent = food ? '⭐ 修改我的食物' : '⭐ 新增我的食物';
   $('mf-delete').classList.toggle('hidden', !food);
-  setBox('mf-note', null, '');
+  setBox('mf-note', prefill ? 'info' : null, prefill ? (prefill.source === 'off' ? '數字來自 Open Food Facts（大家一起建的國際資料庫），請對照包裝上的營養標示，不對就改掉再存。' : '照包裝上的營養標示填，存好之後下次掃這個條碼就找得到。') : '');
   openScreen('scr-myfood');
 }
 function afterMyFoodChange() {
@@ -2890,15 +2904,21 @@ $('mf-save').addEventListener('click', () => {
   MF_FIELDS.forEach(k => { form[k] = $('mf-' + k).value.trim(); });
   EX_KEYS.forEach(k => { form.ex[k] = $('mf-ex-' + k).value; });
   const old = mfEditing ? customFoods().find(f => f.id === mfEditing) : null;
-  // 以後才有的欄位（別名、條碼、來源…）保留
-  ['aliases', 'category', 'barcode', 'source', 'note'].forEach(k => { if (old && old[k] != null) form[k] = old[k]; });
+  // 以後才有的欄位（別名、來源…）保留
+  ['aliases', 'category', 'source', 'note'].forEach(k => { if (old && old[k] != null) form[k] = old[k]; });
+  const bcRaw = $('mf-barcode').value.trim();
+  form.barcode = normalizeBarcode(bcRaw);
+  if (bcRaw && !form.barcode) { setBox('mf-note', 'err', '條碼是 8～14 位數字，請再確認一次'); return; }
+  const bcOwner = form.barcode && customFoods().find(f => f !== old && f.barcode && findByBarcode(form.barcode, { mine: [f] }));
+  if (bcOwner) { setBox('mf-note', 'err', '「' + bcOwner.name + '」已經用這個條碼了'); return; }
+  if (!old && mfSource) form.source = mfSource;
   const { food, error } = customFoodFromForm(form, { id: old ? old.id : uid('cf'), now: now() });
   if (error) { setBox('mf-note', 'err', error); return; }
   if (!old && customFoods().some(f => f.name === food.name)) { setBox('mf-note', 'err', '已經有「' + food.name + '」了，請換個名稱（例如加上店名）'); return; }
   const list = customFoods();
   if (old) list[list.indexOf(old)] = food; else list.unshift(food);
   afterMyFoodChange();
-  closeScreen();
+  if (mfThenRecord && !old) afterClose(() => openGrams(food)); else closeScreen();
   showToast((old ? '已更新' : '已存到我的食物：') + '「' + food.name + '」');
 });
 $('mf-delete').addEventListener('click', () => {
@@ -3124,6 +3144,141 @@ $('packList').addEventListener('click', (e) => {
       afterPackChange();
     });
   }, '刪除');
+});
+
+/* ---------------- 掃商品條碼 ---------------- */
+// 查的順序：我的食物 → 食物資料庫 → Open Food Facts（只送條碼號碼）→ 查不到：照包裝填，存成我的食物並記下條碼
+// 拍一張照片再辨識（和拍營養標示一樣），iPhone 也能用：有 BarcodeDetector（Android Chrome）就用，沒有才載入 ZXing
+let manualBarcode = '';   // 從掃條碼去「自己輸入」拍營養標示：存成我的食物時記下這個條碼
+const ZXING_URL = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+let zxingLoading = null;
+function loadZxing() {
+  if (window.ZXing) return Promise.resolve(window.ZXing);
+  if (!zxingLoading) {
+    zxingLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = ZXING_URL;
+      s.onload = () => (window.ZXing ? resolve(window.ZXing) : reject(new Error('ZXing')));
+      s.onerror = () => { zxingLoading = null; reject(new Error('ZXing')); };
+      document.head.appendChild(s);
+    });
+  }
+  return zxingLoading;
+}
+// 照片太大時 ZXing 很慢：先縮到長邊 1600
+async function scaledImageUrl(file) {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.9);
+}
+// 回傳條碼號碼，認不出來是 ''；辨識程式載入失敗會丟錯
+async function decodeBarcode(file) {
+  if ('BarcodeDetector' in window) {
+    try {
+      const det = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] });
+      const found = await det.detect(await createImageBitmap(file));
+      if (found && found.length) return found[0].rawValue;
+    } catch (e) { /* 這台不支援這些格式：改用 ZXing */ }
+  }
+  const ZX = await loadZxing();
+  try { return (await new ZX.BrowserMultiFormatReader().decodeFromImageUrl(await scaledImageUrl(file))).getText(); } catch (e) { return ''; }
+}
+function afterClose(fn) {
+  const once = () => { window.removeEventListener('popstate', once); setTimeout(fn, 0); };
+  window.addEventListener('popstate', once);
+  closeScreen();
+}
+let scanForm = null;   // 查到（或查不到）時要帶去新增頁的表單
+function scanBox(tone, html) {
+  const el = $('scanResult');
+  el.classList.toggle('hidden', !html);
+  el.className = el.className.replace(/\b(bg|text)-(sky|rose|emerald|amber|stone)-\d+\b/g, '').trim();
+  if (html) el.classList.add(...({ info: ['bg-sky-50', 'text-sky-900'], err: ['bg-rose-50', 'text-rose-800'], ok: ['bg-emerald-50', 'text-emerald-900'], plain: ['bg-stone-50', 'text-stone-800'] }[tone]));
+  el.innerHTML = html || '';
+}
+function scanButtons(code) {
+  return `<button type="button" data-scan-fill class="btn-primary w-full">⭐ 照包裝填，存成我的食物</button>` +
+    (aiKey() ? `<button type="button" data-scan-ai class="btn-secondary w-full">📷 拍營養標示，AI 幫我填</button>` : '');
+}
+async function lookupBarcode(raw) {
+  const code = normalizeBarcode(raw);
+  if (!code) { scanBox('err', '條碼是 8～13 位數字（在黑白直線下面），請再確認一次。'); return; }
+  $('scanInput').value = code;
+  if (!checkDigitOk(code)) { scanBox('err', '「' + code + '」好像少了或打錯一個數字，請對照包裝再輸入一次。'); return; }
+  const hit = findByBarcode(code, { mine: customFoods(), packs: foodPacks() });
+  if (hit) {
+    if (hit.pack) foodPack.set(hit.food, hit.pack);
+    showToast('找到了：' + (hit.food.brand ? hit.food.brand + ' ' : '') + hit.food.name);
+    afterClose(() => openGrams(hit.food));
+    return;
+  }
+  scanForm = { name: '', ex: {}, barcode: code };
+  if (!navigator.onLine) {
+    scanBox('plain', '<p>你的食物裡沒有這個條碼，現在沒有網路，查不了國際資料庫。可以照包裝上的營養標示填一次，下次掃就有了。</p>' + scanButtons(code));
+    return;
+  }
+  scanBox('info', '查詢中…');
+  let json = null;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    const r = await fetch(offUrl(code), { signal: ctrl.signal });
+    clearTimeout(timer);
+    json = await r.json();
+  } catch (e) {
+    scanBox('plain', '<p>連不上國際資料庫（Open Food Facts）。可以照包裝上的營養標示填一次，下次掃就有了。</p>' + scanButtons(code));
+    return;
+  }
+  const off = offToForm(json, code);
+  if (off && off.hasNutrition) {
+    scanForm = off.form;
+    const f = off.form;
+    const parts = [['蛋白質', f.p, 'g'], ['脂肪', f.f, 'g'], ['碳水', f.c, 'g'], ['糖', f.sugar, 'g'], ['鈉', f.na, 'mg']].filter(x => x[1] !== '').map(x => x[0] + ' ' + x[1] + ' ' + x[2]);
+    scanBox('ok', `<p class="text-lg font-bold break-words">${esc(f.name)}</p>
+      <p>一份 ${esc(f.servingLabel || f.servingG + ' g')}：<b class="tabular-nums">${f.kcal} kcal</b>${parts.length ? '<br><span class="text-sm">' + esc(parts.join('・')) + '</span>' : ''}</p>
+      <p class="text-sm">資料來自 Open Food Facts（大家一起建的國際資料庫），可能和包裝不一樣，存之前請對照一下。</p>
+      <button type="button" data-scan-fill class="btn-primary w-full">⭐ 看一下數字，存成我的食物</button>`);
+    return;
+  }
+  if (off) scanForm = off.form;   // 有商品名稱、沒有營養資料：至少帶名稱
+  scanBox('plain', `<p>${off ? '查到「' + esc(off.form.name) + '」，但沒有營養資料。' : '查不到這個條碼。台灣的商品在國際資料庫比較少。'}照包裝上的營養標示填一次，下次掃就有了。</p>` + scanButtons(code));
+}
+$('scanOpenBtn').addEventListener('click', () => {
+  $('scanInput').value = '';
+  scanBox(null, '');
+  openScreen('scr-scan');
+});
+$('scanShotBtn').addEventListener('click', () => $('scanFile').click());
+$('scanFile').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  scanBox('info', '辨識條碼中…');
+  let code = '';
+  try { code = await decodeBarcode(file); } catch (err) {
+    scanBox('err', '條碼辨識程式載入失敗（要連網）。請直接輸入條碼下面的數字。');
+    return;
+  }
+  if (!code) { scanBox('err', '看不清楚條碼。靠近一點、對準黑白直線、不要反光再拍一次，或直接輸入條碼下面的數字。'); return; }
+  lookupBarcode(code);
+});
+$('scanLookupBtn').addEventListener('click', () => lookupBarcode($('scanInput').value));
+$('scanInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') lookupBarcode($('scanInput').value); });
+$('scanResult').addEventListener('click', (e) => {
+  if (!scanForm) return;
+  const form = scanForm;
+  if (e.target.closest('[data-scan-fill]')) afterClose(() => openMyFood(null, '', form));
+  else if (e.target.closest('[data-scan-ai]')) {
+    afterClose(() => {
+      openScreen('scr-manual');
+      manualBarcode = form.barcode;
+      $('saveMineCheck').checked = true;
+      setBox('add-lb-note', 'info', '條碼 ' + form.barcode + '：拍營養標示讓 AI 填好、記下來，會一起存成我的食物，下次掃就有了。');
+    });
+  }
 });
 
 /* ---------------- 套餐（combos） ---------------- */

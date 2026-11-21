@@ -1,4 +1,5 @@
 // 小芽：陪伴使用者的原創小角色（一顆會長葉子的綠色小豆子）
+// 夥伴（js/characters.js）：小貓一起鼓勵；Q 版營養師只在「做得不夠、要提醒」時出來，一天最多 DOC_PER_DAY 次
 // mood：cheer 歡呼、happy 開心、encourage 加油、calm 溫和、hello 打招呼
 
 const C = {
@@ -80,6 +81,7 @@ export function mascotSVG(mood = 'happy') {
     weight: { now, week, first, measuredToday } | null,
     targetWeight, bmi, bmiLabel,
     water, waterGoal,   // waterGoal：這天的喝水目標（沒設是 null）
+    protein, proteinTarget,   // 這天吃的蛋白質（克）、蛋白質目標（沒設是 null）
     exercise, lastNight,
     insights   // 跨模組提醒（js/insights.js 的 buildInsights），一起排序
   }
@@ -119,7 +121,7 @@ export function buildMascotMessages(ctx) {
   if (ctx.count > 0) {
     const ratio = ctx.kcal / (ctx.targetKcal || 1800);
     if (ratio > 1.1) {
-      add(50, 'encourage', ctx.isToday ? '今天吃得比較多一點，沒關係！明天清淡一點、多走走就好' : '這天吃得比較多，沒關係，重要的是持續記錄');
+      add(50, 'encourage', ctx.isToday ? '今天吃得比較多一點，沒關係！明天清淡一點、多走走就好' : '這天吃得比較多，沒關係，重要的是持續記錄', 'ate-more');
     } else if (ratio >= 0.85 && ctx.meals >= 2) {
       add(50, 'happy', ctx.isToday ? '今天吃得剛剛好，很棒！' : '這天吃得剛剛好 👍');
     } else if (ctx.isToday && ratio < 0.6 && ctx.hour >= 19) {
@@ -130,15 +132,18 @@ export function buildMascotMessages(ctx) {
   const sl = ctx.lastNight;
   if (ctx.isToday && sl && sl.night) {
     const h = Math.round(sl.night / 6) / 10;
-    if (sl.night >= 420) add(42, 'happy', `昨晚睡了 ${h} 小時，睡飽了食慾比較好控制 😴`);
+    if (sl.night >= 420) add(42, 'happy', `昨晚睡了 ${h} 小時，睡飽了食慾比較好控制 😴`, 'slept-well');
     // 睡不到 6 小時的提醒在 insights.js
   } else if (ctx.isToday && ctx.hour >= 5 && ctx.hour < 12) {
     add(37, 'hello', '早安！昨晚睡得好嗎？點「睡眠」記一下 😴');
   }
   // 有設喝水目標就看目標，沒設就用 1500 ml
   const wg = ctx.waterGoal || 1500;
-  if (ctx.isToday && ctx.water >= wg) add(35, 'happy', ctx.waterGoal ? '今天的喝水目標達成了，身體會謝謝你 💧' : '水喝得很夠，身體會謝謝你 💧');
+  if (ctx.isToday && ctx.water >= wg) add(35, 'happy', ctx.waterGoal ? '今天的喝水目標達成了，身體會謝謝你 💧' : '水喝得很夠，身體會謝謝你 💧', 'water-goal');
   else if (ctx.isToday && ctx.hour >= 15 && (ctx.water || 0) < Math.round(wg * 2 / 3)) add(30, 'calm', '記得多喝水喔，按「喝水」記一下 💧');
+  if (ctx.proteinTarget && ctx.protein >= ctx.proteinTarget) {
+    add(34, 'happy', `${ctx.isToday ? '今天' : '這天'}蛋白質吃到 ${Math.round(ctx.protein)} 克，達標了，肌肉會謝謝你 💪`, 'protein-goal');
+  }
   if (ctx.bmi != null && ctx.bmi >= 18.5 && ctx.bmi < 24) add(33, 'happy', `BMI ${ctx.bmi}，在健康範圍內，維持得很好`);
   if (ctx.isToday && ctx.streak.n >= 2) {
     add(32, 'happy', ctx.streak.todayLogged ? `已經連續記錄 ${ctx.streak.n} 天了 🔥` : `已經連續記錄 ${ctx.streak.n} 天，今天也記一下吧 🔥`);
@@ -150,4 +155,38 @@ export function buildMascotMessages(ctx) {
   (ctx.insights || []).forEach(m => add(m.pri, m.mood, m.text, m.key));
   add(1, 'calm', '我是小芽，陪你一起記錄、一起變健康 🌱', 'intro');
   return out.sort((a, b) => b.pri - a.pri);
+}
+
+// 訊息 key → 小貓／營養師的特別姿勢（小芽沒有這些姿勢，照 mood 畫）
+export const POSE_BY_KEY = {
+  'water-goal': 'water', 'protein-goal': 'protein', 'slept-well': 'rested', 'ate-more': 'full', 'short-sleep': 'sleepy'
+};
+export const DOC_PER_DAY = 2;
+// 「提醒」＝做得不夠、要使用者做點什麼的訊息（溫和語氣的 calm；自我介紹不算）
+export const isReminder = (m) => m.mood === 'calm' && m.key !== 'intro';
+
+/*
+  決定每一句由誰說（純函式）
+  o = { sprout, cat, doc,   // 設定裡勾了誰
+        isToday,            // 營養師只在看今天時出來
+        docSeen }           // 今天營養師已經說過的 key（說過的同一句不再算次數）
+  回傳 [{ ...訊息, who: 'doc' | 'pals', pose }]：
+  - 提醒：營養師有勾、今天還有次數（或這句今天說過）→ 營養師說；否則小芽／小貓說
+  - 其他：小芽／小貓說；兩個都沒勾就不說
+*/
+export function castMessages(msgs, o = {}) {
+  const seen = o.docSeen || [];
+  let left = Math.max(0, DOC_PER_DAY - seen.length);
+  const pals = Boolean(o.sprout || o.cat);
+  const out = [];
+  msgs.forEach(m => {
+    let who = 'pals';
+    if (o.doc && o.isToday && isReminder(m)) {
+      if (seen.includes(m.key)) who = 'doc';
+      else if (left > 0) { left--; who = 'doc'; }
+    }
+    if (who === 'pals' && !pals) return;
+    out.push({ ...m, who, pose: POSE_BY_KEY[m.key] || null });
+  });
+  return out;
 }

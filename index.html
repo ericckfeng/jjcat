@@ -87,7 +87,7 @@
       <section id="mascotCard" class="mascot-card">
         <button id="mascotBtn" type="button" class="mascot-btn" aria-label="小芽，點我看下一句"></button>
         <div class="flex-1 min-w-0">
-          <div class="mascot-bubble"><span id="mascotMsg"></span></div>
+          <div class="mascot-bubble"><b id="mascotWho" class="text-sky-700"></b><span id="mascotMsg"></span></div>
           <div id="mascotChips" class="flex flex-wrap gap-1.5 mt-2"></div>
         </div>
         <div id="confetti" class="confetti" aria-hidden="true"></div>
@@ -673,7 +673,13 @@
     <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>🔧 功能開關與字體</h2></div>
     <div class="scr-body">
       <div><div class="scr-label">字體大小</div><div id="fontSizeGroup" class="grid grid-cols-3 gap-2"></div></div>
-      <label class="flex items-start gap-3 rounded-2xl bg-white border border-stone-200 p-3 text-base text-stone-700"><input id="mascotToggle" type="checkbox" class="big-check mt-1" /><span><b>首頁顯示「小芽」</b>：鼓勵和提醒。關掉的話，提醒改用首頁的小卡片顯示</span></label>
+      <div class="rounded-2xl bg-white border border-stone-200 p-3 space-y-1 text-base text-stone-700">
+        <div class="font-semibold text-stone-900">首頁的陪伴角色（可以複選）</div>
+        <label class="flex items-start gap-3 py-1"><input id="mascotToggle" type="checkbox" class="big-check mt-1" /><span><b>🌱 小芽</b>：鼓勵你</span></label>
+        <label class="flex items-start gap-3 py-1"><input id="catToggle" type="checkbox" class="big-check mt-1" /><span><b>🐱 小貓</b>：鼓勵你</span></label>
+        <label class="flex items-start gap-3 py-1"><input id="docToggle" type="checkbox" class="big-check mt-1" /><span><b>🩺 營養師</b>：做得不夠時出來提醒，一天最多 2 次</span></label>
+        <p class="text-sm text-stone-500">都不勾的話，提醒改用首頁的小卡片顯示。</p>
+      </div>
       <label class="flex items-start gap-3 rounded-2xl bg-white border border-stone-200 p-3 text-base text-stone-700"><input id="bankToggle" type="checkbox" class="big-check mt-1" /><span><b>熱量銀行</b>：用一週總量控管。哪天多吃或少吃，差額會平均分到這週剩下的日子（每週一重新開始）</span></label>
       <p class="text-sm text-stone-500 leading-relaxed">「我在控制血糖」在「我的基本資料」；AI 辨識在設定的「AI 辨識」。</p>
     </div>

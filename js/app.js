@@ -8,7 +8,8 @@ import { buildWeekly, lastWeek, weeklyText } from './highlights.js';
 import * as cloud from './cloud.js';
 import { mergeData, mergeExtras, pickExtras, syncShape, stableStringify, SYNC_VERSION } from './sync.js';
 import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, muscleChange, sumLimbs, calcSmi, smiLow, latestSmi, SMI_CUTOFF, calcBmi, bmiCategory, healthyWeightRange, waistRisk, waistHipRatio, bmiScalePct, SLEEP_QUALITY, sleepQualityLabel, sleepMinutes, fmtDuration, daySleep } from './body.js';
-import { mascotSVG, buildMascotMessages } from './mascot.js';
+import { mascotSVG, buildMascotMessages, castMessages } from './mascot.js';
+import { catSVG, docSVG } from './characters.js';
 import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS, energyDensity, isGlutinous, kjToKcal, scaleLabel } from './foods.js';
 import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, shouldAskWhen, eatenAt, MEAL_TIME_CHIPS } from './meals.js';
 import { buildInsights } from './insights.js';
@@ -2263,7 +2264,7 @@ function renderWeekly() {
   lastWeekly = w;
   if (state.meta.weeklySeen !== w.from) { state.meta.weeklySeen = w.from; persistLocal(); renderWeeklyCard(); }
   const empty = w.sum.loggedDays === 0;
-  $('weeklyMascot').innerHTML = mascotSVG(empty ? 'calm' : 'cheer');
+  $('weeklyMascot').innerHTML = state.meta.mascot === false && palsOn().cat ? catSVG(empty ? 'calm' : 'cheer') : mascotSVG(empty ? 'calm' : 'cheer');
   $('weeklyRange').textContent = fmtMD(w.from) + '～' + fmtMD(w.to);
   $('weeklyEmpty').classList.toggle('hidden', !empty);
   $('weeklyGood').parentElement.classList.toggle('hidden', empty);
@@ -2283,26 +2284,42 @@ $('weeklyShareBtn').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(text); showToast('已複製週報，貼到 LINE 即可'); } catch (e) { showToast('無法複製'); }
 });
 
+// 設定裡勾了誰：小芽 meta.mascot、小貓 meta.cat、營養師 meta.doc。
+// 小貓、營養師沒設過的話跟著小芽（以前關掉小芽的人，不會突然冒出新角色）
+function palsOn() {
+  const sprout = state.meta.mascot !== false;
+  const on = (k) => state.meta[k] != null ? state.meta[k] !== false : sprout;
+  return { sprout, cat: on('cat'), doc: on('doc') };
+}
+function docSeenToday() {
+  const d = state.meta.docSeen;
+  return d && d.date === todayStr() ? d.keys || [] : [];
+}
 function renderMascot() {
   const card = $('mascotCard');
   const insights = dayInsights(ui.date);
-  if (state.meta.mascot === false) { card.classList.add('hidden'); renderTips(insights); return; }
-  card.classList.remove('hidden');
-  renderTips([]);
+  const pals = palsOn();
+  if (!pals.sprout && !pals.cat && !pals.doc) { card.classList.add('hidden'); renderTips(insights); return; }
   const isToday = ui.date === todayStr();
   const t = dayTotals(ui.date);
   const d = getDay(ui.date, false);
   const w = weightInfo(ui.date);
   const bmi = w ? calcBmi(w.now, state.profile.height) : null;
   const streak = computeStreak(ui.date);
-  mascotMsgs = buildMascotMessages({
+  mascotMsgs = castMessages(buildMascotMessages({
     isToday, hour: new Date().getHours(), count: t.count, kcal: t.kcal, targetKcal: state.targets.kcal,
     meals: MEAL_KEYS.filter(k => t.meals[k] > 0).length, streak, weight: w,
     targetWeight: num(state.targets.weight), bmi, water: num(d.water) || 0, waterGoal: dayWaterGoal(ui.date),
+    protein: t.macroItems ? t.p : 0, proteinTarget: num(state.targets.p),
     lastNight: daySleep(getDay(ui.date, false)),
     exercise: d.exercise || (d.exMin ? d.exMin + ' 分鐘' : ''),
     insights
-  });
+  }), { ...pals, isToday, docSeen: docSeenToday() });
+  // 只勾營養師時，營養師沒說到的提醒照樣放在「小提醒」卡片
+  const said = new Set(mascotMsgs.map(m => m.key));
+  renderTips(pals.sprout || pals.cat ? [] : insights.filter(m => !said.has(m.key)));
+  if (!mascotMsgs.length) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
   mascotIdx = 0;
   showMascotMsg();
   const chips = [];
@@ -2317,11 +2334,36 @@ function renderMascot() {
     burstConfetti();
   }
 }
+// 這一句的角色：營養師說的時候她站前面，小芽、小貓縮小在旁邊加油；其他時候小芽和小貓一起
+const SPROUT_MOODS = ['cheer', 'happy', 'encourage', 'calm', 'hello'];
+function mascotArt(m) {
+  const pals = palsOn();
+  const pal = (svg, sm) => `<span class="pal${sm ? ' pal-sm' : ''}">${svg}</span>`;
+  const sproutMood = SPROUT_MOODS.includes(m.mood) ? m.mood : 'happy';
+  if (m.who === 'doc') {
+    return pal(docSVG('calm')) +
+      (pals.sprout ? pal(mascotSVG('encourage'), true) : '') +
+      (pals.cat ? pal(catSVG(m.pose === 'sleepy' ? 'sleepy' : 'encourage'), true) : '');
+  }
+  return (pals.sprout ? pal(mascotSVG(sproutMood)) : '') + (pals.cat ? pal(catSVG(m.pose || m.mood)) : '');
+}
 function showMascotMsg() {
   const m = mascotMsgs[mascotIdx % mascotMsgs.length];
   if (!m) return;
-  $('mascotBtn').innerHTML = mascotSVG(m.mood);
+  const doc = m.who === 'doc';
+  const btn = $('mascotBtn');
+  btn.innerHTML = mascotArt(m);
+  const n = btn.querySelectorAll('.pal').length;
+  $('mascotCard').classList.toggle('mascot-multi', n > 1);
+  $('mascotCard').classList.toggle('mascot-doc', doc);
+  btn.setAttribute('aria-label', (doc ? '營養師' : '小芽') + '，點一下看下一句');
+  $('mascotWho').textContent = doc ? '營養師：' : '';
   $('mascotMsg').textContent = m.text;
+  // 營養師一天最多出來 DOC_PER_DAY 次：說過的 key 記在這台裝置
+  if (doc && ui.date === todayStr()) {
+    const keys = docSeenToday();
+    if (!keys.includes(m.key)) { state.meta.docSeen = { date: todayStr(), keys: [...keys, m.key] }; persistLocal(); }
+  }
 }
 function burstConfetti() {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -2331,10 +2373,20 @@ function burstConfetti() {
     `<span style="left:${Math.random() * 100}%;background:${colors[i % colors.length]};animation-delay:${Math.random() * 0.5}s"></span>`).join('');
   setTimeout(() => { box.innerHTML = ''; }, 2600);
 }
+// 點角色：跳一下、冒個愛心，再換下一句
 $('mascotBtn').addEventListener('click', () => {
-  if (mascotMsgs.length < 2) return;
-  mascotIdx = (mascotIdx + 1) % mascotMsgs.length;
-  showMascotMsg();
+  if (mascotMsgs.length > 1) {
+    mascotIdx = (mascotIdx + 1) % mascotMsgs.length;
+    showMascotMsg();
+  }
+  const btn = $('mascotBtn');
+  btn.classList.remove('pal-tap'); void btn.offsetWidth; btn.classList.add('pal-tap');
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const pop = document.createElement('span');
+  pop.className = 'pal-pop';
+  pop.textContent = ['💕', '✨', '🌱', '😺'][Math.floor(Math.random() * 4)];
+  $('mascotCard').appendChild(pop);
+  setTimeout(() => pop.remove(), 900);
 });
 
 /* ---------------- 分頁與總渲染 ---------------- */
@@ -2910,7 +2962,7 @@ function renderSettings() {
   const t = state.targets;
   $('setTargetsSub').textContent = '每天 ' + (t.kcal || 1800).toLocaleString() + ' kcal' + (t.mealEx ? '・有每餐份數' : '') + (t.calc ? '・依體重試算' : '');
   $('setFeaturesSub').textContent = '字體 ' + FONT_SIZES[FONT_SIZES[state.meta.fontSize] ? state.meta.fontSize : 'l'].label
-    + '・小芽 ' + (state.meta.mascot === false ? '關' : '開') + '・熱量銀行 ' + (t.bank ? '開' : '關');
+    + '・角色 ' + (Object.entries({ sprout: '小芽', cat: '小貓', doc: '營養師' }).filter(([k]) => palsOn()[k]).map(([, v]) => v).join('、') || '關') + '・熱量銀行 ' + (t.bank ? '開' : '關');
   const c = state.meta.cloud;
   $('setDataSub').textContent = cloud.isConfigured() && c.linked ? '雲端同步：已連結' + (c.email ? '（' + c.email + '）' : '') : '雲端同步、下載備份、匯入、匯出 CSV';
   $('setAboutSub').textContent = '版本 ' + APP_VERSION + '・隱私權政策・資料來源';
@@ -2959,7 +3011,10 @@ function renderFeatures() {
   const cur = FONT_SIZES[state.meta.fontSize] ? state.meta.fontSize : 'l';
   $('fontSizeGroup').innerHTML = Object.entries(FONT_SIZES).map(([k, f]) =>
     `<button type="button" data-font="${k}" class="toggle-btn ${k === cur ? 'is-active' : ''}" style="font-size:${f.px}px">${f.label}</button>`).join('');
-  $('mascotToggle').checked = state.meta.mascot !== false;
+  const pals = palsOn();
+  $('mascotToggle').checked = pals.sprout;
+  $('catToggle').checked = pals.cat;
+  $('docToggle').checked = pals.doc;
   $('bankToggle').checked = Boolean(state.targets.bank);
 }
 $('fontSizeGroup').addEventListener('click', (e) => {
@@ -2970,11 +3025,15 @@ $('fontSizeGroup').addEventListener('click', (e) => {
   applyFontSize();
   renderFeatures();
 });
-$('mascotToggle').addEventListener('change', () => {
-  state.meta.mascot = $('mascotToggle').checked;
+// 三個角色各自勾選；小貓、營養師一旦動過就各自記住，不再跟著小芽
+[['mascotToggle', 'mascot'], ['catToggle', 'cat'], ['docToggle', 'doc']].forEach(([id, key]) => $(id).addEventListener('change', () => {
+  const cur = palsOn();
+  state.meta.cat = cur.cat;
+  state.meta.doc = cur.doc;
+  state.meta[key] = $(id).checked;
   persistLocal();
   renderAll();
-});
+}));
 $('bankToggle').addEventListener('change', () => {
   const next = { ...state.targets };
   if ($('bankToggle').checked) next.bank = true; else delete next.bank;

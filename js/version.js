@@ -2,14 +2,14 @@
 // 給人看的版本＝「發佈日期-當天第幾次」，後面括號 Rev.＝第幾次發佈（從 v1 一路加上來，當紀念）。
 // 比較新舊一律只看 Rev.（一定往上加）。
 // APP_REV、APP_DATE、APP_SEQ 由 scripts/bump.py 自動改，不要手改。
-export const APP_REV = 44;
+export const APP_REV = 45;
 export const APP_DATE = '2026.11.21';
-export const APP_SEQ = 5;
+export const APP_SEQ = 6;
 
 // 雲端資料至少要哪一版 App 才能同步。
 // 只有新功能會寫入「舊版看不懂、同步時會弄壞」的資料時才調高（調成那個功能發佈的 Rev.）。
 // 低於這一版的 App 會暫停同步（不下載合併、不上傳），提示使用者更新；資料不會被刪。
-export const DATA_MIN_REV = 0;
+export const DATA_MIN_REV = 45;
 
 export const versionText = (date, seq) => date ? date + '-' + seq : '';
 export function versionLabel(date = APP_DATE, seq = APP_SEQ, rev = APP_REV) {

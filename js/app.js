@@ -152,6 +152,7 @@ let persistTimer = null;
 function persistSoon() {
   clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
+    persistTimer = null;
     persist();
     renderTiles();
     renderMascot();
@@ -3411,7 +3412,7 @@ function startSignIn(action, silent = false) {
     setCloudStatus('Google 登入沒有成功，請稍後再試一次', 'err');
     return;
   }
-  try { sessionStorage.setItem(silent ? 'diet_silent_tried' : 'diet_reauth_at', String(Date.now())); } catch (e) { /* ignore */ }
+  try { if (!silent) sessionStorage.setItem('diet_reauth_at', String(Date.now())); } catch (e) { /* ignore */ }
   if (!silent) setCloudStatus('前往 Google 登入…', 'busy');
   cloud.signIn(action, state.meta.cloud.email, silent);
 }
@@ -3449,7 +3450,7 @@ async function cloudRun(action, { auto = false } = {}) {
     }
     c.needAuth = false;
     await doSync({ auto, first: action === 'connect' });
-    try { sessionStorage.removeItem('diet_reauth_at'); } catch (e) { /* ignore */ }
+    try { sessionStorage.removeItem('diet_reauth_at'); localStorage.removeItem(SILENT_FAIL); } catch (e) { /* ignore */ }
   } catch (err) {
     if (err && err.auth) {
       c.needAuth = true;
@@ -3580,14 +3581,44 @@ async function doSync({ auto, first }) {
   }
 }
 
+// Google 的登入只有 1 小時。過期後在「沒有正在輸入的東西」時，自動跳去 Google 換新的再跳回來（不用按）。
+// iPad、手機的 App 常常一直開在背景，所以切回來時也要試，不能只在打開 App 時試。
+const SILENT_AT = 'diet_silent_at';       // 上次自動換登入的時間
+const SILENT_FAIL = 'diet_silent_fail';   // 上次自動換失敗（Google 要你自己登入）的時間
+function canSilentRenew() {
+  const c = state.meta.cloud;
+  if (!cloud.isConfigured() || !c.linked || c.auto === false) return false;
+  if (cloud.isBlockedInAppBrowser()) return false;
+  // 跳轉會清掉還沒存的輸入：有打開的畫面、對話框、購物車，或正在打字，就不跳
+  if (screenStack.length || foodCart.length || document.querySelector('.modal:not(.hidden)')) return false;
+  const a = document.activeElement;
+  if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return false;
+  let last = 0;
+  try { last = Number(localStorage.getItem(SILENT_AT) || 0); } catch (e) { /* ignore */ }
+  return Date.now() - last > 10 * 60000 && !silentFailedRecently();
+}
+function silentFailedRecently() {
+  let t = 0;
+  try { t = Number(localStorage.getItem(SILENT_FAIL) || 0); } catch (e) { /* ignore */ }
+  return Date.now() - t < 6 * 3600000;
+}
+function markNeedAuth() {
+  const c = state.meta.cloud;
+  if (c.needAuth) return;
+  c.needAuth = true; persistLocal(); renderBanners(); renderSyncChip();
+}
+function renewOrMarkNeedAuth() {
+  if (!canSilentRenew()) { markNeedAuth(); return; }
+  try { localStorage.setItem(SILENT_AT, String(Date.now())); } catch (e) { /* ignore */ }
+  if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; persist(); }
+  startSignIn('sync', true);
+}
+
 function autoSyncOnOpen() {
   const c = state.meta.cloud;
   if (!cloud.isConfigured() || !c.linked || c.auto === false) return;
   if (cloud.getToken()) { cloudRun('sync', { auto: true }); return; }
-  if (cloud.isBlockedInAppBrowser()) return;
-  // 登入過期：每次開啟最多試一次「不跳畫面」的重新登入
-  if (!sessionStorage.getItem('diet_silent_tried')) startSignIn('sync', true);
-  else { c.needAuth = true; persistLocal(); renderBanners(); renderSyncChip(); }
+  renewOrMarkNeedAuth();
 }
 
 $('cloudConnectBtn').addEventListener('click', () => cloudRun('connect'));
@@ -3659,6 +3690,7 @@ function openFromUrl() {
   const redirect = cloud.isConfigured() ? cloud.consumeRedirect() : null;
   if (redirect) {
     if (redirect.silent && redirect.error) {
+      try { localStorage.setItem(SILENT_FAIL, String(Date.now())); } catch (e) { /* ignore */ }
       state.meta.cloud.needAuth = true; persistLocal(); renderBanners(); renderSyncChip();
     } else if (redirect.error) {
       goToCloudSection(); setCloudStatus(redirect.error, 'err');
@@ -3688,7 +3720,7 @@ function openFromUrl() {
     checkLatest();
     if (state.meta.cloud.linked && state.meta.cloud.auto !== false) {
       if (cloud.getToken()) cloudRun('sync', { auto: true });
-      else if (!state.meta.cloud.needAuth) { state.meta.cloud.needAuth = true; persistLocal(); renderBanners(); renderSyncChip(); }
+      else renewOrMarkNeedAuth();
     }
     const now = todayStr();
     if (now !== lastToday) {

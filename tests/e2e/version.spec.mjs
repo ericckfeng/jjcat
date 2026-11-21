@@ -37,7 +37,8 @@ async function mockDrive(page, remote) {
 async function linkCloud(page) {
   await page.addInitScript(() => {
     if (localStorage.getItem('diet_tracker_v2')) return;
-    localStorage.setItem('diet_gdrive_token', JSON.stringify({ token: 't', exp: Date.now() + 3600e3 }));
+    // 這裡是真的時鐘、App 是固定的中午，期限給久一點才不會被當成過期
+    localStorage.setItem('diet_gdrive_token', JSON.stringify({ token: 't', exp: Date.now() + 3 * 86400e3 }));
     localStorage.setItem('diet_tracker_v2', JSON.stringify({ meta: { welcomed: true, cloud: { linked: true, auto: false } } }));
   });
 }

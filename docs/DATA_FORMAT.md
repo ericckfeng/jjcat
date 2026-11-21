@@ -30,7 +30,8 @@
 | localStorage | `daily_calorie_tracker_v1` | 最早的單檔版本；第一次開啟新版時會自動匯入（只讀） |
 | localStorage | `diet_gdrive_token` | Google 存取權杖 `{ token, exp }`，約 1 小時過期 |
 | localStorage | `diet_gdrive_pending` | 跳轉去 Google 登入前暫存的 `{ state, action, silent, at }` |
-| sessionStorage | `diet_reauth_at`、`diet_silent_tried` | 防止登入無限重試 |
+| sessionStorage | `diet_reauth_at` | 防止登入無限重試 |
+| localStorage | `diet_silent_at`、`diet_silent_fail` | 登入過期時自動換新（打開 App、切回 App 時，沒在輸入才跳轉）：上次試的時間（10 分鐘內不重試）、上次 Google 要求自己登入的時間（6 小時內不再自動試）。自己登入成功會清掉 `diet_silent_fail` |
 | IndexedDB | 資料庫 `diet-tracker` v1，store `photos` | key＝飲食記錄的 `id`，value＝JPEG 的 data URL |
 | Google 雲端硬碟 | `飲控隨身記/飲控隨身記備份.json` | 同步資料（不含照片） |
 | Google 雲端硬碟 | `飲控隨身記/照片/<photoKey>.jpg` | 照片，`appProperties.itemId` = photoKey |

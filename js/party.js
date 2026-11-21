@@ -1,6 +1,7 @@
 // 吃到飽・聚餐速記（純函式，有單元測試）
+// Rev. 43 起畫面已拿掉（使用者覺得用不到，找不到的改用「拍照記・待查」）。
+// 留著範本和換算，只為了把舊版留在裝置上、還沒記下來的速記（meta.party）記成飲食記錄；舊記錄的 party 欄位照樣保留。
 // 一個範本＝一組「代碼＋每單位營養素」；現場只數幾顆／幾份，最後一次算好、記成同一組。
-// 也可以把手機備忘錄的速記文字（例如「A1: 3+2」）貼進來自動換成數量。
 // 熱量是估計值（每單位的平均），給營養師看的是大概，不是精確數字。
 // 單位一律用「一顆、一塊、一條、一杯」：第一次可以秤一顆拍照（秤重模式），之後依重量校正，
 // 所以每筆記錄都存 party: { tpl, code, n, unit, kcal1, g }，校正後可以把舊記錄一起重算。
@@ -38,42 +39,6 @@ export function startCounts(tpl) {
   const c = {};
   tpl.items.forEach(it => { if (it.start) c[it.code] = it.start; });
   return c;
-}
-
-// 全形數字、冒號、加號 → 半形；代碼不分大小寫
-function halfWidth(s) {
-  return String(s || '').replace(/[０-９Ａ-Ｚａ-ｚ．＋：＝]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
-}
-
-// 備忘錄文字 → { counts, unknown }。認得的寫法：
-//   A1(蝦餃/顆): 3   A1：3   A1 3   a1=3   A1: 2+3（每拿一輪加一次）   A1: 0.5
-// 同一個代碼出現好幾次會加起來；沒有數字的不算。
-export function parsePartyText(text, tpl) {
-  const known = new Set(tpl.items.map(it => it.code));
-  const counts = {};
-  const unknown = [];
-  const re = /\b([A-Za-z]\d{1,2})\b(?:\s*[(（][^)）]*[)）])?\s*[:=]?\s*((?:\d+(?:\.\d+)?\s*\+\s*)*\d+(?:\.\d+)?)/g;
-  let m;
-  const src = halfWidth(text).replace(/（/g, '(').replace(/）/g, ')');
-  while ((m = re.exec(src))) {
-    const code = m[1].toUpperCase();
-    const n = m[2].split('+').reduce((s, x) => s + Number(x), 0);
-    if (!known.has(code)) { if (!unknown.includes(code)) unknown.push(code); continue; }
-    counts[code] = (counts[code] || 0) + n;
-  }
-  Object.keys(counts).forEach(k => { counts[k] = cleanCount(counts[k]); if (!counts[k]) delete counts[k]; });
-  return { counts, unknown };
-}
-
-// 給手機備忘錄用的空白速記格式
-export function partyMemo(tpl) {
-  const lines = ['【' + tpl.title + '速記】'];
-  let group = '';
-  tpl.items.forEach(it => {
-    if (it.group !== group) { group = it.group; lines.push('-- ' + group + ' --'); }
-    lines.push(it.code + '(' + it.name + '/' + it.unit + '): ' + (it.start || ''));
-  });
-  return lines.join('\n');
 }
 
 // 秤重模式量到的一顆重量（公克）；不合理的不算

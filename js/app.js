@@ -14,7 +14,7 @@ import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, sho
 import { buildInsights } from './insights.js';
 import { APP_REV, APP_LABEL, parseLatest, requiredRev, minRevToWrite, deviceName, deviceRecord, upsertDevice, deviceRows } from './version.js';
 import { HAND_REFS, AMOUNTS, LOOKUP_CATS, lookupCat, cleanAmount, amountText, sizeText, estimateLookup, buildLookupCsv, readFilledCsv, AI_LOOKUP_PROMPT } from './lookup.js';
-import { partyTemplate, startCounts, parsePartyText, partyMemo, partyEntries, partyTotals, cleanGrams } from './party.js';
+import { partyTemplate, startCounts, partyEntries, partyTotals } from './party.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros } from './bank.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
@@ -851,7 +851,7 @@ function saveFoodCart() {
   saveGroup(items);
   renderFoodCart();
 }
-// 一次記好幾樣到目前這一餐（查食物的購物車、吃到飽速記）：每樣一筆，2 樣以上用 groupId 標成同一組
+// 一次記好幾樣到目前這一餐（查食物的購物車、舊的吃到飽速記）：每樣一筆，2 樣以上用 groupId 標成同一組
 function saveGroup(items) {
   const meal = ui.meal;
   const date = ui.date;
@@ -913,7 +913,6 @@ function openScreen(id) {
   if (id === 'scr-food') { $('foodSearch').value = ''; renderFoodResults(); renderFoodCart(); }
   if (id === 'scr-grams') renderGrams();
   if (id === 'scr-est') renderEst();
-  if (id === 'scr-party') openParty();
   if (id === 'scr-weight') renderWeightHint();
   if (id === 'scr-bodycomp') { bcDate = ui.date; renderBodyComp(); }
   if (id === 'scr-water') renderWaterBig();
@@ -2383,7 +2382,6 @@ function renderAll() {
   renderLogs();
   renderDayPanel();
   renderTiles();
-  renderPartyTile();
   renderMascot();
   renderSyncChip();
   renderExercisePresets();
@@ -2408,7 +2406,6 @@ document.addEventListener('click', (e) => {
   ui.meal = btn.getAttribute('data-meal');
   renderMealSelector();
   if (screenStack.includes('scr-food')) renderFoodCart();
-  if (screenStack.includes('scr-party')) renderParty();
 });
 $('portionGroup').addEventListener('click', (e) => {
   const b = e.target.closest('[data-portion]');
@@ -3310,177 +3307,41 @@ $('estPicked').addEventListener('click', (e) => {
 });
 $('resetEstPartsBtn').addEventListener('click', () => { estCounts = {}; renderEst(); });
 
-/* ---------------- 吃到飽・聚餐速記 ---------------- */
-// 數量存在這台裝置（meta.party），中途關掉 App 也不會不見；按「記下來」才變成飲食記錄
-const partyDraft = () => state.meta.party || null;
-function partyStarted(d) {
-  if (!d) return false;
-  if (Object.keys(d.photos || {}).length || Object.keys(d.grams || {}).length) return true;
-  const base = startCounts(partyTemplate(d.tpl));
-  return Object.keys(d.counts || {}).some(k => d.counts[k] !== (base[k] || 0));
-}
-function openParty() {
-  if (!partyDraft()) { state.meta.party = { tpl: 'dimsum', counts: startCounts(partyTemplate('dimsum')), at: now() }; persistLocal(); }
-  $('partyPaste').value = '';
-  renderParty();
-}
-function renderParty() {
-  const d = partyDraft();
-  if (!d) return;
-  const tpl = partyTemplate(d.tpl);
-  const counts = d.counts || {};
-  $('partyTitle').textContent = tpl.icon + ' ' + tpl.title;
-  $('partyNote').textContent = tpl.note;
-  $('partyWeighToggle').checked = Boolean(d.weigh);
-  const old = partyStarted(d) && now() - (d.at || 0) > 6 * 3600 * 1000;
-  $('partyOld').classList.toggle('hidden', !old);
-  if (old) $('partyOld').textContent = '這是 ' + new Date(d.at).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' 開始的速記，還沒記下來。是那次的就按下面「記下來」；不是的話按「全部清空重來」。';
-  let group = '';
-  $('partyRows').innerHTML = tpl.items.map(it => {
-    const n = counts[it.code] || 0;
-    const head = it.group !== group ? `<h3 class="text-lg font-bold text-stone-700 pt-1">${esc((group = it.group))}</h3>` : '';
-    return head + `<div class="party-row${n ? ' party-on' : ''}">
-      <div class="w-full"><div class="text-lg font-bold text-stone-900 break-words"><span class="text-stone-400 text-base">${it.code}</span> ${esc(it.name)}</div>
-        <div class="text-base text-stone-500 break-words">${esc(it.eg)}</div></div>
-      <div class="min-w-0 flex-1 text-base text-emerald-700 tabular-nums">每${it.unit} ${it.kcal} 大卡</div>
-      <button type="button" class="party-step party-minus" data-party-minus="${it.code}" aria-label="${esc(it.name)}少一${it.unit}" ${n ? '' : 'disabled'}>−</button>
-      <span class="party-count">${n}</span>
-      <button type="button" class="party-step party-plus" data-party-plus="${it.code}" aria-label="${esc(it.name)}多一${it.unit}">＋</button>
-      ${d.weigh ? weighRow(it, d) : ''}
-    </div>`;
-  }).join('');
-  const t = partyTotals(tpl, counts);
-  $('partyKcal').textContent = t.kcal;
-  $('partyMacro').textContent = t.kcal ? `蛋白質 ${t.p}g・碳水 ${t.c}g・脂肪 ${t.f}g` : '';
-  $('partySaveBtn').textContent = t.kcal ? '記到' + MEAL_META[ui.meal].label + '（' + t.kcal + ' 大卡）' : '記下來';
-  renderPartyTile();
-}
-// 秤重模式：每一類一張「一顆放在秤上」的照片＋一顆幾公克
+/* ---------------- 吃到飽速記（Rev. 43 移除） ---------------- */
+// 舊版留在這台裝置、還沒記下來的速記（meta.party）：開 App 時問一次，記到開始那天，不會默默丟掉
 const partyPhotoKey = (code) => 'party_' + code;
-function weighRow(it, d) {
-  const shot = d.photos && d.photos[it.code];
-  const g = (d.grams && d.grams[it.code]) || '';
-  return `<div class="w-full flex flex-wrap items-center gap-2 pt-2 border-t border-stone-200">
-    <button type="button" data-party-shot="${it.code}" class="btn-secondary flex-1 whitespace-nowrap">${shot ? '✓ 已拍・重拍' : '📷 拍秤重照'}</button>
-    <label class="flex items-center gap-1 text-base text-stone-700 whitespace-nowrap">一${it.unit}<input type="number" inputmode="decimal" step="any" min="0" data-party-g="${it.code}" value="${esc(String(g))}" class="field tabular-nums text-lg" style="width:5.5rem" placeholder="0" />公克</label>
-  </div>`;
-}
-function renderPartyTile() {
-  const d = partyDraft();
-  $('partyTileSub').textContent = partyStarted(d)
-    ? '進行中：目前 ' + partyTotals(partyTemplate(d.tpl), d.counts).kcal + ' 大卡，點這裡繼續'
-    : '拿一輪按一下，最後自動算熱量';
-}
-function setPartyCount(code, n) {
-  const d = partyDraft();
-  if (!d) return;
-  d.counts = { ...(d.counts || {}) };
-  if (n > 0) d.counts[code] = n; else delete d.counts[code];
-  if (!partyStarted({ ...d, counts: d.counts })) d.at = now();   // 從頭開始算的時間
-  persistLocal();
-  renderParty();
-}
-$('partyRows').addEventListener('click', (e) => {
-  const plus = e.target.closest('[data-party-plus]');
-  const minus = e.target.closest('[data-party-minus]');
-  const d = partyDraft();
-  if (!d || (!plus && !minus)) return;
-  const code = (plus || minus).getAttribute(plus ? 'data-party-plus' : 'data-party-minus');
-  const n = (d.counts && d.counts[code]) || 0;
-  setPartyCount(code, plus ? n + 1 : Math.max(0, n - 1));
-});
-$('partyWeighToggle').addEventListener('change', (e) => {
-  const d = partyDraft();
-  if (!d) return;
-  d.weigh = e.target.checked;
-  persistLocal();
-  renderParty();
-});
-let partyShotCode = null;
-$('partyRows').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-party-shot]');
-  if (!b) return;
-  partyShotCode = b.getAttribute('data-party-shot');
-  $('partyPhotoInput').click();
-});
-$('partyPhotoInput').addEventListener('change', async (e) => {
-  const file = e.target.files && e.target.files[0];
-  e.target.value = '';
-  const d = partyDraft();
-  if (!file || !d || !partyShotCode) return;
-  try {
-    await savePhoto(partyPhotoKey(partyShotCode), await compressImage(file, 1280));   // 秤上的數字要看得清楚
-  } catch (err) { showToast('照片存不起來，請再試一次'); return; }
-  d.photos = { ...(d.photos || {}), [partyShotCode]: true };
-  persistLocal();
-  renderParty();
-  showToast('已拍好，記得在旁邊填幾公克');
-});
-$('partyRows').addEventListener('change', (e) => {
-  const inp = e.target.closest('[data-party-g]');
-  const d = partyDraft();
-  if (!inp || !d) return;
-  const code = inp.getAttribute('data-party-g');
-  const g = cleanGrams(inp.value);
-  d.grams = { ...(d.grams || {}) };
-  if (g) d.grams[code] = g; else delete d.grams[code];
-  persistLocal();
-});
 async function clearPartyPhotos(d) {
   await Promise.all(Object.keys((d && d.photos) || {}).map(code => deletePhoto(partyPhotoKey(code)).catch(() => {})));
 }
-$('partyPasteBtn').addEventListener('click', () => {
-  const d = partyDraft();
-  const tpl = partyTemplate(d && d.tpl);
-  const { counts, unknown } = parsePartyText($('partyPaste').value, tpl);
-  const codes = Object.keys(counts);
-  if (!codes.length) { showToast('沒有讀到數量。寫法像「A1: 3」'); return; }
-  d.counts = { ...(d.counts || {}), ...counts };
-  persistLocal();
-  renderParty();
-  showToast('讀到 ' + codes.length + ' 樣' + (unknown.length ? '；看不懂的代碼：' + unknown.join('、') : ''), null, null, unknown.length ? 6000 : 0);
-});
-$('partyMemoBtn').addEventListener('click', async () => {
-  const d = partyDraft();
-  try { await navigator.clipboard.writeText(partyMemo(partyTemplate(d && d.tpl))); showToast('已複製，到備忘錄貼上就可以用'); }
-  catch (e) { showToast('這台裝置不能自動複製'); }
-});
-$('partyResetBtn').addEventListener('click', () => {
-  const d = partyDraft();
-  if (!partyStarted(d)) return;
-  openConfirm('全部清空？', '目前記的數量、秤重照片和重量會全部清掉。', () => {
-    clearPartyPhotos(d);
-    state.meta.party = { tpl: d.tpl, counts: startCounts(partyTemplate(d.tpl)), at: now(), weigh: d.weigh };
-    persistLocal();
-    renderParty();
-  }, '清空', null, '不要');
-});
-$('partySaveBtn').addEventListener('click', () => {
-  const d = partyDraft();
-  const tpl = partyTemplate(d && d.tpl);
-  const list = d ? partyEntries(tpl, d.counts, d.grams) : [];
-  if (!list.length) { showToast('還沒有按任何一樣'); return; }
-  // 秤了重卻沒按吃了幾個：照片和重量沒有記錄可以跟，會不見，先問
-  const counted = new Set(list.map(e => e.party.code));
-  const lost = tpl.items.filter(it => !counted.has(it.code) && ((d.photos && d.photos[it.code]) || (d.grams && d.grams[it.code])));
-  if (lost.length) {
-    openConfirm('有秤重、但沒按吃了幾個', lost.map(it => it.code + ' ' + it.name).join('、') + ' 的秤重照片和重量不會存。有吃的話請先按 ＋。', savePartyNow, '照樣記下來', null, '回去按 ＋');
-    return;
-  }
-  savePartyNow();
-});
-async function savePartyNow() {
-  const d = partyDraft();
+function rescuePartyDraft() {
+  const d = state.meta.party;
   if (!d) return;
-  const list = partyEntries(partyTemplate(d.tpl), d.counts, d.grams);
-  // 秤重照跟著那一類的記錄存（營養師看得到「一顆」有多大）
-  const items = await Promise.all(list.map(async entry => ({
-    entry, photo: d.photos && d.photos[entry.party.code] ? await getPhoto(partyPhotoKey(entry.party.code)) : null
-  })));
-  delete state.meta.party;
-  saveGroup(items);
-  clearPartyPhotos(d);
-  closeScreen();
+  const tpl = partyTemplate(d.tpl);
+  const list = partyEntries(tpl, d.counts, d.grams);
+  const base = startCounts(tpl);
+  const touched = Object.keys(d.counts || {}).some(k => d.counts[k] !== (base[k] || 0));
+  const drop = () => { clearPartyPhotos(d); delete state.meta.party; persistLocal(); };
+  if (!touched || !list.length) { drop(); return; }
+  const at = new Date(d.at || now());
+  const date = toDateStr(at);
+  const h = at.getHours();
+  const meal = h < 10 ? 'breakfast' : h < 15 ? 'lunch' : 'dinner';
+  const label = (at.getMonth() + 1) + '/' + at.getDate() + ' ' + MEAL_META[meal].label;
+  const save = async () => {
+    const items = await Promise.all(list.map(async entry => ({
+      entry, photo: d.photos && d.photos[entry.party.code] ? await getPhoto(partyPhotoKey(entry.party.code)) : null
+    })));
+    const keep = { date: ui.date, meal: ui.meal };
+    ui.date = date; ui.meal = meal;
+    saveGroup(items);
+    ui.date = keep.date; ui.meal = keep.meal;
+    drop();
+    renderAll();
+    showToast('已記到 ' + label);
+  };
+  openConfirm('上次的吃到飽速記還沒記下來',
+    '共 ' + partyTotals(tpl, d.counts).kcal + ' 大卡（' + list.length + ' 樣）。吃到飽速記已經拿掉了，要把這份記到 ' + label + ' 嗎？之後可以再改。',
+    save, '記下來', () => openConfirm('不要這份速記？', '刪掉就找不回來了。', drop, '刪掉', null, '留著'), '不要了');
 }
 $('extGoogleSearchBtn').addEventListener('click', () => {
   const q = $('extSearchInput').value.trim() || '台灣外食';
@@ -4043,7 +3904,7 @@ function openFromUrl() {
   } else {
     autoSyncOnOpen();
     if (shouldWelcome()) openScreen('scr-welcome');
-    else openFromUrl();
+    else { openFromUrl(); rescuePartyDraft(); }
   }
   if (navigator.storage && navigator.storage.persist) {
     try { await navigator.storage.persist(); } catch (e) { /* ignore */ }

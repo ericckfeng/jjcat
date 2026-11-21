@@ -243,14 +243,6 @@ textarea.field { min-height: 0; resize: vertical; }
 .tile.tile-wide .tile-ic { font-size: 2rem; }
 
 /* 吃到飽速記：每一列＝名稱＋大的 − 數量 ＋ */
-.party-total { position: sticky; top: -1rem; z-index: 1; }
-.party-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; background: #fff; border: 1px solid var(--stone-200, #e7e5e4); border-radius: 1rem; padding: .6rem .75rem; }
-.party-row.party-on { border-color: #34d399; background: #ecfdf5; }
-.party-step { width: 3rem; height: 3rem; border-radius: .9rem; font-size: 1.75rem; font-weight: 700; line-height: 1; flex-shrink: 0; }
-.party-minus { background: var(--stone-100); color: var(--stone-700, #44403c); }
-.party-plus { background: var(--emerald); color: #fff; }
-.party-step:disabled { opacity: .35; }
-.party-count { min-width: 2.25rem; text-align: center; font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* 一筆記錄的照片（最多 3 張）：縮圖＋右上角移除，最後一格是「加照片」 */
 .photo-strip { display: flex; flex-wrap: wrap; gap: .5rem; }

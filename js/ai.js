@@ -9,6 +9,7 @@
 // 模型用 -latest 別名，舊版下架時不必改程式；找不到模型（404）才換下一個。
 
 import { kjToKcal } from './foods.js';
+import { parsePastedTable } from './packs.js';
 
 export const AI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/';
 export const AI_MODELS = ['gemini-flash-latest', 'gemini-3.5-flash-lite'];
@@ -262,4 +263,75 @@ export async function runAiCheck({ key, labelImage, fetchFn = fetch, clock = () 
 export function checkReport(steps) {
   return steps.map(s => (s.ok ? '✓ ' : '✗ ') + s.name + '：' + (s.ok ? '正常' : '失敗') + '（' + (s.ms / 1000).toFixed(1) + ' 秒' +
     (s.model ? '，' + s.model : '') + '）' + (s.note ? '\n  ' + s.note : '') + (s.kind && s.kind !== 'wrong' ? '\n  代碼：' + [s.kind, s.detail].filter(Boolean).join(' ') : '')).join('\n');
+}
+
+/* ---------------- 用自己的 AI App（不用 Key：複製提示詞 → 傳照片 → 貼回答） ---------------- */
+// 回答一律請 AI 用表格（```csv）；貼回來時 Markdown 表格、「名稱：xx」一行一行也讀得懂。
+// 讀回來後整理成和 Gemini 回傳一樣的形狀，再走同一個 normalizeMeal／normalizeLabel。
+export const MEAL_PASTE_HEAD = ['名稱', '克數', '熱量(kcal)', '蛋白質(g)', '碳水(g)', '脂肪(g)', '全穀雜糧(份)', '豆魚蛋肉(份)', '蔬菜(份)', '水果(份)', '乳品(份)', '油脂與堅果種子(份)'];
+export function mealPastePrompt(text) {
+  return [
+    '你是台灣的營養師助理。請看我傳的照片（或我的描述），辨識這一餐吃了哪些食物，每一樣分開列出（例如便當要拆成飯、主菜、各樣配菜）。',
+    '請只回一個 CSV 表格，放在 ```csv 程式碼區塊裡，不要其他說明。第一列是欄位名稱，固定是：',
+    MEAL_PASTE_HEAD.join(','),
+    '名稱用台灣常用的繁體中文；克數是估計的可食重量（飲料用毫升當克）；熱量、蛋白質、碳水、脂肪是這個份量的總量；六大類份數依台灣國民健康署「食物代換表」估，沒有就填 0。只寫數字，不加單位。',
+    '不確定的也列出最可能的食物。不是食物的話，回答「沒有食物」。',
+    text ? '我的描述：' + text : ''
+  ].filter(Boolean).join('\n');
+}
+export const LABEL_PASTE_HEAD = ['名稱', '每份克數', '本包裝份數', '熱量(kcal)', '千焦耳(kJ)', '蛋白質(g)', '脂肪(g)', '碳水(g)', '糖(g)', '鈉(mg)'];
+export const LABEL_PASTE_PROMPT = [
+  '這是台灣食品包裝上的「營養標示」照片。請讀出每一份的數值。',
+  '請只回一個 CSV 表格，放在 ```csv 程式碼區塊裡，不要其他說明。第一列是欄位名稱，固定是：',
+  LABEL_PASTE_HEAD.join(','),
+  '第二列是數值，只寫數字、不加單位。標示只有「每 100 公克（毫升）」的，每份克數填 100、數值照每 100 公克填。標示上只有千焦耳的，填在千焦耳、熱量留空，不要自己換算。名稱是產品名稱，看不到就留空。',
+  '照片裡找不到營養標示的話，回答「找不到營養標示」。'
+].join('\n');
+
+// 貼上的回答 → 表格。表格讀不到時，試試「名稱：xx」一行一行的寫法
+function pastedTable(text) {
+  const rows = parsePastedTable(text);
+  if (rows.length >= 2 && rows[0].length >= 2) return rows;   // 只有一欄的不是表格（例如一行一行寫的）
+  const kv = String(text || '').split(/\r?\n/).map(l => l.match(/^\s*[-*•]?\s*([^:：|]{1,20})[:：]\s*(.+?)\s*$/)).filter(Boolean);
+  return kv.length >= 2 ? [kv.map(m => m[1].trim()), kv.map(m => m[2].trim())] : [];
+}
+// 空白＝不知道：回傳 undefined（和 Gemini 沒給的欄位一樣；null 會被 numOr 當成 0）
+const num = (v) => { const t = String(v == null ? '' : v).replace(/,/g, '').replace(/[^\d.]/g, ''); const n = Number(t); return t !== '' && Number.isFinite(n) ? n : undefined; };
+function colFinder(head) {
+  const h = head.map(x => String(x || '').replace(/\s/g, ''));
+  return (words, not = null) => h.findIndex(x => words.some(w => x.includes(w)) && !(not && not.test(x)));
+}
+
+// 一餐 → 和 normalizeMeal 一樣的 { items, note }（讀不到表格：items 空的）
+export function mealFromPaste(text) {
+  const rows = pastedTable(text);
+  if (rows.length < 2) return normalizeMeal({ items: [], note: '' });
+  const col = colFinder(rows[0]);
+  const c = {
+    name: col(['名稱', '食物', '品項']), grams: col(['克數', '重量', '份量']), kcal: col(['熱量', '大卡']),
+    p: col(['蛋白質']), carb: col(['碳水', '醣類']), fat: col(['脂肪'], /油脂與堅果|油脂\(份|份/),
+    grain: col(['全穀', '主食']), prot: col(['豆魚蛋肉', '蛋白質類']), veg: col(['蔬菜']), fruit: col(['水果']), dairy: col(['乳品', '奶']), oil: col(['油脂與堅果', '油脂(份'])
+  };
+  if (c.name < 0) return normalizeMeal({ items: [], note: '' });
+  const at = (r, i) => (i >= 0 ? r[i] : '');
+  const items = rows.slice(1).map(r => ({
+    name: at(r, c.name), grams: num(at(r, c.grams)), kcal: num(at(r, c.kcal)),
+    protein: num(at(r, c.p)), carbs: num(at(r, c.carb)), fat: num(at(r, c.fat)),
+    exchanges: { grain: num(at(r, c.grain)), protein: num(at(r, c.prot)), vegetable: num(at(r, c.veg)), fruit: num(at(r, c.fruit)), dairy: num(at(r, c.dairy)), oil: num(at(r, c.oil)) }
+  }));
+  return normalizeMeal({ items, note: '' });
+}
+
+// 營養標示 → 和 normalizeLabel 一樣（讀不到是 null）
+export function labelFromPaste(text) {
+  const rows = pastedTable(text);
+  if (rows.length < 2) return null;
+  const col = colFinder(rows[0]);
+  const r = rows[1];
+  const at = (i) => (i >= 0 ? r[i] : '');
+  return normalizeLabel({
+    name: at(col(['名稱', '品名', '產品'])), serving_g: num(at(col(['每份克數', '每一份量', '每份', '克數']))), servings_per_package: num(at(col(['包裝份數', '本包裝']))),
+    kcal: num(at(col(['熱量', '大卡'], /千焦/))), kj: num(at(col(['千焦', 'kJ', 'kj']))), protein: num(at(col(['蛋白質']))), fat: num(at(col(['脂肪'], /飽和|反式/))),
+    carbs: num(at(col(['碳水', '醣類']))), sugar: num(at(col(['糖'], /醣/))), sodium_mg: num(at(col(['鈉'])))
+  });
 }

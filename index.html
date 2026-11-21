@@ -634,8 +634,20 @@
       <button type="button" id="aiMicBtn" class="hidden btn-secondary w-full">🎤 按一下開始說話</button>
       <div id="aiStatus" class="hidden rounded-2xl whitespace-pre-line break-words p-3 text-base leading-relaxed"></div>
       <button type="button" id="aiFallbackBtn" class="hidden btn-primary w-full">📷 先用「拍照記」存起來，之後再查</button>
+      <button type="button" id="aiPasteFallbackBtn" class="hidden btn-secondary w-full">📤 改用我的 AI App（ChatGPT、Gemini…）</button>
+      <div id="aiPasteWrap" class="hidden rounded-2xl bg-white border border-stone-200 p-3 space-y-3">
+        <ol class="list-decimal pl-6 space-y-1 text-base text-stone-700 leading-relaxed">
+          <li>在 AI App 裡<b>長按輸入框 →「貼上」</b>（說明已經複製好了），送出。</li>
+          <li>AI 回答後，<b>長按回答 →「複製」</b>。</li>
+          <li>回到這裡，貼在下面，按「讀入」。</li>
+        </ol>
+        <p id="aiPasteHint" class="hidden rounded-xl bg-amber-50 text-amber-900 p-2 text-base leading-relaxed"></p>
+        <button type="button" id="aiPhotoSaveBtn" class="hidden btn-secondary w-full">💾 下載這張照片（傳給 AI 用）</button>
+        <textarea id="aiPasteText" rows="4" class="field text-base" placeholder="把 AI 的回答貼在這裡"></textarea>
+        <button type="button" id="aiPasteReadBtn" class="btn-primary w-full">讀入 AI 的回答</button>
+      </div>
       <div id="aiResults" class="space-y-2"></div>
-      <p class="text-sm text-stone-500 leading-relaxed">照片和文字會傳到 Google 的 Gemini 辨識。AI 估的份量和熱量可能有誤差，加入後還可以改克數。</p>
+      <p id="aiPrivacyNote" class="text-sm text-stone-500 leading-relaxed">照片和文字會傳到 Google 的 Gemini 辨識。AI 估的份量和熱量可能有誤差，加入後還可以改克數。</p>
     </div>
     <div class="scr-foot">
       <button type="button" id="aiGoBtn" class="btn-primary btn-xl w-full">請 AI 幫我認</button>
@@ -655,6 +667,13 @@
         <button type="button" id="aiCheckCopy" class="btn-secondary w-full hidden">複製檢查結果（傳給開發者）</button>
         <button type="button" id="aiOffBtn" class="btn-secondary w-full">關閉 AI，並刪除這支手機上的 Key</button>
       </div>
+      <div class="rounded-2xl bg-white border border-stone-200 p-4 space-y-3">
+        <div class="text-lg font-bold text-stone-900">沒有 Key 也可以：用自己的 AI App</div>
+        <p class="text-base text-stone-700 leading-relaxed">用手機上的 ChatGPT、Gemini 等 App（免費版也可以）。拍照後按「傳給我的 AI App」，在 AI App 貼上說明、送出，再把回答複製回來。<b>步驟比較多，適合家人在旁邊幫忙時用。</b>照片由你自己傳給你選的 AI App，這個 App 不會另外傳送。</p>
+        <p id="aiPasteState" class="text-base font-semibold"></p>
+        <button type="button" id="aiPasteToggle" class="btn-secondary w-full"></button>
+      </div>
+      <div class="text-lg font-bold text-stone-900 pt-2">用 Google 的 Key（自動，不用複製貼上）</div>
       <p class="text-lg text-stone-800 leading-relaxed">開啟後，可以<b>拍一餐、說一句話</b>讓 AI 拆成一樣一樣記，也可以<b>拍包裝的營養標示</b>自動填數字。需要一把自己的 Google「API Key」，免費、不用綁信用卡。</p>
       <ol class="space-y-3 text-lg text-stone-800 leading-relaxed list-decimal pl-6">
         <li>按下面的按鈕，用自己的 Google 帳號登入 Google AI Studio。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="btn-secondary block w-full mt-2 text-center">打開 Google AI Studio</a></li>

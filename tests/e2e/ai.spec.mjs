@@ -231,3 +231,109 @@ test('AI 太忙或次數用完：拍的照片一起帶到「拍照記」，存�
   await page.click('#aiTile');
   await expect(page.locator('#aiFallbackBtn')).toBeHidden();
 });
+
+/* ---------------- 用自己的 AI App（不用 Key） ---------------- */
+// 假的分享選單：記下傳了什麼，馬上成功
+async function fakeShare(page, { canShareFiles = true } = {}) {
+  await page.addInitScript((can) => {
+    window.__shared = [];
+    navigator.share = async (d) => { window.__shared.push({ text: d.text, files: (d.files || []).map(f => f.name + ':' + f.type) }); };
+    navigator.canShare = (d) => can || !(d && d.files);
+  }, canShareFiles);
+}
+async function enablePaste(page) {
+  await openSettings(page, '#aiSetupBtn');
+  await page.click('#aiPasteToggle');
+  await closeScreens(page);
+}
+const MEAL_ANSWER = '以下是結果：\n```csv\n名稱,克數,熱量(kcal),蛋白質(g),碳水(g),脂肪(g),全穀雜糧(份),豆魚蛋肉(份),蔬菜(份),水果(份),乳品(份),油脂與堅果種子(份)\n白飯,200,280,5,62,0.5,4,0,0,0,0,0\n滷排骨,120,330,22,8,23,0,3,0,0,0,2\n```';
+
+test('沒有 Key：設定開「用自己的 AI App」→ 拍一餐 → 分享給 AI App（照片＋說明）→ 貼回答 → 拆成一樣一樣記下來', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await fakeShare(page);
+  const calls = await mockGemini(page, () => ({ status: 500, body: '' }));
+  await openApp(page);
+  await expect(page.locator('#aiTile')).toBeHidden();
+  await openSettings(page, '#aiSetupBtn');
+  await page.click('#aiPasteToggle');
+  await expect(page.locator('#aiPasteState')).toContainText('已開啟');
+  await closeScreens(page);
+  await page.click('#aiTile');
+  await expect(page.locator('#aiGoBtn')).toHaveText('📤 傳給我的 AI App');
+  await expect(page.locator('#aiPrivacyNote')).toContainText('由你自己傳給你選的 AI App');
+  await page.setInputFiles('#aiPhotoInput', photo);
+  await page.click('#aiGoBtn');
+  await expect(page.locator('#aiPasteWrap')).toBeVisible();
+  const shared = await page.evaluate(() => window.__shared);
+  expect(shared).toHaveLength(1);
+  expect(shared[0].files[0]).toMatch(/^照片\.jpg:image\//);
+  expect(shared[0].text).toContain('名稱,克數,熱量(kcal)');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('名稱,克數,熱量(kcal)');
+  await expect(page.locator('#aiPhotoSaveBtn')).toBeHidden();
+  await page.fill('#aiPasteText', '我沒辦法看');
+  await page.click('#aiPasteReadBtn');
+  await expect(page.locator('#aiStatus')).toContainText('讀不到 AI 的回答');
+  await page.fill('#aiPasteText', MEAL_ANSWER);
+  await page.click('#aiPasteReadBtn');
+  await expect(page.locator('#aiResults .pick-row')).toHaveCount(2);
+  await page.click('#aiAddBtn');
+  await page.click('#foodCartSaveBtn');
+  const day = (await appState(page)).logs[await page.evaluate(() => window.__dietApp.ui.date)];
+  expect(day.map(e => [e.name, e.kcal, e.ai])).toEqual([['白飯 200g', 280, 'photo'], ['滷排骨 120g', 330, 'photo']]);
+  expect(calls).toHaveLength(0);   // 沒有 Key：App 不會自己連 Gemini
+  expect((await appState(page)).meta.aiPaste).toBe(true);
+});
+
+test('不能分享的裝置（電腦）：說明複製好，提示自己打開 AI 網站，可以下載照片', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await fakeShare(page, { canShareFiles: false });
+  await openApp(page);
+  await enablePaste(page);
+  await page.click('#aiTile');
+  await page.setInputFiles('#aiPhotoInput', photo);
+  await page.click('#aiGoBtn');
+  await expect(page.locator('#aiPasteHint')).toContainText('說明已經複製好了');
+  await expect(page.locator('#aiPhotoSaveBtn')).toBeVisible();
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#aiPhotoSaveBtn')]);
+  expect(dl.suggestedFilename()).toMatch(/^照片_.*\.jpg$/);
+});
+
+test('拍營養標示：傳給自己的 AI App → 貼回答 → 填好標示和熱量', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await fakeShare(page);
+  await openApp(page);
+  await enablePaste(page);
+  await page.click('[data-screen=scr-manual]');
+  await page.click('#add-lb summary');
+  await expect(page.locator('[data-lb-photo=add]')).toContainText('可以傳給你的 AI App 讀');
+  await page.setInputFiles('#add-lb-file', photo);
+  await expect(page.locator('#add-lb-paste')).toBeVisible();
+  await page.click('[data-lb-share=add]');
+  await expect.poll(() => page.evaluate(() => window.__shared.length)).toBe(1);
+  expect((await page.evaluate(() => window.__shared[0].text))).toContain('名稱,每份克數,本包裝份數');
+  await page.fill('#add-lb-pastetext', '```csv\n名稱,每份克數,本包裝份數,熱量(kcal),千焦耳(kJ),蛋白質(g),脂肪(g),碳水(g),糖(g),鈉(mg)\n燕麥片,30,10,115,,3.5,2,20,1,45\n```');
+  await page.click('[data-lb-pasteread=add]');
+  await expect(page.locator('#add-lb-g')).toHaveValue('30');
+  await expect(page.locator('#foodKcalInput')).toHaveValue('115');
+  await expect(page.locator('#foodNameInput')).toHaveValue('燕麥片');
+  await expect(page.locator('#add-lb-paste')).toBeHidden();
+});
+
+test('有 Key 但次數用完：可以改用自己的 AI App', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await fakeShare(page);
+  await mockGemini(page, (body) => body.contents[0].parts[0].text.includes('{"ok": true}') ? reply({ ok: true })
+    : { status: 429, contentType: 'application/json', body: JSON.stringify({ error: { code: 429, status: 'RESOURCE_EXHAUSTED' } }) });
+  await openApp(page);
+  await enableAi(page);
+  await page.click('#aiTile');
+  await expect(page.locator('#aiGoBtn')).toHaveText('請 AI 幫我認');
+  await page.fill('#aiText', '一碗白飯、一塊滷排骨');
+  await page.click('#aiGoBtn');
+  await page.click('#aiPasteFallbackBtn');
+  await expect.poll(() => page.evaluate(() => window.__shared.length)).toBe(1);
+  expect(await page.evaluate(() => window.__shared[0].text)).toContain('我的描述：一碗白飯、一塊滷排骨');
+  await page.fill('#aiPasteText', MEAL_ANSWER);
+  await page.click('#aiPasteReadBtn');
+  await expect(page.locator('#aiResults .pick-row')).toHaveCount(2);
+});

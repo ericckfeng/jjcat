@@ -144,3 +144,26 @@ test('檢查 AI：文字和照片都正常；文字失敗就不再試照片；�
   assert.equal(wrong[1].ok, false);
   assert.match(checkReport(wrong), /AI 讀到 12 大卡（應該是 123）/);
 });
+
+test('用自己的 AI App：提示詞要表格；貼回的回答（```csv、Markdown、一行一行）讀回成一樣的形狀', async () => {
+  const { mealPastePrompt, mealFromPaste, labelFromPaste, LABEL_PASTE_PROMPT, MEAL_PASTE_HEAD } = await import('../../js/ai.js');
+  assert.ok(mealPastePrompt('一碗白飯').includes(MEAL_PASTE_HEAD.join(',')));
+  assert.match(mealPastePrompt('一碗白飯'), /我的描述：一碗白飯$/);
+  const meal = mealFromPaste('好的，以下是辨識結果：\n```csv\n' + MEAL_PASTE_HEAD.join(',') + '\n白飯,200,280,5,62,0.5,4,0,0,0,0,0\n滷排骨,120,330,22,8,23,0,3,0,0,0,2\n```');
+  assert.deepEqual(meal.items, [
+    { name: '白飯', grams: 200, kcal: 280, p: 5, c: 62, f: 0.5, ex: { grain: 4 } },
+    { name: '滷排骨', grams: 120, kcal: 330, p: 22, c: 8, f: 23, ex: { prot: 3, oil: 2 } }
+  ]);
+  const md = mealFromPaste('| 名稱 | 克數 | 熱量(kcal) |\n|---|---|---|\n| 茶葉蛋 | 55 | 75 kcal |');
+  assert.deepEqual(md.items.map(i => [i.name, i.grams, i.kcal]), [['茶葉蛋', 55, 75]]);
+  assert.deepEqual(mealFromPaste('沒有食物').items, []);
+
+  assert.match(LABEL_PASTE_PROMPT, /名稱,每份克數,本包裝份數,熱量\(kcal\)/);
+  assert.deepEqual(labelFromPaste('```csv\n名稱,每份克數,本包裝份數,熱量(kcal),千焦耳(kJ),蛋白質(g),脂肪(g),碳水(g),糖(g),鈉(mg)\n燕麥片,30,10,115,,3.5,2,20,1,45\n```'),
+    { name: '燕麥片', servingG: 30, servings: 10, kcal: 115, kj: null, p: 3.5, c: 20, f: 2, sugar: 1, na: 45 });
+  // 一行一行的寫法；只有千焦耳 → 換成大卡
+  const lb = labelFromPaste('名稱：某餅乾\n每份克數：25 公克\n熱量：\n千焦耳：502\n蛋白質：1.5 公克');
+  assert.equal(lb.kcal, 120);
+  assert.equal(lb.servingG, 25);
+  assert.equal(labelFromPaste('找不到營養標示'), null);
+});

@@ -48,7 +48,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/targets.js` | **純函式**：依體重試算目標（Mifflin-St Jeor、熱量底線、三大營養素、喝水目標、重算提醒）（有單元測試） |
 | `js/highlights.js` | **純函式**：營養師報告頂端的「本週重點」（有單元測試） |
 | `js/bank.js` | **純函式**：熱量銀行（一週總量控管、今天的建議熱量、營養素調整）（有單元測試） |
-| `js/ai.js` | AI 辨識：呼叫 Gemini（使用者自己的 Key，存 `meta.ai`）、整理回傳資料（純函式有單元測試）。只能用 CORS 允許的 `content-type`、`x-goog-api-key` 標頭 |
+| `js/ai.js` | AI 辨識：呼叫 Gemini（使用者自己的 Key，存 `meta.ai`）、整理回傳資料（純函式有單元測試）。只能用 CORS 允許的 `content-type`、`x-goog-api-key` 標頭。也有「用自己的 AI App」（不用 Key，`meta.aiPaste`）的提示詞和讀回答（`mealPastePrompt`、`mealFromPaste`、`labelFromPaste`） |
 | `js/party.js` | **純函式**：吃到飽速記的範本與換算。**畫面 Rev. 43 已拿掉**，只用來把舊版留在裝置上、還沒記下來的速記（`meta.party`）記成記錄（有單元測試） |
 | `js/myfoods.js` | **純函式**：我的食物（`customFoods`）：新增頁表單 ↔ 每 100 g／每份、以份計的換算、搜尋、依常用排序（有單元測試） |
 | `js/combos.js` | **純函式**：套餐（`combos`）：購物車 → 套餐（每樣存 `snapshot`）、選套餐時找回現在的食物（找不到用 snapshot）、合計、搜尋、排序（有單元測試） |

@@ -23,6 +23,7 @@ import { HAND_REFS, AMOUNTS, LOOKUP_CATS, lookupCat, cleanAmount, amountText, si
 import { partyTemplate, startCounts, partyEntries, partyTotals } from './party.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros } from './bank.js';
+import { mealPastePrompt, LABEL_PASTE_PROMPT, mealFromPaste, labelFromPaste } from './ai.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
@@ -929,7 +930,7 @@ function openScreen(id) {
   if (id === 'scr-about') { renderAbout(); checkLatest(true); }
   if (id === 'scr-data') { renderCloud(); renderBackupInfo(); }   // 關掉自動同步的人也要看得到雲端區塊
   if (id === 'scr-weekly') renderWeekly();
-  if (id === 'scr-ai') { resetAi(); $('aiFallbackBtn').classList.add('hidden'); }
+  if (id === 'scr-ai') { resetAi(); ['aiFallbackBtn', 'aiPasteFallbackBtn', 'aiPasteWrap'].forEach(x => $(x).classList.add('hidden')); $('aiPasteText').value = ''; }
   if (id === 'scr-manual') { setBox('add-lb-note', null, ''); manualBarcode = ''; }
   if (id === 'scr-aikey') renderAiKey();
   if (id === 'scr-sleep') renderSleepScreen();
@@ -1924,15 +1925,50 @@ function setBox(id, tone, text) {
   if (text) el.classList.add(...({ info: ['bg-sky-50', 'text-sky-900'], err: ['bg-rose-50', 'text-rose-800'], ok: ['bg-emerald-50', 'text-emerald-900'] }[tone]));
   el.textContent = text || '';
 }
+// 用自己的 AI App（複製貼上，不用 Key）：只存這台裝置的開關
+const aiPasteOn = () => Boolean(state.meta.aiPaste);
 function renderAiUi() {
   const on = Boolean(aiKey());
-  $('aiTile').classList.toggle('hidden', !on);
+  $('aiTile').classList.toggle('hidden', !on && !aiPasteOn());
   document.querySelectorAll('[data-lb-photo]').forEach(b => { b.textContent = labelPhotoText(); });
-  $('aiStatusText').textContent = on ? '已開啟（Key 只存在這支手機）' : '關閉・用自己的免費 Google API Key';
+  $('aiStatusText').textContent = on ? '已開啟（Key 只存在這支手機）' : aiPasteOn() ? '用自己的 AI App（複製貼上）' : '關閉・用自己的免費 Google API Key';
+  $('aiGoBtn').textContent = on ? '請 AI 幫我認' : '📤 傳給我的 AI App';
+  $('aiPrivacyNote').textContent = (on ? '照片和文字會傳到 Google 的 Gemini 辨識。' : '照片和說明由你自己傳給你選的 AI App，這個 App 不會另外傳送。') + 'AI 估的份量和熱量可能有誤差，加入後還可以改克數。';
+}
+// 照片（data URL）→ 檔案：同步轉，按下按鈕後馬上叫出分享選單（iPhone 要求不能先等別的事）
+function dataUrlToFile(dataUrl, name) {
+  const m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl || '');
+  if (!m) return null;
+  const bin = atob(m[2]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new File([bytes], name, { type: m[1] });
+}
+// 把說明複製好、照片用分享選單傳給 AI App。回傳 'shared'｜'copied'（不能分享，只複製了）｜'aborted'｜'failed'
+async function shareToAi(prompt, photo) {
+  let copied = Promise.resolve(false);
+  try { copied = navigator.clipboard.writeText(prompt).then(() => true, () => false); } catch (e) { /* 不能複製 */ }
+  const file = photo ? dataUrlToFile(photo, '照片.jpg') : null;
+  const data = file ? { files: [file], text: prompt } : { text: prompt };
+  try {
+    if (navigator.share && (!file || (navigator.canShare && navigator.canShare({ files: [file] })))) {
+      await navigator.share(data);
+      return 'shared';
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return 'aborted';
+  }
+  return (await copied) ? 'copied' : 'failed';
+}
+function savePhotoFile(photo) {
+  const file = dataUrlToFile(photo, '照片_' + todayStr() + '.jpg');
+  if (file) downloadBlob(file.name, file);
 }
 
 // 設定頁
 function renderAiKey() {
+  $('aiPasteState').textContent = aiPasteOn() ? '✓ 已開啟：首頁有「AI 幫我認」' : '目前沒有開啟';
+  $('aiPasteToggle').textContent = aiPasteOn() ? '關閉「用自己的 AI App」' : '開啟「用自己的 AI App」';
   const on = Boolean(aiKey());
   $('aiKeyOn').classList.toggle('hidden', !on);
   $('aiKeyInput').value = '';
@@ -1941,6 +1977,13 @@ function renderAiKey() {
   $('aiCheckCopy').classList.add('hidden');
   setBox('aiKeyStatus', null, '');
 }
+$('aiPasteToggle').addEventListener('click', () => {
+  state.meta.aiPaste = !aiPasteOn();
+  persistLocal();
+  renderAll();
+  renderAiKey();
+  if (aiPasteOn()) showToast('已開啟。首頁多了「AI 幫我認」');
+});
 $('aiKeySaveBtn').addEventListener('click', async () => {
   const key = $('aiKeyInput').value.trim();
   if (!key) { setBox('aiKeyStatus', 'err', '請先貼上 API Key'); return; }
@@ -2057,6 +2100,7 @@ $('aiResults').addEventListener('change', (e) => {
 $('aiGoBtn').addEventListener('click', async () => {
   const text = $('aiText').value.trim();
   if (!aiDraft.photo && !text) { setBox('aiStatus', 'err', '請先拍照，或用說的、打字描述吃了什麼'); return; }
+  if (!aiKey()) { sendMealToAiApp(); return; }
   const btn = $('aiGoBtn');
   btn.disabled = true; btn.textContent = 'AI 辨識中…（大約 5～15 秒）';
   setBox('aiStatus', 'info', 'AI 辨識中，請稍等…');
@@ -2071,10 +2115,39 @@ $('aiGoBtn').addEventListener('click', async () => {
   } catch (e) {
     setBox('aiStatus', 'err', aiErrorText(e));
     // AI 不能用（次數用完、太忙、網路）：照片和描述不要白拍，直接帶到「拍照記」存成待查
-    if (['quota', 'busy', 'timeout', 'network', 'server'].includes(e && e.kind)) $('aiFallbackBtn').classList.remove('hidden');
+    if (['quota', 'busy', 'timeout', 'network', 'server'].includes(e && e.kind)) {
+      $('aiFallbackBtn').classList.remove('hidden');
+      if (e.kind !== 'network') $('aiPasteFallbackBtn').classList.remove('hidden');
+    }
   } finally {
     btn.disabled = false; btn.textContent = '請 AI 幫我認';
   }
+});
+// 用自己的 AI App：傳照片＋說明 → 貼回答 → 和 Gemini 一樣拆成一樣一樣
+async function sendMealToAiApp() {
+  const text = $('aiText').value.trim();
+  const how = await shareToAi(mealPastePrompt(text), aiDraft.photo);
+  if (how === 'aborted') return;
+  $('aiPasteWrap').classList.remove('hidden');
+  $('aiPasteFallbackBtn').classList.add('hidden');
+  const noShare = how !== 'shared';
+  $('aiPhotoSaveBtn').classList.toggle('hidden', !(noShare && aiDraft.photo));
+  setBox('aiPasteHint', noShare ? 'info' : null, how === 'failed' ? '這台裝置沒辦法自動複製。請打開 AI App，自己描述「把這餐拆成一樣一樣，列出克數和熱量」，再把回答貼回來。'
+    : noShare ? '說明已經複製好了。請打開你的 AI App（或 chatgpt.com、gemini.google.com），貼上說明' + (aiDraft.photo ? '，再附上這張照片（可以先按下面的「下載這張照片」）' : '') + '。' : '');
+  $('aiPasteText').focus({ preventScroll: true });
+}
+$('aiPasteFallbackBtn').addEventListener('click', sendMealToAiApp);
+$('aiPhotoSaveBtn').addEventListener('click', () => savePhotoFile(aiDraft.photo));
+$('aiPasteReadBtn').addEventListener('click', () => {
+  const out = mealFromPaste($('aiPasteText').value);
+  if (!out.items.length) { setBox('aiStatus', 'err', '讀不到 AI 的回答：請把 AI 回答的整段（表格）複製、貼上。AI 說「沒有食物」的話，換張照片或用說的再試。'); return; }
+  aiDraft.items = out.items;
+  aiDraft.source = aiDraft.photo ? 'photo' : 'text';
+  aiDraft.checked = new Set(out.items.map((_, i) => i));
+  renderAiResults();
+  $('aiPasteText').value = '';
+  $('aiPasteWrap').classList.add('hidden');
+  setBox('aiStatus', 'info', '不對的可以取消打勾，加入後還可以改克數。');
 });
 $('aiFallbackBtn').addEventListener('click', () => {
   const photo = aiDraft.photo;
@@ -2136,6 +2209,18 @@ async function readLabelByAi(prefix, photo) {
   try {
     const lb = normalizeLabel(await callGemini({ key: aiKey(), request: buildRequest({ prompt: LABEL_PROMPT, imageDataUrl: photo, schema: LABEL_SCHEMA }) }));
     if (!lb) { setBox(note, 'err', '找不到營養標示。照片已經存了，可以對照照片自己填；或把表格拍清楚、拍正一點再試。'); return; }
+    applyLabelResult(prefix, lb);
+  } catch (err) {
+    setBox(note, 'err', aiErrorText(err) + '\n照片已經存了，可以對照照片自己填，或改傳給你的 AI App。');
+    $(prefix + '-lb-paste').classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = labelPhotoText();
+  }
+}
+// AI（Gemini 或自己的 AI App）讀到的標示 → 填進「照營養標示算」和熱量
+function applyLabelResult(prefix, lb) {
+  const note = prefix + '-lb-note';
+  {
     const nameEl = $(prefix === 'add' ? 'foodNameInput' : 'editLogNameInput');
     if (!nameEl.value.trim() && lb.name) nameEl.value = lb.name;
     // 拍了營養標示的多半會再吃：「也存到我的食物」預設勾起來（可以取消）
@@ -2154,10 +2239,6 @@ async function readLabelByAi(prefix, photo) {
       if (prefix === 'add') { $('addMore').open = true; $('addNutrDetails').open = true; }
       setBox(note, 'info', 'AI 讀到：每份 ' + lb.kcal + ' 大卡' + kj + '，已填好（標示沒寫每份幾克）。請對照包裝確認。');
     }
-  } catch (err) {
-    setBox(note, 'err', aiErrorText(err) + '\n照片已經存了，可以對照照片自己填。');
-  } finally {
-    btn.disabled = false; btn.textContent = labelPhotoText();
   }
 }
 
@@ -2619,7 +2700,7 @@ async function saveEditPhotos(item) {
 /* ---------------- 照營養標示算（自己輸入、修改記錄都有） ---------------- */
 // 標示寫「每 35 克 100 大卡」、吃了 7 克 → 自動算好填進熱量和營養素，不用拿計算機
 const LB_FIELDS = [['kcal', '熱量（大卡）'], ['p', '蛋白質（克）'], ['f', '脂肪（克）'], ['c', '碳水（克）']];
-function labelPhotoText() { return aiKey() ? '📷 拍營養標示，AI 幫我填（照片會一起存）' : '📷 拍營養標示（照片會跟這筆一起存）'; }
+function labelPhotoText() { return aiKey() ? '📷 拍營養標示，AI 幫我填（照片會一起存）' : aiPasteOn() ? '📷 拍營養標示（可以傳給你的 AI App 讀）' : '📷 拍營養標示（照片會跟這筆一起存）'; }
 let addLabelByAi = false;   // 這次「自己輸入」有用 AI 讀營養標示（存成我的食物時記來源）
 // 存一樣我的食物（form＝customFoodFromForm 的表單）；同名的不重複存。回傳要接在提示後面的說明
 function saveAsMyFood(form, source) {
@@ -2646,6 +2727,12 @@ function labelCalcHTML(prefix) {
       <input id="${prefix}-lb-file" type="file" accept="image/*" capture="environment" class="hidden" />
       <button type="button" data-lb-photo="${prefix}" class="btn-secondary w-full bg-white">${labelPhotoText()}</button>
       <p id="${prefix}-lb-note" class="hidden rounded-2xl whitespace-pre-line break-words p-3 text-base leading-relaxed"></p>
+      <div id="${prefix}-lb-paste" class="hidden rounded-xl bg-white border border-stone-200 p-3 space-y-2">
+        <button type="button" data-lb-share="${prefix}" class="btn-primary w-full">📤 把標示照片傳給我的 AI App</button>
+        <p class="text-base text-stone-700 leading-relaxed">在 AI App 長按輸入框 →「貼上」說明（已複製）、送出；AI 回答後長按 →「複製」，貼在下面。</p>
+        <textarea id="${prefix}-lb-pastetext" rows="3" class="field text-base" placeholder="把 AI 的回答貼在這裡"></textarea>
+        <button type="button" data-lb-pasteread="${prefix}" class="btn-secondary w-full">讀入 AI 的回答</button>
+      </div>
       <div class="lb-line">標示上寫：每 ${inp('g', '克')} 克</div>
       <div class="lb-grid">${LB_FIELDS.map(([k, t]) => `<label><span>${t}</span>${inp(k, '')}</label>`).join('')}</div>
       <div class="lb-line">我吃了 ${inp('eat', '克')} 克
@@ -2697,7 +2784,13 @@ function fillLabelCalc(prefix, item) {
   setBox(prefix + '-lb-note', null, '');
   $(prefix + '-lb').open = Boolean(lb);
 }
-function resetLabelCalc(prefix) { fillLabelCalc(prefix, null); if (prefix === 'add') addLabelByAi = false; }
+function resetLabelCalc(prefix) {
+  fillLabelCalc(prefix, null);
+  if (prefix === 'add') addLabelByAi = false;
+  $(prefix + '-lb-paste').classList.add('hidden');
+  $(prefix + '-lb-pastetext').value = '';
+  labelPhoto[prefix] = null;
+}
 function setPortion(v) {
   $('portionSelect').value = String(v);
   document.querySelectorAll('#portionGroup [data-portion]').forEach(x => x.classList.toggle('is-active', x.getAttribute('data-portion') === String(v)));
@@ -2719,6 +2812,24 @@ document.addEventListener('click', (e) => {
   const ph = e.target.closest('[data-lb-photo]');
   if (ph) $(ph.getAttribute('data-lb-photo') + '-lb-file').click();
 });
+const labelPhoto = { add: null, edit: null };   // 這次拍的營養標示（傳給 AI App 用）
+document.addEventListener('click', async (e) => {
+  const share = e.target.closest('[data-lb-share]');
+  const read = e.target.closest('[data-lb-pasteread]');
+  if (share) {
+    const prefix = share.getAttribute('data-lb-share');
+    const how = await shareToAi(LABEL_PASTE_PROMPT, labelPhoto[prefix]);
+    if (how === 'copied') { setBox(prefix + '-lb-note', 'info', '說明已經複製好了。請打開你的 AI App，貼上說明，再附上營養標示的照片。'); savePhotoFile(labelPhoto[prefix]); }
+    else if (how === 'failed') setBox(prefix + '-lb-note', 'err', '這台裝置沒辦法自動複製和分享。請對照照片自己填下面的數字。');
+  } else if (read) {
+    const prefix = read.getAttribute('data-lb-pasteread');
+    const lb = labelFromPaste($(prefix + '-lb-pastetext').value);
+    if (!lb) { setBox(prefix + '-lb-note', 'err', '讀不到 AI 的回答：請把 AI 回答的整段（表格）複製、貼上。AI 說找不到營養標示的話，拍清楚一點再試。'); return; }
+    applyLabelResult(prefix, lb);
+    $(prefix + '-lb-pastetext').value = '';
+    $(prefix + '-lb-paste').classList.add('hidden');
+  }
+});
 ['add', 'edit'].forEach(prefix => $(prefix + '-lb-file').addEventListener('change', async (e) => {
   const file = e.target.files && e.target.files[0];
   e.target.value = '';
@@ -2726,7 +2837,9 @@ document.addEventListener('click', (e) => {
   let src = null;
   try { src = await addFormPhoto(prefix, file, 1280); } catch (err) { showError('照片讀取失敗'); return; }   // 標示的字小，解析度高一點
   if (!src) return;
+  labelPhoto[prefix] = src;
   if (aiKey()) readLabelByAi(prefix, src);
+  else if (aiPasteOn()) { $(prefix + '-lb-paste').classList.remove('hidden'); setBox(prefix + '-lb-note', 'info', '照片存好了。可以按下面的按鈕傳給你的 AI App 讀，或對照著自己填。'); }
   else showToast('已附上營養標示照片，對照著填下面的數字');
 }));
 renderPhotoStrip('add');

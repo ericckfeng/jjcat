@@ -160,7 +160,7 @@
 | v3（Rev. 39） | 2026-11-19 | 版本改成「日期-序號（Rev.）」。最上層新增 `devices`、`minRev`（見上方）；`meta.deviceName`、`meta.cloud.blockedRev`。 |
 | v3（Rev. 41） | 2026-11-21 | 記錄新增 `label`（照營養標示算）、`morePhotos`（一筆最多 3 張照片）。**沒有調 `DATA_MIN_REV`**：兩個都是記錄裡的欄位，舊版會原樣保留；舊版看不到第 2、3 張、不會同步它們，但也不會刪（見 `morePhotos` 的 key 格式）。舊版「複製前一天」會連 `morePhotos` 一起複製，兩筆共用同一張照片，不會壞。 |
 | v3（Rev. 42） | 2026-11-21 | 記錄新增 `lookup`（拍照記・待查）。只是記錄裡的新欄位，舊版原樣保留，沒有調 `DATA_MIN_REV`。待查表（CSV）只是匯出／匯入用的檔案，不是同步格式：欄位見 `js/lookup.js` 的 `CSV_HEAD`，回填只看「編號」和要填的欄。 |
-| v3（Rev. 43） | 2026-11-21 | 拿掉吃到飽速記畫面（使用者覺得用不到）。格式沒變：舊記錄的 `party` 欄位保留；裝置上還沒記下來的 `meta.party` 開 App 時問一次要不要記下來。 | 首頁角色改成可以複選：小芽、小貓、營養師（`meta.cat`、`meta.doc`、`meta.docSeen`，只存這台裝置）。
+| v3（Rev. 43） | 2026-11-21 | 拿掉吃到飽速記畫面（使用者覺得用不到）。格式沒變：舊記錄的 `party` 欄位保留；裝置上還沒記下來的 `meta.party` 開 App 時問一次要不要記下來。首頁角色改成可以複選：小芽、小貓、營養師（`meta.cat`、`meta.doc`、`meta.docSeen`，只存這台裝置）。 |
 | v3（App v23） | 2026-11-19 | 每日欄位新增 `smm`（骨骼肌）；`targets.bodyFat`（目標體脂率）；`targets.calc.bmrSource` 可為 `ffm`。每日 CSV 最後再加一欄骨骼肌。 |
 | v3（App v24） | 2026-11-19 | 每日欄位新增 `vfl`、`pa`、`ecw`。每日 CSV 最後加三欄。 |
 | v3（App v25） | 2026-11-19 | 每日欄位新增 `vfa`（內臟脂肪面積）。每日 CSV 最後加一欄。 |

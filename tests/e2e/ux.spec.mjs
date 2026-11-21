@@ -54,3 +54,19 @@ test('歡迎頁說明雲端在設定裡；報告的日期在特大字下看得�
   const w = await page.locator('#rptFrom').evaluate(el => el.getBoundingClientRect().width);
   expect(w).toBeGreaterThan(250);   // 上下排，一欄佔滿寬度
 });
+
+test('第二批：清空在最下面、沒記錄時不出現；自己輸入不知道熱量 → 帶著名稱換到拍照記；其他選項收起來', async ({ page }) => {
+  await openApp(page);
+  await expect(page.locator('#clearDayBtn')).toBeHidden();
+  await page.click('[data-screen=scr-manual]');
+  await expect(page.locator('#kjDetails')).toBeHidden();          // 收在「更多選項」裡
+  await expect(page.locator('#extSearchInput')).toBeHidden();
+  await page.fill('#foodNameInput', '巷口滷味');
+  await page.click('[data-screen-swap=scr-photo]');
+  await expect(page.locator('#scr-photo')).toBeVisible();
+  await expect(page.locator('#scr-manual')).toBeHidden();
+  await expect(page.locator('#photoQuickName')).toHaveValue('巷口滷味');
+  await page.click('#photoQuickSave');
+  await expect(page.locator('#clearDayBtn')).toBeVisible();
+  await expect(page.locator('#clearDayBtn')).toHaveText('清空這一天的飲食記錄');
+});

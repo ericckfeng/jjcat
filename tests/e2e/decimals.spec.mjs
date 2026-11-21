@@ -30,6 +30,7 @@ test('自己輸入可以填小數份數', async ({ page }) => {
   await page.click('[data-screen=scr-manual]');
   await page.fill('#foodNameInput', '燙青菜');
   await page.fill('#foodKcalInput', '30');
+  await page.click('#addMore summary');
   await page.click('#addNutrDetails summary');
   await page.fill('#add-ex-veg', '0.8');
   await page.fill('#add-ex-oil', '0.3');

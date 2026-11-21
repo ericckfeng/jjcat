@@ -1417,6 +1417,7 @@ $('mealLogContainer').addEventListener('click', (e) => {
 function renderLogs() {
   const container = $('mealLogContainer');
   const list = state.logs[ui.date] || [];
+  $('clearDayBtn').classList.toggle('hidden', !list.length);
   if (!list.length) {
     container.innerHTML = `<div class="bg-white rounded-2xl border border-dashed border-stone-300 p-8 text-center space-y-2">
       <p class="text-base font-medium text-stone-600">這天還沒有記錄</p>
@@ -2150,7 +2151,7 @@ async function readLabelByAi(prefix, photo) {
       // 標示沒寫每份幾克：直接填一份的數字
       $(KCAL_FIELD[prefix]).value = lb.kcal;
       writeNutrFields(prefix, { p: lb.p, c: lb.c, f: lb.f, ex: null });
-      if (prefix === 'add') $('addNutrDetails').open = true;
+      if (prefix === 'add') { $('addMore').open = true; $('addNutrDetails').open = true; }
       setBox(note, 'info', 'AI 讀到：每份 ' + lb.kcal + ' 大卡' + kj + '，已填好（標示沒寫每份幾克）。請對照包裝確認。');
     }
   } catch (err) {
@@ -2525,6 +2526,13 @@ $('kcalStepperGroup').addEventListener('click', (e) => {
   el.value = Math.min(5000, (Number(el.value) || 0) + Number(btn.getAttribute('data-kcal-add')));
 });
 $('kcalResetStepBtn').addEventListener('click', () => { $('foodKcalInput').value = ''; });
+// 「自己輸入」不知道熱量 → 換到「拍照記」（帶著已經填的名稱）
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-screen-swap]');
+  if (!b) return;
+  const name = $('foodNameInput').value.trim();
+  afterClose(() => { openScreen(b.getAttribute('data-screen-swap')); if (name) $('photoQuickName').value = name; });
+});
 // 千焦耳 → 大卡：一邊打一邊換算，填到熱量欄
 $('foodKjInput').addEventListener('input', (e) => {
   const kj = Number(e.target.value);
@@ -2669,7 +2677,7 @@ function applyLabelCalc(prefix) {
   if (!r) { out.textContent = ''; return; }
   $(KCAL_FIELD[prefix]).value = r.kcal;
   MACRO_KEYS.forEach(k => { if (r[k] != null) $(prefix + '-' + k).value = r[k]; });
-  if (prefix === 'add') { setPortion(1); $('addNutrDetails').open = true; }   // 算出來的就是吃的量
+  if (prefix === 'add') { setPortion(1); $('addMore').open = true; $('addNutrDetails').open = true; }   // 算出來的就是吃的量
   const parts = [r.kcal + ' 大卡'].concat(['p', 'f', 'c'].filter(k => r[k] != null).map(k => MACRO_META[k].label + ' ' + r[k] + ' 克'));
   out.textContent = '＝ ' + parts.join('、') + (prefix === 'add' ? '（已填進下面）' : '（已填好）');
 }
@@ -2752,6 +2760,7 @@ $('addFoodForm').addEventListener('submit', async (e) => {
   resetLabelCalc('add');
   $('addNutrDetails').open = false;
   $('kjDetails').open = false;
+  $('addMore').open = false;
   $('kjResult').textContent = '';
   formPhotos.add = [];
   renderPhotoStrip('add');

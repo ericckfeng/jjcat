@@ -140,7 +140,7 @@
       <section class="space-y-2">
         <h2 class="sec-title">記錄吃的</h2>
         <div class="grid grid-cols-2 gap-3">
-          <button type="button" data-food-open="mine" class="tile"><span class="tile-ic">⭐</span><span class="tile-t">我的食物</span><span class="tile-s">選一樣，填吃了多少</span></button>
+          <button type="button" data-food-open="mine" class="tile"><span class="tile-ic">⭐</span><span class="tile-t">我的食物</span><span class="tile-s">選一樣，或掃包裝條碼</span></button>
           <button type="button" data-screen="scr-photo" class="tile"><span class="tile-ic">📷</span><span class="tile-t">拍照記</span><span class="tile-s">找不到、不知道熱量：先拍，之後再查</span></button>
           <button type="button" data-screen="scr-est" class="tile"><span class="tile-ic">✋</span><span class="tile-t">估份量</span><span class="tile-s">自助餐、家常菜</span></button>
           <button type="button" data-screen="scr-manual" class="tile"><span class="tile-ic">✏️</span><span class="tile-t">自己輸入</span><span class="tile-s">知道熱量時用</span></button>
@@ -167,12 +167,11 @@
       <section class="space-y-3">
         <div class="flex items-center justify-between px-1">
           <h2 class="sec-title px-0">吃了什麼</h2>
-          <div class="flex items-center gap-1">
-            <button id="copyYesterdayBtn" type="button" class="text-sm font-medium text-stone-600 hover:text-emerald-700 px-2.5 py-2 rounded-lg hover:bg-stone-100 transition">複製前一天</button>
-            <button id="clearDayBtn" type="button" class="text-sm font-medium text-rose-600 hover:text-rose-700 px-2.5 py-2 rounded-lg hover:bg-rose-50 transition">清空</button>
-          </div>
+          <button id="copyYesterdayBtn" type="button" class="chip-btn chip-lg">複製前一天</button>
         </div>
         <div id="mealLogContainer" class="space-y-3"></div>
+        <!-- 清空放在最下面、灰色小字：不要和常用的按鈕放在一起，避免誤按 -->
+        <div class="text-center"><button id="clearDayBtn" type="button" class="hidden text-sm text-stone-400 underline px-3 py-2">清空這一天的飲食記錄</button></div>
       </section>
     </div>
 
@@ -558,17 +557,8 @@
             <button type="button" data-kcal-add="50" class="kcal-step-btn chip-btn chip-lg">+50</button>
             <button type="button" data-kcal-add="100" class="kcal-step-btn chip-btn chip-lg">+100</button>
             <button type="button" data-kcal-add="250" class="kcal-step-btn chip-btn chip-lg">+250</button>
-            <button type="button" id="kcalResetStepBtn" class="px-3 py-2 rounded-lg text-sm text-stone-500 underline">歸零</button>
+            <button type="button" id="kcalResetStepBtn" class="kcal-step-btn chip-btn chip-lg">清除</button>
           </div>
-          <details id="kjDetails" class="mt-3">
-            <summary class="text-base text-stone-600 underline cursor-pointer py-1">包裝寫的是千焦耳（kJ）？點這裡換算</summary>
-            <div class="flex items-center gap-2 mt-2 flex-wrap text-lg text-stone-700">
-              <input id="foodKjInput" type="number" inputmode="decimal" step="any" min="0" max="20000" placeholder="例如：552" aria-label="千焦耳" class="field tabular-nums text-xl" style="width:8rem" />
-              <span>千焦耳</span>
-              <span id="kjResult" class="font-semibold text-emerald-800"></span>
-            </div>
-            <p class="text-sm text-stone-500 mt-1">會自動換成大卡，填到上面的熱量（1 大卡 ＝ 4.184 千焦耳）。</p>
-          </details>
         </div>
         <div>
           <span class="scr-label">吃了幾份</span>
@@ -593,18 +583,34 @@
           <input id="saveMineCheck" type="checkbox" class="big-check" />
           也存到「我的食物」（下次直接選）
         </label>
-        <details id="addNutrDetails" class="rounded-2xl border border-stone-200 bg-white">
-          <summary class="px-4 py-3 text-base font-semibold text-stone-700 cursor-pointer select-none">更多：營養素／六大類份數（選填）</summary>
-          <div id="addNutrFields" class="px-4 pb-4"></div>
-        </details>
-        <div class="rounded-2xl bg-stone-100 p-3 space-y-2">
-          <div class="text-sm font-semibold text-stone-700">不知道熱量？上網查</div>
-          <div class="flex gap-2">
-            <input id="extSearchInput" type="text" placeholder="例如：八方雲集鍋貼" class="field flex-1" />
-            <button type="button" id="extGoogleSearchBtn" class="btn-secondary bg-white shrink-0">查詢 ↗</button>
+        <p class="text-base text-stone-600 leading-relaxed">不知道熱量？<button type="button" data-screen-swap="scr-photo" class="text-emerald-700 underline font-semibold py-1">改用「📷 拍照記」先存起來</button>，之後再查。</p>
+        <details id="addMore" class="rounded-2xl border border-stone-200 bg-white">
+          <summary class="px-4 py-3 text-base font-semibold text-stone-700 cursor-pointer select-none">更多選項（選填）</summary>
+          <div class="px-4 pb-4 space-y-4">
+            <p class="text-sm text-stone-500">千焦耳換算、蛋白質等營養素、六大類份數、上網查熱量。</p>
+            <details id="kjDetails">
+            <summary class="text-base text-stone-600 underline cursor-pointer py-1">包裝寫的是千焦耳（kJ）？點這裡換算</summary>
+            <div class="flex items-center gap-2 mt-2 flex-wrap text-lg text-stone-700">
+              <input id="foodKjInput" type="number" inputmode="decimal" step="any" min="0" max="20000" placeholder="例如：552" aria-label="千焦耳" class="field tabular-nums text-xl" style="width:8rem" />
+              <span>千焦耳</span>
+              <span id="kjResult" class="font-semibold text-emerald-800"></span>
+            </div>
+            <p class="text-sm text-stone-500 mt-1">會自動換成大卡，填到上面的熱量（1 大卡 ＝ 4.184 千焦耳）。</p>
+          </details>
+            <details id="addNutrDetails" class="rounded-xl border border-stone-200">
+              <summary class="px-3 py-2 text-base font-semibold text-stone-700 cursor-pointer select-none">營養素／六大類份數</summary>
+              <div id="addNutrFields" class="px-3 pb-3"></div>
+            </details>
+            <div class="rounded-xl bg-stone-100 p-3 space-y-2">
+              <div class="text-sm font-semibold text-stone-700">上網查熱量</div>
+              <div class="flex gap-2">
+                <input id="extSearchInput" type="text" placeholder="例如：八方雲集鍋貼" class="field flex-1 min-w-0" />
+                <button type="button" id="extGoogleSearchBtn" class="btn-secondary bg-white shrink-0">查詢 ↗</button>
+              </div>
+              <a href="https://consumer.fda.gov.tw/Food/TFND.aspx?nodeID=178" target="_blank" rel="noopener noreferrer" class="text-sm text-emerald-700 underline">食藥署食品營養資料庫 ↗</a>
+            </div>
           </div>
-          <a href="https://consumer.fda.gov.tw/Food/TFND.aspx?nodeID=178" target="_blank" rel="noopener noreferrer" class="text-sm text-emerald-700 underline">食藥署食品營養資料庫 ↗</a>
-        </div>
+        </details>
       </form>
     </div>
     <div class="scr-foot"><button type="submit" form="addFoodForm" class="btn-primary btn-xl w-full">儲存</button></div>
@@ -942,14 +948,12 @@
     <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>⚖️ 體重・尺寸</h2></div>
     <div class="scr-body">
       <div class="rounded-2xl bg-white border border-stone-200 p-3 space-y-2">
-        <div class="flex items-end gap-2">
-          <label class="block flex-1"><span class="scr-label">身高（公分）</span><input id="profHeight" type="number" inputmode="decimal" step="0.5" min="100" max="230" class="field tabular-nums" placeholder="例如：165" /></label>
-          <div class="shrink-0">
-            <span class="scr-label">性別</span>
-            <div id="sexGroup" class="grid grid-cols-2 gap-1.5 w-32">
-              <button type="button" data-sex="m" class="toggle-btn">男</button>
-              <button type="button" data-sex="f" class="toggle-btn">女</button>
-            </div>
+        <label class="block"><span class="scr-label">身高（公分）</span><input id="profHeight" type="number" inputmode="decimal" step="0.5" min="100" max="230" class="field tabular-nums text-lg" placeholder="例如：165" /></label>
+        <div>
+          <span class="scr-label">性別</span>
+          <div id="sexGroup" class="grid grid-cols-2 gap-2">
+            <button type="button" data-sex="m" class="toggle-btn">男</button>
+            <button type="button" data-sex="f" class="toggle-btn">女</button>
           </div>
         </div>
         <p class="text-sm text-stone-500">算 BMI、判斷腰圍用，只要填一次。</p>

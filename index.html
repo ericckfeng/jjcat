@@ -43,7 +43,7 @@
     </div>
     <nav class="hidden sm:flex max-w-2xl mx-auto px-4 border-t border-stone-100">
       <button type="button" data-tab="log" class="nav-tab flex-1 py-2.5 text-sm">今日記錄</button>
-      <button type="button" data-tab="library" class="nav-tab flex-1 py-2.5 text-sm">外食快選</button>
+      <button type="button" data-tab="library" class="nav-tab flex-1 py-2.5 text-sm">我的食物</button>
       <button type="button" data-tab="trends" class="nav-tab flex-1 py-2.5 text-sm">趨勢</button>
       <button type="button" data-tab="report" class="nav-tab flex-1 py-2.5 text-sm">營養師報告</button>
     </nav>
@@ -53,7 +53,7 @@
     <!-- Banners -->
     <div id="installBanner" class="no-print hidden bg-sky-50 border border-sky-200 rounded-2xl p-3 text-xs text-sky-900 flex gap-2 items-start">
       <div class="flex-1 leading-relaxed">
-        <b>建議加入主畫面使用</b>：iPhone 用 Safari 點「分享」→「加入主畫面」；Android 用 Chrome 選單 →「安裝應用程式」。可以離線開啟，資料也比較不會被瀏覽器自動清掉。Android 加入後，<b>長按 App 圖示</b>可以直接打開「常吃的」「拍照記」「喝水」「量體重」。
+        <b>建議加入主畫面使用</b>：iPhone 用 Safari 點「分享」→「加入主畫面」；Android 用 Chrome 選單 →「安裝應用程式」。可以離線開啟，資料也比較不會被瀏覽器自動清掉。Android 加入後，<b>長按 App 圖示</b>可以直接打開「我的食物」「拍照記」「喝水」「量體重」。
       </div>
       <button id="dismissInstallBtn" type="button" class="text-sky-500 hover:text-sky-800 font-bold px-1" aria-label="關閉">✕</button>
     </div>
@@ -140,13 +140,13 @@
       <section class="space-y-2">
         <h2 class="sec-title">記錄吃的</h2>
         <div class="grid grid-cols-2 gap-3">
-          <button type="button" data-screen="scr-quick" class="tile"><span class="tile-ic">⭐</span><span class="tile-t">常吃的</span><span class="tile-s">點一下就記好</span></button>
+          <button type="button" data-food-open="mine" class="tile"><span class="tile-ic">⭐</span><span class="tile-t">我的食物</span><span class="tile-s">選一樣，填吃了多少</span></button>
           <button type="button" data-screen="scr-photo" class="tile"><span class="tile-ic">📷</span><span class="tile-t">拍照記</span><span class="tile-s">找不到、不知道熱量：先拍，之後再查</span></button>
           <button type="button" data-screen="scr-est" class="tile"><span class="tile-ic">✋</span><span class="tile-t">估份量</span><span class="tile-s">自助餐、家常菜</span></button>
           <button type="button" data-screen="scr-manual" class="tile"><span class="tile-ic">✏️</span><span class="tile-t">自己輸入</span><span class="tile-s">知道熱量時用</span></button>
           <button type="button" id="aiTile" data-screen="scr-ai" class="tile col-span-2 tile-wide hidden"><span class="tile-ic">🤖</span><span class="min-w-0"><span class="tile-t block">AI 幫我認</span><span class="tile-s block">拍一張或說一句，AI 拆成一樣一樣</span></span></button>
           <button type="button" data-screen="scr-party" class="tile col-span-2 tile-wide"><span class="tile-ic">🥟</span><span class="min-w-0"><span class="tile-t block">吃到飽・聚餐</span><span id="partyTileSub" class="tile-s block">拿一輪按一下，最後自動算熱量</span></span></button>
-          <button type="button" data-screen="scr-food" class="tile col-span-2 tile-wide"><span class="tile-ic">🔍</span><span class="min-w-0"><span class="tile-t block">查食物・秤克數</span><span class="tile-s block">輸入名稱和克數，算出蛋白質等營養素</span></span></button>
+          <button type="button" data-food-open="all" class="tile col-span-2 tile-wide"><span class="tile-ic">🔍</span><span class="min-w-0"><span class="tile-t block">查食物・秤克數</span><span class="tile-s block">輸入名稱和克數，算出蛋白質等營養素</span></span></button>
           <button type="button" id="lookupTile" data-screen="scr-lookup" class="tile col-span-2 tile-wide hidden" style="background:#fffbeb;border-color:#fcd34d"><span class="tile-ic">🔎</span><span class="min-w-0"><span id="lookupTileT" class="tile-t block">還有待查的記錄</span><span class="tile-s block">一筆一筆補，或整份給 AI／營養師填</span></span></button>
         </div>
       </section>
@@ -180,34 +180,13 @@
     <!-- TAB 2: LIBRARY -->
     <div id="tab-library" class="tab-panel hidden space-y-4">
       <section class="bg-white rounded-2xl border border-stone-200 p-4 space-y-3">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 class="text-sm font-bold text-stone-900">台灣常見外食與飲品快選</h2>
-            <p class="text-xs text-stone-500">點選項目即可加入 <span id="libraryMealLabel" class="font-semibold text-emerald-700">午餐</span></p>
-          </div>
-          <div class="flex items-center gap-1.5">
-            <select id="libraryMealSelect" class="px-2.5 py-1.5 rounded-xl border border-stone-200 bg-stone-50 text-xs font-semibold text-stone-700 min-h-[36px]">
-              <option value="breakfast">加到：早餐</option>
-              <option value="lunch">加到：午餐</option>
-              <option value="dinner">加到：晚餐</option>
-              <option value="snack">加到：點心</option>
-            </select>
-            <button id="addQuickItemBtn" type="button" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition min-h-[36px]">+ 新增快選</button>
-          </div>
+        <div>
+          <h2 class="text-lg font-bold text-stone-900">⭐ 我的食物</h2>
+          <p class="text-base text-stone-600 leading-relaxed">常吃的東西照包裝上的營養標示存一次，之後在首頁「我的食物」點一下、填吃了多少就記好。最常記的排在前面。</p>
         </div>
-        <input id="librarySearchInput" type="search" placeholder="搜尋（例：水餃、豆漿、便當、珍奶）" class="field" />
-        <div class="flex flex-wrap gap-1.5" id="libraryFilterChips">
-          <button type="button" data-cat="all" class="cat-chip">全部</button>
-          <button type="button" data-cat="fav" class="cat-chip">我的常用</button>
-          <button type="button" data-cat="breakfast" class="cat-chip">早餐超商</button>
-          <button type="button" data-cat="meal" class="cat-chip">便當小吃</button>
-          <button type="button" data-cat="drink" class="cat-chip">飲品點心</button>
-        </div>
-        <div id="libraryGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1"></div>
-        <div class="pt-2 border-t border-stone-100 flex items-center justify-between text-[0.6875rem] text-stone-400">
-          <span>點右側圖示可修改熱量、營養素或刪除</span>
-          <span class="flex gap-3"><button type="button" data-open-sources class="text-stone-500 hover:text-stone-800 underline">熱量資料來源</button><button id="resetQuickItemsBtn" type="button" class="text-stone-500 hover:text-stone-800 underline">恢復預設快選</button></span>
-        </div>
+        <button type="button" id="myFoodAddBtn" class="btn-primary btn-xl w-full">＋ 新增我的食物</button>
+        <input id="myFoodSearch" type="search" class="field text-lg" placeholder="搜尋我的食物" />
+        <div id="myFoodList" class="space-y-2"></div>
       </section>
     </div>
 
@@ -299,7 +278,7 @@
     </button>
     <button type="button" data-tab="library" class="mobile-nav-tab">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
-      <span class="text-[0.6875rem]">快選</span>
+      <span class="text-[0.6875rem]">我的食物</span>
     </button>
     <button type="button" data-tab="trends" class="mobile-nav-tab">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M14 7h7v7"></path></svg>
@@ -335,32 +314,53 @@
     </div>
   </div>
 
-  <!-- 常吃的 -->
-  <div id="scr-quick" class="screen hidden" role="dialog" aria-label="常吃的">
-    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>⭐ 常吃的</h2></div>
+  <!-- 我的食物：新增／修改（照包裝營養標示填一份的數字） -->
+  <div id="scr-myfood" class="screen hidden" role="dialog" aria-label="我的食物">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2 id="myFoodTitle">⭐ 新增我的食物</h2></div>
     <div class="scr-body">
-      <div><div class="scr-label">記到哪一餐？</div><div class="meal-picker"></div></div>
-      <input id="quickPickSearch" type="search" class="field" placeholder="搜尋，例如：豆漿、便當" />
-      <div id="quickPickCats" class="flex flex-wrap gap-2">
-        <button type="button" data-cat="all" class="cat-chip">全部</button>
-        <button type="button" data-cat="fav" class="cat-chip">我的常用</button>
-        <button type="button" data-cat="breakfast" class="cat-chip">早餐超商</button>
-        <button type="button" data-cat="meal" class="cat-chip">便當小吃</button>
-        <button type="button" data-cat="drink" class="cat-chip">飲品點心</button>
+      <label class="block"><span class="scr-label">名稱</span><input id="mf-name" type="text" class="field text-lg" placeholder="例如：全家烤地瓜、無糖豆漿" /></label>
+      <div class="rounded-2xl bg-white border border-stone-200 p-3 space-y-3">
+        <div class="scr-label mb-0">一份是多少？</div>
+        <p class="text-base text-stone-600 leading-relaxed">照包裝上的「每一份」填。不知道幾克就空著，記的時候會問「吃了幾份」。</p>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block"><span class="block text-base text-stone-600 mb-1">一份幾克</span><input id="mf-servingG" type="number" inputmode="decimal" min="0" max="5000" step="any" class="field tabular-nums text-lg text-center" placeholder="克" /></label>
+          <label class="block"><span class="block text-base text-stone-600 mb-1">叫做（可不填）</span><input id="mf-servingLabel" type="text" class="field text-lg" placeholder="1 包、1 碗" /></label>
+        </div>
       </div>
-      <div id="quickPickList" class="space-y-2"></div>
-      <button type="button" id="quickPickManage" class="text-sm text-stone-500 underline self-start py-2">管理清單（新增、修改、刪除項目）</button>
+      <div class="rounded-2xl bg-white border border-stone-200 p-3 space-y-3">
+        <div class="scr-label mb-0">一份的營養</div>
+        <div class="lb-grid-plain grid grid-cols-2 gap-2">
+          <label class="block"><span class="block text-base text-stone-600 mb-1">熱量（大卡）</span><input id="mf-kcal" type="number" inputmode="decimal" min="0" step="any" class="field tabular-nums text-lg text-center" /></label>
+          <label class="block"><span class="block text-base text-stone-600 mb-1">蛋白質（克）</span><input id="mf-p" type="number" inputmode="decimal" min="0" step="any" class="field tabular-nums text-lg text-center" /></label>
+          <label class="block"><span class="block text-base text-stone-600 mb-1">脂肪（克）</span><input id="mf-f" type="number" inputmode="decimal" min="0" step="any" class="field tabular-nums text-lg text-center" /></label>
+          <label class="block"><span class="block text-base text-stone-600 mb-1">碳水（克）</span><input id="mf-c" type="number" inputmode="decimal" min="0" step="any" class="field tabular-nums text-lg text-center" /></label>
+        </div>
+        <details id="mf-more" class="rounded-xl border border-stone-200">
+          <summary class="px-3 py-2 text-base font-semibold text-stone-700 cursor-pointer">更多：糖、鈉、膳食纖維、六大類份數（選填）</summary>
+          <div class="p-3 space-y-3">
+            <div class="grid grid-cols-3 gap-2">
+              <label class="block"><span class="block text-sm text-stone-600 mb-1">糖（克）</span><input id="mf-sugar" type="number" inputmode="decimal" min="0" step="any" class="field tabular-nums text-center" /></label>
+              <label class="block"><span class="block text-sm text-stone-600 mb-1">鈉（毫克）</span><input id="mf-na" type="number" inputmode="decimal" min="0" step="any" class="field tabular-nums text-center" /></label>
+              <label class="block"><span class="block text-sm text-stone-600 mb-1">膳食纖維（克）</span><input id="mf-fiber" type="number" inputmode="decimal" min="0" step="any" class="field tabular-nums text-center" /></label>
+            </div>
+            <div id="mf-ex" class="grid grid-cols-3 gap-2"></div>
+          </div>
+        </details>
+      </div>
+      <p id="mf-note" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
+      <button type="button" id="mf-delete" class="hidden text-base text-rose-600 underline self-start py-2">刪除這樣食物</button>
     </div>
-    <div class="scr-foot"><button type="button" data-back class="btn-primary btn-xl w-full">完成</button></div>
+    <div class="scr-foot"><button type="button" id="mf-save" class="btn-primary btn-xl w-full">儲存</button></div>
   </div>
 
   <!-- 查食物（衛福部食品營養成分資料庫） -->
   <div id="scr-food" class="screen hidden" role="dialog" aria-label="查食物">
-    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>🔍 查食物</h2></div>
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2 id="foodTitle">🔍 查食物</h2></div>
     <div class="scr-body">
       <div><div class="scr-label">記到哪一餐？</div><div class="meal-picker"></div></div>
       <div id="foodCart" class="hidden rounded-2xl bg-emerald-50 border border-emerald-200 p-3 space-y-2"></div>
       <input id="foodSearch" type="search" class="field text-lg" placeholder="輸入食物，例如：雞胸肉、地瓜" autocomplete="off" />
+      <div id="foodMine" class="space-y-2"></div>
       <div id="foodResults" class="space-y-2"></div>
       <p id="foodSource" class="text-sm text-stone-500 leading-relaxed"></p>
     </div>
@@ -385,7 +385,7 @@
           <button type="button" data-weighed="cooked" id="gramsCookedBtn" class="toggle-btn">煮熟的</button>
         </div>
       </div>
-      <label class="block"><span class="scr-label">幾公克（g）</span>
+      <label class="block"><span id="gramsLabel" class="scr-label">幾公克（g）</span>
         <input id="gramsInput" type="number" inputmode="decimal" min="0" max="5000" step="any" class="field tabular-nums text-2xl" placeholder="例如：135" />
       </label>
       <div id="gramsResult" class="rounded-2xl bg-white border border-stone-200 p-4 space-y-2"></div>
@@ -550,8 +550,8 @@
           </label>
         </div>
         <label class="flex items-center gap-2.5 text-base text-stone-700 cursor-pointer select-none">
-          <input id="saveFavCheck" type="checkbox" class="big-check" />
-          加到「常吃的」清單
+          <input id="saveMineCheck" type="checkbox" class="big-check" />
+          也存到「我的食物」（下次直接選）
         </label>
         <details id="addNutrDetails" class="rounded-2xl border border-stone-200 bg-white">
           <summary class="px-4 py-3 text-base font-semibold text-stone-700 cursor-pointer select-none">更多：營養素／六大類份數（選填）</summary>
@@ -1120,7 +1120,7 @@
         <h3 class="text-base font-bold text-stone-900">熱量與份數參考來源</h3>
         <button type="button" data-close="sourceModal" class="modal-x">✕</button>
       </div>
-      <p class="text-xs text-stone-600 leading-relaxed">外食快選為一般常見份量的參考值，實際熱量依店家做法與份量而異。份量估算與「依份數推算」使用國民健康署食物代換表的每份營養素（豆魚蛋肉以中脂、乳品以低脂計）。</p>
+      <p class="text-xs text-stone-600 leading-relaxed">「我的食物」是你自己照包裝標示或營養師的表填的。份量估算與「依份數推算」使用國民健康署食物代換表的每份營養素（豆魚蛋肉以中脂、乳品以低脂計）。</p>
       <ul class="text-xs text-stone-700 space-y-1.5 list-disc pl-4">
         <li><a href="https://www.hpa.gov.tw/Pages/Detail.aspx?nodeid=544&pid=9605" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">衛生福利部國民健康署 — 健康食譜舉例</a>（炸雞腿便當、豬肉漢堡、奶茶）</li>
         <li><a href="https://health.ettoday.net/news/1960565" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">ETtoday 健康雲 / 營養師程涵宇</a>（滷肉飯、水餃、蚵仔麵線、蔥油餅）</li>
@@ -1129,36 +1129,6 @@
         <li><a href="https://www.yohopower.tw/blogs/health-note/food_calorie_quick_reference_guide" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">悠活原力食物熱量速查指南</a>（白飯、地瓜）</li>
         <li><a href="https://nuli.app/blog/six-food-groups-eating-out-fat-loss/" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">Nuli 外食減脂指南</a> 與 <a href="https://www.jinhetcm.com.tw/project/%E4%BE%BF%E5%88%A9%E5%95%86%E5%BA%97%E6%B8%9B%E8%84%82%E8%8F%9C%E5%96%AE%E8%BE%A6%E5%85%AC%E5%AE%A4%E7%99%BD%E9%A0%98%E6%B8%9B%E8%84%82%E5%8D%88%E6%99%9A%E9%A4%90%E9%80%99%E6%A8%A3%E5%90%83.html" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">錦禾中醫診所</a>（茶葉蛋、雞胸肉、無糖豆漿、堅果）</li>
       </ul>
-    </div>
-  </div>
-
-  <!-- Quick Item Modal -->
-  <div id="quickItemModal" class="modal hidden">
-    <div class="modal-card max-w-sm">
-      <div class="flex items-center justify-between">
-        <h3 id="quickItemModalTitle" class="text-base font-bold text-stone-900">新增快選食物</h3>
-        <button type="button" data-close="quickItemModal" class="modal-x">✕</button>
-      </div>
-      <form id="quickItemForm" class="space-y-3">
-        <input id="quickItemEditId" type="hidden" value="" />
-        <label class="block"><span class="lbl">食物名稱</span><input id="quickItemNameInput" type="text" required placeholder="例：全家烤地瓜 (150g)" class="field" /></label>
-        <div class="grid grid-cols-2 gap-2">
-          <label class="block"><span class="lbl">熱量 (kcal)</span><input id="quickItemKcalInput" type="number" inputmode="numeric" min="1" max="5000" step="1" required placeholder="185" class="field font-semibold tabular-nums" /></label>
-          <label class="block"><span class="lbl">分類</span>
-            <select id="quickItemCatSelect" class="field px-2">
-              <option value="fav">我的常用</option><option value="breakfast">早餐超商</option><option value="meal">便當小吃</option><option value="drink">飲品點心</option>
-            </select>
-          </label>
-        </div>
-        <details class="rounded-xl border border-stone-200 bg-stone-50/60">
-          <summary class="px-3 py-2 text-xs font-semibold text-stone-700 cursor-pointer select-none">營養素／六大類份數（選填）</summary>
-          <div id="qiNutrFields" class="px-3 pb-3"></div>
-        </details>
-        <div class="flex justify-end gap-2 pt-1">
-          <button type="button" data-close="quickItemModal" class="btn-small-secondary">取消</button>
-          <button type="submit" class="btn-small-primary">儲存快選</button>
-        </div>
-      </form>
     </div>
   </div>
 

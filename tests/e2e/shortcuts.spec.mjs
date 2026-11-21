@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { stubCdn } from './helpers.mjs';
 
 const manifest = JSON.parse(readFileSync(new URL('../../manifest.webmanifest', import.meta.url), 'utf8'));
-const SCREEN = { quick: 'scr-quick', photo: 'scr-photo', water: 'scr-water', weight: 'scr-weight' };
+const SCREEN = { quick: 'scr-food', photo: 'scr-photo', water: 'scr-water', weight: 'scr-weight' };
 
 async function seed(page, meta = {}) {
   await page.addInitScript((meta) => {

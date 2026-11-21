@@ -30,8 +30,8 @@
   ],
   "shortcuts": [
     {
-      "name": "常吃的",
-      "short_name": "常吃的",
+      "name": "我的食物",
+      "short_name": "我的食物",
       "description": "點一下就記好",
       "url": "./?go=quick",
       "icons": [

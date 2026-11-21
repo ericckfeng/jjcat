@@ -17,10 +17,6 @@ test('記錄吃的、身體、睡眠，並產生報告', async ({ page }) => {
   await page.click('[data-portion="2"]');
   await page.click('#scr-manual .scr-foot button');
 
-  await page.click('[data-screen=scr-quick]');
-  await page.click('#quickPickList .pick-row >> nth=0');
-  await page.click('#scr-quick .scr-foot [data-back]');
-
   await page.click('[data-screen=scr-est]');
   for (const id of ['grain', 'grain', 'protMid', 'veg']) await page.click(`[data-est=${id}]`);
   await page.click('#applyEstimateBtn');
@@ -56,9 +52,11 @@ test('記錄吃的、身體、睡眠，並產生報告', async ({ page }) => {
 test('刪除會留下刪除標記，復原會移除', async ({ page }) => {
   await openApp(page);
   const today = await page.evaluate(() => window.__dietApp.ui.date);
-  await page.click('[data-screen=scr-quick]');
-  await page.click('#quickPickList .pick-row >> nth=0');
-  await page.click('#scr-quick .scr-foot [data-back]');
+  await page.click('[data-screen=scr-manual]');
+  await page.fill('#foodNameInput', '茶葉蛋');
+  await page.fill('#foodKcalInput', '75');
+  await page.click('#scr-manual .scr-foot button');
+  await expect(page.locator('#scr-manual')).toBeHidden();
   const id = (await appState(page)).logs[today][0].id;
   await page.click(`[data-del-id="${id}"]`);
   expect((await appState(page)).tomb['e:' + id]).toBeGreaterThan(0);

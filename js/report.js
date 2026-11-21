@@ -7,6 +7,11 @@ import { buildHighlights } from './highlights.js';
 const EXTRA_MEASURES = MEASURES.filter(m => m.key !== 'weight' && m.key !== 'waist');
 
 const WEEK = '日一二三四五六';
+// 膳食纖維只算有纖維資料的記錄（衛福部資料、我的食物），所以要說明涵蓋多少
+function fiberNote(s) {
+  const pct = Math.round(s.fiberShare * 100);
+  return s.fiberDays + ' 天有資料・只算 ' + pct + '% 的記錄' + (pct < 100 ? '，實際會更多' : '');
+}
 
 export const REPORT_CSS = `
 .rpt{font-family:'Noto Sans TC','PingFang TC',-apple-system,'Microsoft JhengHei',sans-serif;color:#1c1917;font-size:13px;line-height:1.55}
@@ -173,6 +178,7 @@ export async function buildReportHTML(ctx, opts) {
       h += stat('平均' + MACRO_META[k].label, fmt(s.avgMacro[k], 1) + ' g', (tg[k] ? '目標 ' + fmt(tg[k], 1) + ' g・' : '') + (pct != null ? '佔熱量 ' + pct + '%' : ''));
     });
     h += stat('營養素有填', s.macroDays + ' 天', '僅計入有填的記錄');
+    if (s.fiberDays) h += stat('平均膳食纖維', fmt(s.avgFiber, 1) + ' g', fiberNote(s));
     h += '</div>';
   }
 
@@ -328,6 +334,7 @@ export function buildReportText(ctx, opts) {
   if (s.macroDays) {
     lines.push('三大營養素平均：' + MACRO_KEYS.map(k => MACRO_META[k].label + ' ' + fmt(s.avgMacro[k], 1) + (tg[k] ? '/' + fmt(tg[k], 1) : '') + 'g').join('、'));
   }
+  if (s.fiberDays) lines.push('膳食纖維平均 ' + fmt(s.avgFiber, 1) + ' g（' + fiberNote(s) + '）');
   if (s.exDays) {
     lines.push('六大類平均份數：' + EX_KEYS.map(k => EX_META[k].short + ' ' + fmt(s.avgEx[k], 1) + (tg.ex && tg.ex[k] ? '/' + fmt(tg.ex[k], 1) : '')).join('、'));
   }

@@ -93,7 +93,7 @@ function deriveFromEx(ex) {
 }
 function dayTotals(date) {
   const list = state.logs[date] || [];
-  const t = { kcal: 0, p: 0, c: 0, f: 0, ex: {}, macroItems: 0, exItems: 0, pending: 0, count: list.length, meals: {} };
+  const t = { kcal: 0, p: 0, c: 0, f: 0, fiber: 0, fiberItems: 0, ex: {}, macroItems: 0, exItems: 0, pending: 0, count: list.length, meals: {} };
   EX_KEYS.forEach(k => { t.ex[k] = 0; });
   MEAL_KEYS.forEach(k => { t.meals[k] = 0; });
   list.forEach(it => {
@@ -104,9 +104,11 @@ function dayTotals(date) {
       t.p += it.p || 0; t.c += it.c || 0; t.f += it.f || 0;
     }
     if (it.ex) { t.exItems++; EX_KEYS.forEach(k => { t.ex[k] += it.ex[k] || 0; }); }
+    // 膳食纖維：只有衛福部資料、我的食物有填的記錄才有（fiber），其他記錄不知道
+    if (it.fiber != null) { t.fiberItems++; t.fiber += it.fiber || 0; }
     if (it.pending) t.pending++;
   });
-  t.p = r1(t.p); t.c = r1(t.c); t.f = r1(t.f);
+  t.p = r1(t.p); t.c = r1(t.c); t.f = r1(t.f); t.fiber = r1(t.fiber);
   EX_KEYS.forEach(k => { t.ex[k] = r1(t.ex[k]); });
   return t;
 }
@@ -459,14 +461,13 @@ async function addEntry({ name, nutr, mult = 1, meal, photo = null, morePhotos =
     for (const src of morePhotos) { const k = newPhotoKey(it.id); await savePhoto(k, src); it.morePhotos.push(k); }
   }
   (state.logs[ui.date] || (state.logs[ui.date] = [])).push(it);
-  if (saveMine && !customFoods().some(f => f.name === it.name)) {
-    const { food } = customFoodFromForm(formFromManual({ name: it.name, nutr, label: it.label, grams: it.grams, mult }), { id: uid('cf'), now: now() });
-    if (food) customFoods().unshift(food);
-  }
+  // saveMine：true 或來源字串（'ai-label'＝AI 讀營養標示）
+  let mineNote = '';
+  if (saveMine) mineNote = saveAsMyFood(formFromManual({ name: it.name, nutr, label: it.label, grams: it.grams, mult }), saveMine);
   persist();
   renderAll();
   const hint = gapHint(it.meal);
-  showToast('已加入「' + it.name + '」(' + it.kcal + ' kcal)' + hint, null, null, hint ? 6000 : 0);
+  showToast('已加入「' + it.name + '」(' + it.kcal + ' kcal)' + mineNote + hint, null, null, hint || mineNote ? 6000 : 0);
   askWhen([it]);
 }
 async function deleteEntry(id) {
@@ -1525,6 +1526,10 @@ function rangeStats(dates) {
     macroDays: macroDays.length,
     avgEx: Object.fromEntries(EX_KEYS.map(k => [k, avg(exDays, t => t.ex[k])])),
     exDays: exDays.length,
+    // 膳食纖維：有纖維資料的天數平均；fiberShare＝有纖維資料的記錄佔幾成（少的話實際吃的會比平均多）
+    avgFiber: avg(totals.filter(t => t.fiberItems > 0), t => t.fiber),
+    fiberDays: totals.filter(t => t.fiberItems > 0).length,
+    fiberShare: logged.length ? totals.reduce((a, t) => a + t.fiberItems, 0) / logged.reduce((a, t) => a + t.count, 0) : 0,
     weights,
     avgWater: waters.length ? waters.reduce((a, b) => a + b, 0) / waters.length : null,
     exMinTotal: exMins.reduce((a, b) => a + b, 0),
@@ -2083,6 +2088,8 @@ async function readLabelByAi(prefix, photo) {
     if (!lb) { setBox(note, 'err', '找不到營養標示。照片已經存了，可以對照照片自己填；或把表格拍清楚、拍正一點再試。'); return; }
     const nameEl = $(prefix === 'add' ? 'foodNameInput' : 'editLogNameInput');
     if (!nameEl.value.trim() && lb.name) nameEl.value = lb.name;
+    // 拍了營養標示的多半會再吃：「也存到我的食物」預設勾起來（可以取消）
+    if (prefix === 'add') { $('saveMineCheck').checked = true; addLabelByAi = true; }
     const per = lb.servingG ? '每份 ' + lb.servingG + ' 公克' + (lb.servings ? '、這包有 ' + lb.servings + ' 份' : '') + '。' : '';
     const kj = lb.kj ? '（標示是 ' + lb.kj + ' 千焦耳，已換成大卡）' : '';
     if (lb.servingG) {
@@ -2554,6 +2561,17 @@ async function saveEditPhotos(item) {
 // 標示寫「每 35 克 100 大卡」、吃了 7 克 → 自動算好填進熱量和營養素，不用拿計算機
 const LB_FIELDS = [['kcal', '熱量（大卡）'], ['p', '蛋白質（克）'], ['f', '脂肪（克）'], ['c', '碳水（克）']];
 function labelPhotoText() { return aiKey() ? '📷 拍營養標示，AI 幫我填（照片會一起存）' : '📷 拍營養標示（照片會跟這筆一起存）'; }
+let addLabelByAi = false;   // 這次「自己輸入」有用 AI 讀營養標示（存成我的食物時記來源）
+// 存一樣我的食物（form＝customFoodFromForm 的表單）；同名的不重複存。回傳要接在提示後面的說明
+function saveAsMyFood(form, source) {
+  const name = String(form.name || '').trim();
+  if (customFoods().some(f => f.name === name)) return '。我的食物已經有「' + name + '」，沒有重複存';
+  if (typeof source === 'string') form.source = source;
+  const { food } = customFoodFromForm(form, { id: uid('cf'), now: now() });
+  if (!food) return '';
+  customFoods().unshift(food);
+  return '，也存到我的食物了';
+}
 function labelCalcHTML(prefix) {
   const inp = (k, ph) => `<input id="${prefix}-lb-${k}" data-lb="${prefix}" type="number" inputmode="decimal" min="0" step="any" placeholder="${ph}" class="field tabular-nums" />`;
   return `<details id="${prefix}-lb" class="lb-calc">
@@ -2568,10 +2586,21 @@ function labelCalcHTML(prefix) {
       <div class="lb-line">我吃了 ${inp('eat', '克')} 克
         <button type="button" data-lb-one="${prefix}" class="chip-btn chip-lg">吃了 1 份</button></div>
       <div id="${prefix}-lb-out" class="lb-out" aria-live="polite"></div>
+      ${prefix === 'edit' ? `<button type="button" id="edit-lb-mine" class="btn-secondary w-full bg-white">⭐ 照這個標示存成「我的食物」</button>` : ''}
     </div>
   </details>`;
 }
 document.querySelectorAll('[data-label-calc]').forEach(el => { el.innerHTML = labelCalcHTML(el.getAttribute('data-label-calc')); });
+// 修改記錄時：以前照標示算過的（記錄有 label），一鍵存成我的食物（一份＝這次吃的克數）
+$('edit-lb-mine').addEventListener('click', () => {
+  const lx = labelExtra('edit', 1);
+  const name = $('editLogNameInput').value.trim();
+  if (!lx) { showToast('先填好標示上的克數、熱量和「我吃了幾克」'); return; }
+  if (!name) { showToast('請先填食物名稱'); return; }
+  const note = saveAsMyFood(formFromManual({ name, nutr: { kcal: lx.label.kcal }, label: lx.label, grams: lx.grams }), 'label');
+  if (note.startsWith('，')) { persist(); renderAll(); showToast('已存到我的食物：「' + name + '」，一份 ' + lx.grams + ' 克'); }
+  else showToast(note.slice(1));
+});
 function readLabel(prefix) {
   const v = (k) => $(prefix + '-lb-' + k).value.trim();
   return { g: v('g'), kcal: v('kcal'), p: v('p'), c: v('c'), f: v('f'), eat: v('eat') };
@@ -2603,7 +2632,7 @@ function fillLabelCalc(prefix, item) {
   setBox(prefix + '-lb-note', null, '');
   $(prefix + '-lb').open = Boolean(lb);
 }
-function resetLabelCalc(prefix) { fillLabelCalc(prefix, null); }
+function resetLabelCalc(prefix) { fillLabelCalc(prefix, null); if (prefix === 'add') addLabelByAi = false; }
 function setPortion(v) {
   $('portionSelect').value = String(v);
   document.querySelectorAll('#portionGroup [data-portion]').forEach(x => x.classList.toggle('is-active', x.getAttribute('data-portion') === String(v)));
@@ -2657,7 +2686,7 @@ $('addFoodForm').addEventListener('submit', async (e) => {
   await addEntry({
     name, nutr: { kcal, ...nutr }, mult, meal: ui.meal,
     photo: photos[0] || null, morePhotos: photos.slice(1),
-    pending: pendingChecked || (!hasKcal && photos.length > 0), saveMine: $('saveMineCheck').checked,
+    pending: pendingChecked || (!hasKcal && photos.length > 0), saveMine: $('saveMineCheck').checked && (addLabelByAi ? 'ai-label' : true),
     extra: labelExtra('add', mult)
   });
   $('addFoodForm').reset();

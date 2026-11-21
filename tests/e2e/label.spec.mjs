@@ -232,3 +232,25 @@ test('同步：第 2、3 張照片上傳到雲端、另一台下載得到；拿�
   expect(await photoBytes(page, it.morePhotos[1])).toBe(0);
   await ctx2.close();
 });
+
+test('以前照標示算過的記錄：修改時一鍵存成我的食物（一份＝這次吃的克數），同名的不重複存', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (localStorage.getItem('diet_tracker_v2')) return;
+    const d = new Date(); d.setHours(12);
+    const today = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    localStorage.setItem('diet_tracker_v2', JSON.stringify({ meta: { welcomed: true }, logs: { [today]: [
+      { id: 'item_n', name: '綜合堅果', kcal: 40, f: 4, meal: 'snack', multiplier: 1, grams: 7, label: { g: 35, kcal: 200, f: 20 }, updatedAt: 1 }
+    ] } }));
+  });
+  await openApp(page);
+  await page.click('.edit-entry-btn');
+  await expect(page.locator('#edit-lb')).toHaveAttribute('open', '');
+  await page.click('#edit-lb-mine');
+  await expect(page.locator('#toast')).toContainText('已存到我的食物：「綜合堅果」，一份 7 克');
+  const foods = (await appState(page)).customFoods;
+  expect(foods).toHaveLength(1);
+  expect(foods[0]).toMatchObject({ name: '綜合堅果', source: 'label', serving: { g: 7 }, per100g: { kcal: 571.43, f: 57.14 } });
+  await page.click('#edit-lb-mine');
+  await expect(page.locator('#toast')).toContainText('我的食物已經有「綜合堅果」');
+  expect((await appState(page)).customFoods).toHaveLength(1);
+});

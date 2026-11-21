@@ -156,11 +156,15 @@ test('拍營養標示：填進自己輸入的名稱、熱量、營養素', async
   await expect(page.locator('#foodNameInput')).toHaveValue('高纖蘇打餅');
   await expect(page.locator('#foodKcalInput')).toHaveValue('132');
   await expect(page.locator('#add-p')).toHaveValue('2.7');
+  await expect(page.locator('#saveMineCheck')).toBeChecked();   // 拍了標示的，預設也存到我的食物
   await page.click('[data-portion="2"]');
   await page.click('[form=addFoodForm][type=submit]');
   await expect(page.locator('#scr-manual')).toBeHidden();   // 存照片要一點時間，關掉才算存好
   const it = (await appState(page)).logs[today].find(x => x.name === '高纖蘇打餅');
   expect(it).toMatchObject({ kcal: 264, p: 5.4, c: 39.2, f: 9.6, hasPhoto: true, grams: 60, label: { g: 30, kcal: 132, p: 2.7, c: 19.6, f: 4.8 } });
+  const mine = (await appState(page)).customFoods.find(f => f.name === '高纖蘇打餅');
+  expect(mine).toMatchObject({ source: 'ai-label', serving: { g: 30 }, per100g: { kcal: 440, p: 9, f: 16, c: 65.33 } });
+  await expect(page.locator('#toast')).toContainText('也存到我的食物了');
 });
 
 test('拍營養標示：只有千焦耳的，換成大卡', async ({ page }) => {

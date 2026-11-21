@@ -1323,36 +1323,48 @@ function nutrLine(it) {
   return parts.join('・');
 }
 
-// 「和昨天一樣」：這天還沒記、前一天有記的餐別，各一張卡片，左右滑；按一下整餐記進來，不要的再刪
+// 「吃的和前幾天一樣？」：上面選餐別（預設是現在該記的那一餐，可以改），
+// 下面左右滑前 7 天同一餐的卡片（昨天在最前面）；按一下整餐放進來，多的少的再到記錄區改
+const WEEKDAY = ['日', '一', '二', '三', '四', '五', '六'];
+function copyDayLabel(date) {
+  const d = new Date(date + 'T12:00:00');
+  const wd = '星期' + WEEKDAY[d.getDay()];
+  const back = Math.round((new Date(ui.date + 'T12:00:00') - d) / 86400000);
+  return (back === 1 ? (ui.date === todayStr() ? '昨天' : '前一天') + '・' + wd : wd) + '　' + (d.getMonth() + 1) + '/' + d.getDate();
+}
 function copyMealHTML(list) {
-  const prev = addDays(ui.date, -1);
-  const word = ui.date === todayStr() ? '昨天' : '前一天';
-  const cards = MEAL_KEYS.filter(m => !list.some(i => i.meal === m)).map(m => {
-    const items = mealEntries(state.logs, prev, m);
+  const meal = ui.meal;
+  const days = Array.from({ length: 7 }, (_, i) => addDays(ui.date, -(i + 1)));
+  if (!days.some(d => (state.logs[d] || []).length)) return '';   // 前 7 天都沒記錄就不顯示
+  const tabs = MEAL_KEYS.map(k => `<button type="button" data-meal="${k}" class="meal-btn${k === meal ? ' is-active' : ''}">${MEAL_META[k].label}</button>`).join('');
+  const cards = days.map(date => {
+    const items = mealEntries(state.logs, date, meal);
     if (!items.length) return '';
     const shown = items.slice(0, 4).map(i => `<li class="truncate">${esc(i.name)}</li>`).join('');
     const more = items.length > 4 ? `<li class="text-stone-400">…還有 ${items.length - 4} 樣</li>` : '';
-    return `<button type="button" data-copy-meal="${m}" class="copy-card">
-      <span class="block text-lg font-bold text-stone-900">和${word}一樣的${MEAL_META[m].label}</span>
+    return `<button type="button" data-copy-from="${date}" class="copy-card">
+      <span class="block text-lg font-bold text-stone-900">${copyDayLabel(date)}</span>
       <ul class="copy-items">${shown}${more}</ul>
       <span class="block text-base text-emerald-700 font-bold tabular-nums">${items.length} 樣・${sumNutr(items).kcal} kcal</span>
-      <span class="copy-go">全部記進來</span></button>`;
+      <span class="copy-go">放入${MEAL_META[meal].label}</span></button>`;
   }).filter(Boolean);
-  if (!cards.length) return '';
-  const hint = cards.length > 1 ? '<span class="text-base font-normal text-stone-500">　左右滑看其他餐</span>' : '';
-  return `<div id="copyMealBox" class="space-y-2"><div class="sec-title px-1">吃的和${word}一樣？${hint}</div>
-    <div class="copy-strip">${cards.join('')}</div>
-    <p class="text-sm text-stone-500 px-1">按一下整餐記進來，沒吃的再刪掉。</p></div>`;
+  const has = list.some(i => i.meal === meal);
+  const body = cards.length
+    ? `<div class="copy-strip">${cards.join('')}</div>
+       <p class="text-sm text-stone-500 px-1">${cards.length > 1 ? '左右滑看前幾天。' : ''}按一下整餐放進來，多的或少的再到上面的記錄增加或刪除。${has ? '這一餐已經有記錄，放入的會加在後面。' : ''}</p>`
+    : `<p class="text-base text-stone-500 px-1">前 7 天沒有記${MEAL_META[meal].label}。</p>`;
+  return `<div id="copyMealBox" class="space-y-2"><div class="sec-title px-1">吃的和前幾天一樣？</div>
+    <div class="meal-picker copy-meals">${tabs}</div>${body}</div>`;
 }
-function copyMeal(meal) {
-  const prev = addDays(ui.date, -1);
+function copyMeal(from) {
+  const meal = ui.meal;
   const date = ui.date;
-  const added = copyEntries(mealEntries(state.logs, prev, meal), { makeId: uid, at: now() });
+  const added = copyEntries(mealEntries(state.logs, from, meal), { makeId: uid, at: now() });
   if (!added.length) return;
   (state.logs[date] || (state.logs[date] = [])).push(...added);
   persist();
   renderAll();
-  showToast('已記' + MEAL_META[meal].label + '：' + added.length + ' 樣、' + sumNutr(added).kcal + ' kcal（不含照片）', '復原', () => {
+  showToast('已放入' + MEAL_META[meal].label + ' ' + added.length + ' 樣（不含照片）。多的或少的請到記錄區增加或刪除', '復原', () => {
     const ids = new Set(added.map(a => a.id));
     state.logs[date] = (state.logs[date] || []).filter(it => !ids.has(it.id));
     added.forEach(a => tombstone('e:' + a.id));
@@ -1361,8 +1373,8 @@ function copyMeal(meal) {
   });
 }
 $('mealLogContainer').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-copy-meal]');
-  if (b) copyMeal(b.getAttribute('data-copy-meal'));
+  const b = e.target.closest('[data-copy-from]');
+  if (b) copyMeal(b.getAttribute('data-copy-from'));
 });
 
 function renderLogs() {
@@ -2399,6 +2411,7 @@ document.addEventListener('click', (e) => {
   if (!btn) return;
   ui.meal = btn.getAttribute('data-meal');
   renderMealSelector();
+  if (btn.closest('#copyMealBox')) renderLogs();
   if (screenStack.includes('scr-food')) renderFoodCart();
 });
 $('portionGroup').addEventListener('click', (e) => {

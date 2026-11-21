@@ -13,7 +13,7 @@
 - 網址：https://ericckfeng.github.io/jjcat/
 - 個人網站「開源專案」表格有連到這裡（見文末「個人網站」）。
 
-功能：記錄吃的（我的食物、查食物、拍照待查、份量估算、自己輸入）、三大營養素與六大類份數、體重／BMI／身體尺寸、喝水、運動、睡眠（含補眠）、心情備註、趨勢圖、給營養師的報告（PDF／分享檔／LINE 文字）、JSON／CSV 匯出匯入、Google 雲端硬碟同步（手機＋電腦）、鼓勵角色「小芽」。
+功能：記錄吃的（我的食物、查食物、拍照待查、份量估算、自己輸入）、三大營養素與六大類份數、體重／BMI／身體尺寸、喝水、運動、睡眠（含補眠）、心情備註、趨勢圖、給營養師的報告（PDF／分享檔／LINE 文字）、JSON／CSV 匯出匯入、Google 雲端硬碟同步（手機＋電腦）、鼓勵角色「小芽」「小貓」與只在做得不夠時出來提醒的「營養師」（設定裡複選）。
 
 ## 開發
 
@@ -37,7 +37,8 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/app.js` | 主程式：狀態、儲存、畫面渲染、事件、同步流程、小芽、睡眠 |
 | `js/sync.js` | **純函式**：同步的逐筆合併 `mergeData()`（有單元測試） |
 | `js/body.js` | **純函式**：BMI／國健署分級、身體尺寸、睡眠時數計算 |
-| `js/mascot.js` | 小芽 SVG 與鼓勵訊息（`buildMascotMessages` 是純函式） |
+| `js/mascot.js` | 小芽 SVG 與鼓勵訊息（`buildMascotMessages`、決定誰說哪一句的 `castMessages` 是純函式，有單元測試） |
+| `js/characters.js` | 小貓、Q 版營養師的 SVG（和小芽同一組 mood，另有 sleepy／rested／full／water／protein 姿勢）。營養師只說「提醒」（calm），一天最多 2 句 |
 | `js/report.js` | 營養師報告 HTML／文字摘要 |
 | `js/cloud.js` | Google OAuth（整頁跳轉、`drive.file` 權限）與 Drive API |
 | `js/db.js` | 照片存 IndexedDB |

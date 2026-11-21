@@ -217,7 +217,24 @@ textarea.field { min-height: 0; resize: vertical; }
 .tips-card { padding: .9rem 1rem; border-radius: 1.1rem; background: #f0f9ff; border: 1px solid #bae6fd; display: flex; flex-direction: column; gap: .5rem; }
 .tips-card.hidden { display: none; }
 .tips-card li { background: #fff; border-radius: .85rem; padding: .6rem .8rem; font-size: 1.0625rem; font-weight: 500; line-height: 1.5; color: #1c1917; }
-.mascot-btn { flex-shrink: 0; width: 5.5rem; height: 5.5rem; border-radius: 1rem; }
+.mascot-btn { flex-shrink: 0; display: flex; align-items: flex-end; border-radius: 1rem; }
+.pal { display: block; width: 5.5rem; height: 5.5rem; }
+.pal-sm { width: 3.6rem; height: 3.6rem; margin-left: -.3rem; }
+.mascot-card.mascot-multi { flex-direction: column; align-items: stretch; gap: .4rem; }
+.mascot-card.mascot-multi .mascot-btn { align-self: flex-start; }
+.mascot-card.mascot-multi .mascot-bubble::before { left: 2rem; top: -.45rem; border: .5rem solid transparent; border-bottom-color: #fff; border-top: 0; }
+.mascot-card.mascot-doc { background: linear-gradient(135deg, #eff6ff, #f0f9ff); border-color: #bfdbfe; }
+.mascot-zz { animation: mascot-zz 2s ease-in-out infinite; }
+.mascot-bub { transform-box: fill-box; transform-origin: center; animation: mascot-bub 2s ease-in-out infinite; }
+.pal-wave { transform-box: fill-box; transform-origin: 20% 100%; animation: mascot-wave 1s ease-in-out infinite; }
+.mascot-sleepy .mascot-body { animation: mascot-nod 3s ease-in-out infinite; }
+.pal-tap .mascot-svg { animation: pal-hop .5s ease-out; }
+.pal-pop { position: absolute; left: 3.5rem; top: .4rem; font-size: 1.4rem; pointer-events: none; animation: pal-pop .9s ease-out forwards; }
+@keyframes mascot-zz { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+@keyframes mascot-bub { 0%, 100% { transform: scale(.7); } 50% { transform: scale(1.2); } }
+@keyframes mascot-nod { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(3deg) translateY(1px); } }
+@keyframes pal-hop { 0% { transform: none; } 30% { transform: translateY(-10px) scale(.96, 1.05); } 60% { transform: scale(1.05, .95); } 100% { transform: none; } }
+@keyframes pal-pop { from { opacity: 1; transform: translateY(0) scale(.8); } to { opacity: 0; transform: translateY(-2.5rem) scale(1.2); } }
 .mascot-btn:active { transform: scale(.95); }
 .mascot-svg { width: 100%; height: 100%; overflow: visible; }
 .mascot-body { transform-origin: 60px 110px; animation: mascot-bob 2.6s ease-in-out infinite; }
@@ -235,7 +252,7 @@ textarea.field { min-height: 0; resize: vertical; }
 .confetti span { position: absolute; top: -10px; width: 8px; height: 12px; border-radius: 2px; animation: confetti-fall 1.8s ease-in forwards; }
 @keyframes confetti-fall { to { transform: translateY(170px) rotate(540deg); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .mascot-body, .mascot-wave, .mascot-twinkle, .confetti span { animation: none !important; }
+  .mascot-body, .mascot-wave, .mascot-twinkle, .mascot-zz, .mascot-bub, .pal-wave, .pal-tap .mascot-svg, .confetti span { animation: none !important; }
 }
 
 /* 寬版按鈕（睡眠） */

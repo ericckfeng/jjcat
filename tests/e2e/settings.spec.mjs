@@ -16,7 +16,7 @@ test('設定首頁列出六項，副標題顯示目前的狀態與版本', async
   await expect(page.locator('#setProfileSub')).toContainText('王小明・男');
   await expect(page.locator('#setProfileSub')).toContainText('181 公分');
   await expect(page.locator('#setTargetsSub')).toHaveText('每天 1,500 kcal・有每餐份數');
-  await expect(page.locator('#setFeaturesSub')).toHaveText('字體 特大・小芽 開・熱量銀行 開');
+  await expect(page.locator('#setFeaturesSub')).toHaveText('字體 特大・角色 小芽、小貓、營養師・熱量銀行 開');
   await expect(page.locator('#setAboutSub')).toContainText('（Rev. ');
   await page.click('#scr-settings [data-screen=scr-about]');
   await expect(page.locator('#appVersionText')).toHaveText(/^版本 \d{4}\.\d{2}\.\d{2}-\d+（Rev\. \d+）$/);
@@ -44,13 +44,19 @@ test('基本資料：存檔後體重頁的身高、性別也一樣（同一份�
   await expect(page.locator('[data-calc-act=light]')).toHaveClass(/is-active/);
 });
 
-test('功能開關：字體、小芽按下去就生效', async ({ page }) => {
+test('功能開關：字體、三個角色按下去就生效', async ({ page }) => {
   await openApp(page);
   await openSettings(page, '[data-screen=scr-features]');
   await page.click('#fontSizeGroup [data-font=xl]');
   expect(await page.evaluate(() => document.documentElement.style.fontSize)).toBe('20px');
   await page.uncheck('#mascotToggle');
-  expect((await appState(page)).meta.mascot).toBe(false);
+  await page.uncheck('#catToggle');
+  await page.uncheck('#docToggle');
+  expect((await appState(page)).meta).toMatchObject({ mascot: false, cat: false, doc: false });
+  await closeScreens(page);
+  await expect(page.locator('#mascotCard')).toBeHidden();
+  await openSettings(page);
+  await expect(page.locator('#setFeaturesSub')).toContainText('角色 關');
   await closeScreens(page);
   await expect(page.locator('#mascotCard')).toBeHidden();
 });

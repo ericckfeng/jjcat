@@ -91,6 +91,7 @@
 | `customFoodId` | （選填，第 1 步起）從「我的食物」記的：`customFoods` 的 id。我的食物刪掉後記錄照舊（數字是記的當時算好的） |
 | `servings` | （選填，第 1 步起）以份計的我的食物吃了幾份（這時沒有 `grams`） |
 | `fiber` | （選填，第 1 步起）膳食纖維 g。只有查食物／我的食物有纖維資料時才有；很多記錄沒有，合計時要註明「有填纖維的 N 筆」 |
+| `comboId` | （選填，第 3 步起）從套餐放進購物車再記的：`combos` 的 id（套餐依最近用的排序）。在購物車改過克數也照樣帶著；套餐刪掉後記錄照舊 |
 | `foodId` | （選填，v11 起）食物資料庫的 id（`tfda_foods.json` 的 TFDA 整合編號） |
 | `backfill` | （選填，v32 起）`true`＝事後補記：`time` 是記錄的時間、不是吃的時間。記在過去的日期時自動標。報告的夜間進食不算這些。（v33 起，晚上 10 點到清晨 5 點記的會問吃的時間，直接改 `time`，不再標 `backfill`） |
 | `ai` | （選填，v27 起）這筆是 AI 估算的：`'photo'` 拍照、`'text'` 用說的／打字。沒有 `foodId` |
@@ -146,6 +147,21 @@
 - `aliases`、`category`、`barcode`、`source`、`note` 是之後（條碼、機構資料庫）用的，修改時要原樣保留。
 - `source` 目前會出現的值：`'ai-label'`（AI 讀營養標示後存的）、`'label'`（修改記錄時照標示存的）；手動新增的沒有。
 
+### Combo（套餐，最上層 `combos`，第 3 步起）
+
+```
+{ id: 'cb_xxxx', name, updatedAt,
+  items: [{ foodId? | customFoodId?, snapshot: { id?, name, category?, state?, note?, per100g?, exPer100g?, perServing?, exPerServing?, serving?, ai? },
+            grams, weighed }] }
+```
+
+- 購物車「存成套餐」產生（`js/combos.js` 的 `comboFromCart`）。只存食物和份量，不存餐別。
+- `grams`：記的時候填的數字；以份計的食物（`snapshot.perServing`）是「幾份」。`weighed`：`'asis'` 或 `'cooked'`（熟重）。
+- `foodId`＝TFDA 整合編號；`customFoodId`＝我的食物的 id；AI 估的品項兩個都沒有（`snapshot.ai` 有值）。
+- `snapshot`：存的時候那樣食物的資料（和食物同形狀，只留算營養要用的欄位）。選套餐時，資料庫／我的食物裡還找得到就用**現在**的數字（使用者改了我的食物，套餐跟著改）；找不到（TFDA 刪掉、我的食物刪掉、AI 估的、資料庫還沒載入）才用 snapshot。我的食物從以份計改成以克計（或反過來）時，`grams` 的意思不同了，也用 snapshot。
+- 清單照規則 5 合併（`id`＋`updatedAt`），刪除用 `tomb['combos:<id>']`。匯入備份檔和我的食物一樣「只加不刪」。
+- 同名再存一次＝更新那個套餐（同一個 `id`，換掉 `items`）。
+
 ### meta（只存在這台裝置）
 
 `deviceId`、`welcomed`（true＝這台裝置已經選過歡迎畫面的開始方式）、`ai: { key, at }`（使用者自己的 Gemini API Key；**只存在這台裝置，絕不能放進同步檔或備份檔**，有 e2e 測試檢查）、`weeklySeen`（已看過的小芽週報，值是那週週一的日期）、`fontSize`（`m`/`l`/`xl`）、`mascot`（false＝關閉小芽）、`cat`／`doc`（Rev. 43 起，小貓／營養師有沒有勾；沒設過就跟著 `mascot`）、`docSeen: { date, keys }`（營養師今天已經說過的提醒，一天最多 2 句）、`lastCheer`、`installHintDismissed`、`lastBackup`、`photoVer`（`{ entryId: 本機照片的 photoKey }`）、`cloud: { linked, email, auto, lastSync, lastBackup, knownModified, dirty, needAuth, blockedRev }`（`blockedRev`：Rev. 39 起，雲端資料要求的最低版本比這台新，暫停同步中）。`deviceName`（Rev. 39 起，使用者幫這台取的名字，空的就用「iPhone」「Mac 電腦」等）。`party: { tpl, counts: { 代碼: 數量 }, at, weigh, photos: { 代碼: true }, grams: { 代碼: 公克 } }`（v37 起；Rev. 43 拿掉吃到飽畫面後，開 App 時若還有就問一次：記到開始那天的那一餐，或確認兩次後刪掉。吃到飽速記還沒記下來的數量、秤重模式開關、秤重照（暫存在 IndexedDB `party_<代碼>`）與一顆的重量；按「記下來」後全部刪除）。
@@ -180,6 +196,7 @@
 | v3（Rev. 42） | 2026-11-21 | 記錄新增 `lookup`（拍照記・待查）。只是記錄裡的新欄位，舊版原樣保留，沒有調 `DATA_MIN_REV`。待查表（CSV）只是匯出／匯入用的檔案，不是同步格式：欄位見 `js/lookup.js` 的 `CSV_HEAD`，回填只看「編號」和要填的欄。 |
 | v3（Rev. 43） | 2026-11-21 | 拿掉吃到飽速記畫面（使用者覺得用不到）。格式沒變：舊記錄的 `party` 欄位保留；裝置上還沒記下來的 `meta.party` 開 App 時問一次要不要記下來。首頁角色改成可以複選：小芽、小貓、營養師（`meta.cat`、`meta.doc`、`meta.docSeen`，只存這台裝置）。 |
 | v3（Rev. 45，第 1 步） | 2026-11-21 | 最上層新增 `customFoods`（我的食物），「常吃的」`quickItems` 停用（不顯示、不新增，資料保留）。記錄新增 `customFoodId`、`servings`、`fiber`。`tfda_foods.json` 加回 `fiber`。**發佈時用 `python3 scripts/bump.py --min-rev`**，把 `DATA_MIN_REV` 調成這一版：還沒更新的 App 會暫停同步、提示更新。 |
+| v3（Rev. 47，第 3 步） | 2026-11-21 | 最上層新增 `combos`（套餐），記錄新增選填 `comboId`。**沒有調 `DATA_MIN_REV`**：Rev. 39 起的 App 都會原樣保留、照規則合併看不懂的最上層清單，`DATA_MIN_REV` 已經是 45。樣本：`backup-v3-combos.json`。 |
 | v3（App v23） | 2026-11-19 | 每日欄位新增 `smm`（骨骼肌）；`targets.bodyFat`（目標體脂率）；`targets.calc.bmrSource` 可為 `ffm`。每日 CSV 最後再加一欄骨骼肌。 |
 | v3（App v24） | 2026-11-19 | 每日欄位新增 `vfl`、`pa`、`ecw`。每日 CSV 最後加三欄。 |
 | v3（App v25） | 2026-11-19 | 每日欄位新增 `vfa`（內臟脂肪面積）。每日 CSV 最後加一欄。 |

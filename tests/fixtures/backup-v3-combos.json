@@ -1,0 +1,124 @@
+{
+  "app": "diet-tracker",
+  "version": 3,
+  "exportedAt": "2026-11-26T12:00:00.000Z",
+  "targets": {
+    "kcal": 1800
+  },
+  "logs": {
+    "2026-11-25": [
+      {
+        "id": "item_cb1",
+        "name": "堅果包 35g",
+        "kcal": 100,
+        "meal": "breakfast",
+        "time": "07:30",
+        "multiplier": 1,
+        "grams": 35,
+        "customFoodId": "cf_nut",
+        "comboId": "cb_morning",
+        "updatedAt": 1764050000000
+      }
+    ]
+  },
+  "days": {},
+  "quickItems": [],
+  "customFoods": [
+    {
+      "id": "cf_nut",
+      "name": "堅果包",
+      "serving": {
+        "g": 35,
+        "label": "1 包"
+      },
+      "per100g": {
+        "kcal": 285.71,
+        "p": 8.57,
+        "f": 28.57
+      },
+      "updatedAt": 1764040000000
+    }
+  ],
+  "combos": [
+    {
+      "id": "cb_morning",
+      "name": "每天的早餐",
+      "updatedAt": 1764045000000,
+      "items": [
+        {
+          "customFoodId": "cf_nut",
+          "snapshot": {
+            "id": "cf_nut",
+            "name": "堅果包",
+            "serving": {
+              "g": 35
+            },
+            "per100g": {
+              "kcal": 285.71,
+              "p": 8.57,
+              "f": 28.57
+            }
+          },
+          "grams": 35,
+          "weighed": "asis"
+        },
+        {
+          "foodId": "ZZ_REMOVED",
+          "snapshot": {
+            "id": "ZZ_REMOVED",
+            "name": "已下架的燕麥片",
+            "category": "穀物類",
+            "per100g": {
+              "kcal": 400,
+              "p": 12,
+              "c": 66
+            }
+          },
+          "grams": 40,
+          "weighed": "asis"
+        },
+        {
+          "customFoodId": "cf_deleted",
+          "snapshot": {
+            "id": "cf_deleted",
+            "name": "刪掉的豆漿",
+            "serving": {
+              "label": "1 杯"
+            },
+            "perServing": {
+              "kcal": 120,
+              "p": 8
+            }
+          },
+          "grams": 1,
+          "weighed": "asis"
+        },
+        {
+          "snapshot": {
+            "name": "滷蛋",
+            "per100g": {
+              "kcal": 140,
+              "p": 12
+            },
+            "ai": "photo"
+          },
+          "grams": 50,
+          "weighed": "asis"
+        }
+      ]
+    },
+    {
+      "id": "cb_future",
+      "name": "未來的套餐",
+      "updatedAt": 1764045000000,
+      "futureField": {
+        "x": 1
+      },
+      "items": []
+    }
+  ],
+  "tomb": {
+    "combos:cb_gone": 1764040000000
+  },
+  "photos": {}
+}

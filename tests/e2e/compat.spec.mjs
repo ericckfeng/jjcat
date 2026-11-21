@@ -102,6 +102,26 @@ test('最早單檔版的欄位（targetKcal）不會被當成新資料存起來'
   for (const it of s.logs['2026-10-01']) { expect(it.photo).toBeUndefined(); expect(it.baseKcal).toBeUndefined(); }
 });
 
+test('套餐（combos）備份檔：套餐都匯入、看不懂的欄位保留；資料庫找不到、刪掉、AI 估的品項用 snapshot 照樣能放進購物車', async ({ page }) => {
+  await openApp(page);
+  expect(await importFile(page, fx('backup-v3-combos.json'))).toContain('匯入完成');
+  const s = await appState(page);
+  expect(s.combos.map(c => c.id)).toEqual(['cb_morning', 'cb_future']);
+  expect(s.combos[1]).toMatchObject({ futureField: { x: 1 } });
+  await closeScreens(page);
+  await page.click('[data-food-open=mine] >> nth=0');
+  await page.click('#foodMine [data-combo-pick="cb_morning"]');
+  await expect(page.locator('#foodCart li')).toHaveCount(4);
+  await expect(page.locator('#foodCart')).toContainText('已下架的燕麥片 40g');
+  await expect(page.locator('#foodCart')).toContainText('刪掉的豆漿 1 份');
+  await page.click('#foodCartSaveBtn');
+  const added = (await appState(page)).logs[await page.evaluate(() => window.__dietApp.ui.date)];
+  expect(added.find(e => e.name.startsWith('已下架'))).toMatchObject({ kcal: 160, foodId: 'ZZ_REMOVED', comboId: 'cb_morning' });
+  expect(added.find(e => e.name.startsWith('刪掉的豆漿')).customFoodId).toBeUndefined();
+  expect(added.find(e => e.name.startsWith('滷蛋'))).toMatchObject({ kcal: 70, ai: 'photo' });
+  expect(added.find(e => e.name.startsWith('堅果包'))).toMatchObject({ customFoodId: 'cf_nut', kcal: 100 });
+});
+
 test('我的食物（customFoods）備份檔：食物都匯入（和記錄一樣，匯入只加不刪）；看不懂的欄位保留；記錄連得回我的食物', async ({ page }) => {
   await openApp(page);
   expect(await importFile(page, fx('backup-v3-custom-foods.json'))).toContain('匯入完成');

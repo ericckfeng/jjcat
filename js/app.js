@@ -15,6 +15,7 @@ import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, sho
 import { buildInsights } from './insights.js';
 import { APP_REV, APP_LABEL, parseLatest, requiredRev, minRevToWrite, deviceName, deviceRecord, upsertDevice, deviceRows } from './version.js';
 import { customFoodFromForm, formFromCustomFood, servingNutrients, servingKcal, servingText, searchMine, sortByUse, isPerServing, formFromManual } from './myfoods.js';
+import { comboFromCart, resolveCombo, comboTotals, comboSummary, searchCombos, sortCombos } from './combos.js';
 import { HAND_REFS, AMOUNTS, LOOKUP_CATS, lookupCat, cleanAmount, amountText, sizeText, estimateLookup, buildLookupCsv, readFilledCsv, AI_LOOKUP_PROMPT } from './lookup.js';
 import { partyTemplate, startCounts, partyEntries, partyTotals } from './party.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
@@ -746,7 +747,8 @@ $('scr-grams').addEventListener('click', (e) => {
 });
 // 購物車：連續選好幾樣，一次記到同一餐。每一樣各存一筆記錄，用 groupId 標成同一組。
 // 只放在記憶體；離開查食物頁時還有東西，會問要不要記。
-let foodCart = [];   // [{ key, food, grams, weighed, entry }]
+let foodCart = [];   // [{ key, food, grams, weighed, entry, comboId }]
+let cartCombo = null; // 最後放進購物車的套餐（存成套餐時預填名稱，同名就是更新它）
 function cartEntryFor(food, g, weighed) {
   if (isPerServing(food)) {
     const n = servingNutrients(food, g);
@@ -776,7 +778,7 @@ function renderFoodCart() {
   box.classList.toggle('hidden', !has);
   $('foodDoneBtn').classList.toggle('hidden', has);
   $('foodCartSaveBtn').classList.toggle('hidden', !has);
-  if (!has) { box.innerHTML = ''; return; }
+  if (!has) { box.innerHTML = ''; cartCombo = null; return; }
   const t = sumNutr(foodCart.map(c => c.entry));
   box.innerHTML = `<div class="text-base font-bold text-emerald-900">這一餐已選 ${foodCart.length} 樣</div>
     <ul class="space-y-2">${foodCart.map(c => `<li class="flex items-center gap-2 bg-white rounded-xl border border-emerald-100 p-2">
@@ -785,7 +787,8 @@ function renderFoodCart() {
       <button type="button" data-cart-edit="${c.key}" class="chip-btn chip-lg shrink-0">改</button>
       <button type="button" data-cart-del="${c.key}" class="chip-btn chip-lg shrink-0" aria-label="拿掉">✕</button>
     </li>`).join('')}</ul>
-    <div class="text-base text-stone-800"><span class="font-bold tabular-nums">合計 ${t.kcal} kcal</span>${macroText(t) ? '<br><span class="text-sm text-stone-600">' + esc(macroText(t)) + '</span>' : ''}</div>`;
+    <div class="text-base text-stone-800"><span class="font-bold tabular-nums">合計 ${t.kcal} kcal</span>${macroText(t) ? '<br><span class="text-sm text-stone-600">' + esc(macroText(t)) + '</span>' : ''}</div>
+    ${foodCart.length > 1 ? '<button type="button" data-cart-combo class="btn-secondary w-full">🍱 這幾樣存成套餐</button>' : ''}`;
   $('foodCartSaveBtn').textContent = '記到' + MEAL_META[ui.meal].label + '（' + foodCart.length + ' 樣）';
 }
 $('foodCart').addEventListener('click', (e) => {
@@ -797,7 +800,7 @@ $('foodCart').addEventListener('click', (e) => {
   } else if (del) {
     foodCart = foodCart.filter(x => x.key !== del.getAttribute('data-cart-del'));
     renderFoodCart();
-  }
+  } else if (e.target.closest('[data-cart-combo]')) openCombo(null);
 });
 $('gramsSaveBtn').addEventListener('click', () => {
   const food = gramsDraft.food;
@@ -833,6 +836,7 @@ function saveGroup(items) {
       ...c.entry, ex: cleanEx(c.entry.ex), updatedAt: now()
     };
     if (groupId) it.groupId = groupId;
+    if (c.comboId) it.comboId = c.comboId;   // 從哪個套餐放進來的（套餐依最近用的排序）
     if (date !== todayStr()) it.backfill = true;
     if (c.photo) photos.push([it.id, c.photo]);
     return it;
@@ -2399,6 +2403,7 @@ function renderAll() {
   renderSyncChip();
   renderExercisePresets();
   renderMyFoods();
+  renderComboList();
   renderBanners();
   if (ui.tab === 'trends') renderTrends();
 }
@@ -2815,7 +2820,9 @@ function renderFoodMine(q) {
   const list = q ? searchMine(all, q) : foodMode === 'mine' ? sortByUse(all, state.logs) : [];
   const add = '<button type="button" data-mf-new class="btn-secondary w-full">＋ 新增我的食物</button>';
   let html = '';
-  if (list.length) html = '<div class="sec-title px-1">⭐ 我的食物</div>' + list.map(f => myFoodRowHTML(f, 'pick')).join('');
+  const cbs = q ? searchCombos(combos(), q) : foodMode === 'mine' ? sortCombos(combos(), state.logs) : [];
+  if (cbs.length) html += '<div class="sec-title px-1">🍱 我的套餐</div>' + cbs.map(c => comboRowHTML(c, 'pick')).join('');
+  if (list.length) html += '<div class="sec-title px-1">⭐ 我的食物</div>' + list.map(f => myFoodRowHTML(f, 'pick')).join('');
   if (!q && foodMode === 'mine') {
     html += all.length ? add : `<div class="rounded-2xl bg-stone-50 p-4 space-y-3 text-base text-stone-600 leading-relaxed">
       <p>還沒有我的食物。常吃的東西照包裝上的營養標示存一次，之後點一下、填吃了多少就記好。</p>${add}
@@ -2886,6 +2893,131 @@ $('mf-delete').addEventListener('click', () => {
       afterMyFoodChange();
     });
   }, '刪除');
+});
+
+/* ---------------- 套餐（combos） ---------------- */
+// 購物車「存成套餐」；選套餐＝整組放進購物車（可以再改克數、拿掉）→ 記到某餐。格式見 js/combos.js
+function combos() {
+  if (!Array.isArray(state.combos)) state.combos = [];
+  return state.combos;
+}
+function comboRowHTML(c, action) {
+  const attr = action === 'edit' ? `data-combo-edit="${esc(c.id)}"` : `data-combo-pick="${esc(c.id)}"`;
+  return `<button type="button" ${attr} class="pick-row">
+    <span class="min-w-0 flex-1 text-left"><span class="block text-lg font-semibold text-stone-900 leading-snug break-words">${action === 'edit' ? '' : '<span class="mr-1 px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 text-sm font-bold align-middle">套餐</span>'}${esc(c.name)}</span>
+    <span class="block text-sm text-stone-500 break-words">${esc(comboSummary(c))}</span>
+    <span class="block text-base text-emerald-700 font-bold tabular-nums">${(c.items || []).length} 樣　${comboTotals(c).kcal} kcal</span></span>
+    <span class="pick-add">${action === 'edit' ? '修改' : '選擇 ›'}</span>
+  </button>`;
+}
+function renderComboList() {
+  const list = sortCombos(combos(), state.logs);
+  $('comboList').innerHTML = list.length ? list.map(c => comboRowHTML(c, 'edit')).join('')
+    : '<p class="rounded-2xl bg-stone-50 text-stone-600 p-4 text-base leading-relaxed">還沒有套餐。</p>';
+}
+// 選套餐：整組放進購物車（加在已經選的後面）
+async function pickCombo(combo) {
+  let tfda = null;
+  try { tfda = (await loadFoodDB()).foods; } catch (e) { /* 離線又沒快取：用存套餐時的數字 */ }
+  const items = resolveCombo(combo, { tfda, mine: customFoods() });
+  items.forEach(({ food, grams, weighed: w }) => {
+    const { weighed, entry } = cartEntryFor(food, grams, w);
+    foodCart.push({ key: uid('c'), food, grams, weighed, entry, comboId: combo.id });
+  });
+  cartCombo = { id: combo.id, name: combo.name };
+  $('foodSearch').value = '';
+  renderFoodResults();
+  renderFoodCart();
+  showToast('已放入「' + combo.name + '」' + items.length + ' 樣，可以改克數或拿掉');
+}
+// 存成套餐（editId＝null，從購物車）或修改套餐（從我的食物分頁）
+const comboDraft = { editId: null, items: [] };
+function openCombo(editId) {
+  comboDraft.editId = editId;
+  const old = editId ? combos().find(c => c.id === editId) : null;
+  if (editId && !old) return;
+  // 修改：可以改名字、拿掉某一樣；要改克數或加東西，就選這個套餐、在購物車改好再存一次
+  comboDraft.items = old ? old.items.map(it => ({ ...it })) : null;
+  $('comboTitle').textContent = old ? '🍱 修改套餐' : '🍱 存成套餐';
+  $('comboName').value = old ? old.name : (cartCombo ? cartCombo.name : '');
+  $('comboHint').textContent = old ? '要改克數或加東西：在「我的食物」選這個套餐，在「這一餐已選」改好，再按「存成套餐」、用同一個名字存。'
+    : '只存食物和克數，不會記到哪一餐。用同一個名字存，就會更新那個套餐。';
+  $('comboDelete').classList.toggle('hidden', !old);
+  setBox('comboNote', null, '');
+  renderComboItems();
+  openScreen('scr-combo');
+}
+function renderComboItems() {
+  const rows = comboDraft.items
+    ? comboDraft.items.map((it, i) => ({ name: (it.snapshot && it.snapshot.name) || '', kcal: comboTotals({ items: [it] }).kcal, amount: it.snapshot && it.snapshot.perServing && !it.snapshot.per100g ? fmt(it.grams, 1) + ' 份' : it.grams + 'g' + (it.weighed === 'cooked' ? '（熟重）' : ''), del: i }))
+    : foodCart.map(c => ({ name: c.entry.name, kcal: c.entry.kcal, amount: '', del: null }));
+  $('comboItems').innerHTML = rows.map(r => `<li class="flex items-center gap-2 bg-stone-50 rounded-xl p-2">
+    <span class="min-w-0 flex-1"><span class="block text-base font-semibold text-stone-900 leading-snug break-words">${esc(r.name)}${r.amount ? ' ' + esc(r.amount) : ''}</span>
+    <span class="block text-sm text-emerald-700 font-bold tabular-nums">${r.kcal} kcal</span></span>
+    ${r.del != null && rows.length > 1 ? `<button type="button" data-combo-del="${r.del}" class="chip-btn chip-lg shrink-0" aria-label="拿掉">✕</button>` : ''}
+  </li>`).join('');
+  const t = comboDraft.items ? comboTotals({ items: comboDraft.items }) : sumNutr(foodCart.map(c => c.entry));
+  $('comboTotal').innerHTML = `<span class="font-bold tabular-nums">合計 ${t.kcal} kcal</span>${macroText(t) ? '<br><span class="text-sm text-stone-600">' + esc(macroText(t)) + '</span>' : ''}`;
+}
+$('comboItems').addEventListener('click', (e) => {
+  const d = e.target.closest('[data-combo-del]');
+  if (!d || !comboDraft.items || comboDraft.items.length < 2) return;
+  comboDraft.items.splice(Number(d.getAttribute('data-combo-del')), 1);
+  renderComboItems();
+});
+function afterComboChange() {
+  persist();
+  renderAll();
+  if (screenStack.includes('scr-food')) renderFoodMine($('foodSearch').value.trim());
+}
+function storeCombo(combo, old) {
+  const list = combos();
+  if (old) list[list.indexOf(old)] = combo; else list.unshift(combo);
+  cartCombo = { id: combo.id, name: combo.name };
+  afterComboChange();
+  closeScreen();
+  showToast((old ? '已更新套餐「' : '已存成套餐「') + combo.name + '」');
+}
+$('comboSaveBtn').addEventListener('click', () => {
+  const name = $('comboName').value.trim();
+  const list = combos();
+  if (comboDraft.editId) {
+    const old = list.find(c => c.id === comboDraft.editId);
+    if (!old) return;
+    if (!name) { setBox('comboNote', 'err', '請幫套餐取個名字'); return; }
+    if (list.some(c => c !== old && c.name === name)) { setBox('comboNote', 'err', '已經有「' + name + '」了，請換個名稱'); return; }
+    storeCombo({ ...old, name, items: comboDraft.items, updatedAt: now() }, old);
+    return;
+  }
+  const same = list.find(c => c.name === name);
+  const { combo, error } = comboFromCart(foodCart, { id: same ? same.id : uid('cb'), name, now: now(), mine: isMine });
+  if (error) { setBox('comboNote', 'err', error); return; }
+  if (!same) { storeCombo(combo, null); return; }
+  openConfirm('已經有「' + name + '」', '要把這個套餐換成現在這 ' + combo.items.length + ' 樣嗎？', () => storeCombo({ ...same, ...combo }, same), '換成這幾樣');
+});
+$('comboDelete').addEventListener('click', () => {
+  const list = combos();
+  const combo = list.find(c => c.id === comboDraft.editId);
+  if (!combo) return;
+  openConfirm('刪除套餐「' + combo.name + '」', '只會刪掉這個套餐，裡面的食物和已經記的飲食記錄都不會改變。', () => {
+    const idx = list.indexOf(combo);
+    list.splice(idx, 1);
+    tombstone('combos:' + combo.id);
+    afterComboChange();
+    closeScreen();
+    showToast('已刪除套餐「' + combo.name + '」', '復原', () => {
+      delete state.tomb['combos:' + combo.id];
+      touch(combo);
+      combos().splice(idx, 0, combo);
+      afterComboChange();
+    });
+  }, '刪除');
+});
+document.addEventListener('click', (e) => {
+  const pick = e.target.closest('[data-combo-pick]');
+  if (pick) { const c = combos().find(x => x.id === pick.getAttribute('data-combo-pick')); if (c) pickCombo(c); return; }
+  const edit = e.target.closest('[data-combo-edit]');
+  if (edit) openCombo(edit.getAttribute('data-combo-edit'));
 });
 
 /* ---------------- 晚上記的：是現在吃的嗎？不是就問大約幾點吃的 ---------------- */

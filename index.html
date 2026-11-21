@@ -180,6 +180,13 @@
     <div id="tab-library" class="tab-panel hidden space-y-4">
       <section class="bg-white rounded-2xl border border-stone-200 p-4 space-y-3">
         <div>
+          <h2 class="text-lg font-bold text-stone-900">🍱 我的套餐</h2>
+          <p class="text-base text-stone-600 leading-relaxed">常一起吃的幾樣（例如每天的早餐）存成套餐：在「我的食物」或「查食物」選好幾樣後，按「存成套餐」。之後選套餐就整組放進這一餐，可以再改克數。</p>
+        </div>
+        <div id="comboList" class="space-y-2"></div>
+      </section>
+      <section class="bg-white rounded-2xl border border-stone-200 p-4 space-y-3">
+        <div>
           <h2 class="text-lg font-bold text-stone-900">⭐ 我的食物</h2>
           <p class="text-base text-stone-600 leading-relaxed">常吃的東西照包裝上的營養標示存一次，之後在首頁「我的食物」點一下、填吃了多少就記好。最常記的排在前面。</p>
         </div>
@@ -350,6 +357,23 @@
       <button type="button" id="mf-delete" class="hidden text-base text-rose-600 underline self-start py-2">刪除這樣食物</button>
     </div>
     <div class="scr-foot"><button type="button" id="mf-save" class="btn-primary btn-xl w-full">儲存</button></div>
+  </div>
+
+  <!-- 套餐：存成套餐（從購物車）／修改套餐（從我的食物分頁） -->
+  <div id="scr-combo" class="screen hidden" role="dialog" aria-label="套餐">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2 id="comboTitle">🍱 存成套餐</h2></div>
+    <div class="scr-body">
+      <label class="block"><span class="scr-label">套餐名稱</span><input id="comboName" type="text" class="field text-lg" placeholder="例如：每天的早餐、公司便當" /></label>
+      <div class="rounded-2xl bg-white border border-stone-200 p-3 space-y-2">
+        <div class="scr-label mb-0">裡面有</div>
+        <ul id="comboItems" class="space-y-2"></ul>
+        <div id="comboTotal" class="text-base text-stone-800"></div>
+      </div>
+      <p id="comboHint" class="text-base text-stone-600 leading-relaxed"></p>
+      <p id="comboNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
+      <button type="button" id="comboDelete" class="hidden text-base text-rose-600 underline self-start py-2">刪除這個套餐</button>
+    </div>
+    <div class="scr-foot"><button type="button" id="comboSaveBtn" class="btn-primary btn-xl w-full">儲存套餐</button></div>
   </div>
 
   <!-- 查食物（衛福部食品營養成分資料庫） -->

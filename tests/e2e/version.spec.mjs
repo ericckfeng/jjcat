@@ -104,7 +104,8 @@ test('同步：記下這台的版本，關於頁列出裝置；雲端要求較�
   await page.click('#cloudSyncBtn');
   await expect(page.locator('#cloudStatus')).toContainText('需要較新版的 App');
   expect(drive.uploads.length).toBe(1);
-  expect((await appState(page)).minRev).toBeUndefined();
+  // 沒有合併雲端（較新版）的 minRev；這台自己寫的 DATA_MIN_REV 可以有
+  expect(Number((await appState(page)).minRev?.rev) || 0).toBeLessThanOrEqual(rev);
   await page.click('#scr-data [data-back]');
   await page.click('#scr-settings [data-back]');
   await expect(page.locator('#updateBannerText')).toContainText('要更新才能繼續同步');

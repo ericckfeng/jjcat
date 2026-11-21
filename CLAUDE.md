@@ -13,7 +13,7 @@
 - 網址：https://ericckfeng.github.io/jjcat/
 - 個人網站「開源專案」表格有連到這裡（見文末「個人網站」）。
 
-功能：記錄吃的（我的食物、查食物、拍照待查、份量估算、自己輸入）、三大營養素與六大類份數、體重／BMI／身體尺寸、喝水、運動、睡眠（含補眠）、心情備註、趨勢圖、給營養師的報告（PDF／分享檔／LINE 文字）、JSON／CSV 匯出匯入、Google 雲端硬碟同步（手機＋電腦）、鼓勵角色「小芽」「小貓」與只在做得不夠時出來提醒的「營養師」（設定裡複選）。
+功能：記錄吃的（我的食物、套餐、查食物、拍照待查、份量估算、自己輸入）、三大營養素與六大類份數、體重／BMI／身體尺寸、喝水、運動、睡眠（含補眠）、心情備註、趨勢圖、給營養師的報告（PDF／分享檔／LINE 文字）、JSON／CSV 匯出匯入、Google 雲端硬碟同步（手機＋電腦）、鼓勵角色「小芽」「小貓」與只在做得不夠時出來提醒的「營養師」（設定裡複選）。
 
 ## 開發
 
@@ -51,6 +51,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/ai.js` | AI 辨識：呼叫 Gemini（使用者自己的 Key，存 `meta.ai`）、整理回傳資料（純函式有單元測試）。只能用 CORS 允許的 `content-type`、`x-goog-api-key` 標頭 |
 | `js/party.js` | **純函式**：吃到飽速記的範本與換算。**畫面 Rev. 43 已拿掉**，只用來把舊版留在裝置上、還沒記下來的速記（`meta.party`）記成記錄（有單元測試） |
 | `js/myfoods.js` | **純函式**：我的食物（`customFoods`）：新增頁表單 ↔ 每 100 g／每份、以份計的換算、搜尋、依常用排序（有單元測試） |
+| `js/combos.js` | **純函式**：套餐（`combos`）：購物車 → 套餐（每樣存 `snapshot`）、選套餐時找回現在的食物（找不到用 snapshot）、合計、搜尋、排序（有單元測試） |
 | `js/lookup.js` | **純函式**：拍照記・待查的手掌法粗估（`LOOKUP_CATS`）、大小寫法、待查表 CSV 匯出與回填（有單元測試） |
 | `js/version.js` | **純函式**：版本號（由 `scripts/bump.py` 改）、有沒有新版、雲端要求的最低版本 `DATA_MIN_REV`、「我的裝置」清單（有單元測試） |
 | `js/nutrition.js` | 餐別、營養素、六大類代換表、預設快選 |
@@ -67,7 +68,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 重點機制：
 
 - **狀態**：`state`（要同步的資料＋只存本機的 `meta`）存 `localStorage['diet_tracker_v2']`；照片另外存 IndexedDB。
-- **儲存**：改到「要同步的資料」一律呼叫 `persist()`（會標記 dirty 並排程同步）；只改本機設定用 `persistLocal()`。每日欄位用 `setDayField(field, value, date)`，它會寫入欄位時間戳 `_t`。新增／修改飲食記錄或我的食物要更新 `updatedAt`；刪除要呼叫 `tombstone('e:'+id)` 或 `tombstone('customFoods:'+id)`。舊的「常吃的」`quickItems` 已停用：不顯示、不新增，但要原樣保留、照常同步。
+- **儲存**：改到「要同步的資料」一律呼叫 `persist()`（會標記 dirty 並排程同步）；只改本機設定用 `persistLocal()`。每日欄位用 `setDayField(field, value, date)`，它會寫入欄位時間戳 `_t`。新增／修改飲食記錄或我的食物要更新 `updatedAt`；刪除要呼叫 `tombstone('e:'+id)`、`tombstone('customFoods:'+id)` 或 `tombstone('combos:'+id)`。舊的「常吃的」`quickItems` 已停用：不顯示、不新增，但要原樣保留、照常同步。
 - **同步**：`doSync()` 下載雲端 JSON → `mergeData(local, remote)` → 上傳照片（只傳新的）→ 下載缺的照片 → 有變才上傳合併結果。照片以 `photoKey`（編輯換照片時變成 `id-時間`）區分版本。一筆最多 3 張照片：第 2、3 張的 key 在記錄的 `morePhotos`（`x_<id>_<時間>`，不能有「-」，原因見 `DATA_FORMAT.md`），新增、刪除、複製記錄時要一起處理（`deleteEntryPhotos`、`morePhotoKeys`）。
 - **睡眠**：昨晚的睡眠記在**起床那天**（`nightDate() === ui.date`），補眠也記在當天；這樣才能和當天吃多少比較。
 - **全螢幕輸入頁**：`openScreen(id)` 會 `history.pushState`，手機返回鍵可關閉。新增輸入頁照現有 `scr-*` 的結構做。

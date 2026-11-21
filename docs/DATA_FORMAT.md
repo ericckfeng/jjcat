@@ -217,7 +217,7 @@
 | v3（Rev. 43） | 2026-11-21 | 拿掉吃到飽速記畫面（使用者覺得用不到）。格式沒變：舊記錄的 `party` 欄位保留；裝置上還沒記下來的 `meta.party` 開 App 時問一次要不要記下來。首頁角色改成可以複選：小芽、小貓、營養師（`meta.cat`、`meta.doc`、`meta.docSeen`，只存這台裝置）。 |
 | v3（Rev. 45，第 1 步） | 2026-11-21 | 最上層新增 `customFoods`（我的食物），「常吃的」`quickItems` 停用（不顯示、不新增，資料保留）。記錄新增 `customFoodId`、`servings`、`fiber`。`tfda_foods.json` 加回 `fiber`。**發佈時用 `python3 scripts/bump.py --min-rev`**，把 `DATA_MIN_REV` 調成這一版：還沒更新的 App 會暫停同步、提示更新。 |
 | v3（Rev. 47，第 3 步） | 2026-11-21 | 最上層新增 `combos`（套餐），記錄新增選填 `comboId`。**沒有調 `DATA_MIN_REV`**：Rev. 39 起的 App 都會原樣保留、照規則合併看不懂的最上層清單，`DATA_MIN_REV` 已經是 45。樣本：`backup-v3-combos.json`。 |
-| v3（Rev. 47 或之後，第 4 步） | 2026-11-21 | 最上層新增 `foodPacks`（食物資料庫）；記錄新增選填 `src`、`srcName`、`packFoodId`；套餐的品項可以有 `src`＋`packFoodId`。沒有調 `DATA_MIN_REV`（理由同套餐）。樣本：`backup-v3-foodpacks.json`。 |
+| v3（Rev. 47，第 4 步） | 2026-11-21 | 最上層新增 `foodPacks`（食物資料庫）；記錄新增選填 `src`、`srcName`、`packFoodId`；套餐的品項可以有 `src`＋`packFoodId`。沒有調 `DATA_MIN_REV`（理由同套餐）。樣本：`backup-v3-foodpacks.json`。 |
 | v3（App v23） | 2026-11-19 | 每日欄位新增 `smm`（骨骼肌）；`targets.bodyFat`（目標體脂率）；`targets.calc.bmrSource` 可為 `ffm`。每日 CSV 最後再加一欄骨骼肌。 |
 | v3（App v24） | 2026-11-19 | 每日欄位新增 `vfl`、`pa`、`ecw`。每日 CSV 最後加三欄。 |
 | v3（App v25） | 2026-11-19 | 每日欄位新增 `vfa`（內臟脂肪面積）。每日 CSV 最後加一欄。 |

@@ -49,6 +49,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/bank.js` | **純函式**：熱量銀行（一週總量控管、今天的建議熱量、營養素調整）（有單元測試） |
 | `js/ai.js` | AI 辨識：呼叫 Gemini（使用者自己的 Key，存 `meta.ai`）、整理回傳資料（純函式有單元測試）。只能用 CORS 允許的 `content-type`、`x-goog-api-key` 標頭 |
 | `js/party.js` | **純函式**：吃到飽・聚餐速記的範本（目前只有港式點心）、備忘錄文字解析、合計（有單元測試）。新增範本＝在 `PARTY_TEMPLATES` 加一組 |
+| `js/lookup.js` | **純函式**：拍照記・待查的手掌法粗估（`LOOKUP_CATS`）、大小寫法、待查表 CSV 匯出與回填（有單元測試） |
 | `js/version.js` | **純函式**：版本號（由 `scripts/bump.py` 改）、有沒有新版、雲端要求的最低版本 `DATA_MIN_REV`、「我的裝置」清單（有單元測試） |
 | `js/nutrition.js` | 餐別、營養素、六大類代換表、預設快選 |
 | `js/config.js` | Google OAuth 用戶端 ID（公開值，可以放程式碼裡） |

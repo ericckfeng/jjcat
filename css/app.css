@@ -270,3 +270,8 @@ textarea.field { min-height: 0; resize: vertical; }
 .lb-calc .lb-grid .field { text-align: center; font-size: 1.125rem; background: #fff; }
 .lb-calc .lb-out { border-radius: .75rem; background: #fff; padding: .6rem .8rem; font-size: 1.0625rem; color: #065f46; font-weight: 600; }
 .lb-calc .lb-out:empty { display: none; }
+
+/* 拍照記：用手比大小的三顆按鈕（圖示、名稱、說明上下排） */
+.ref-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .1rem; padding: .5rem .25rem; line-height: 1.2; }
+.ref-btn .ref-ic { font-size: 1.6rem; }
+.ref-btn .ref-hint { font-size: .8125rem; font-weight: 400; opacity: .8; }

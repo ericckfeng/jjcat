@@ -13,6 +13,7 @@ import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS, ene
 import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, shouldAskWhen, eatenAt, MEAL_TIME_CHIPS } from './meals.js';
 import { buildInsights } from './insights.js';
 import { APP_REV, APP_LABEL, parseLatest, requiredRev, minRevToWrite, deviceName, deviceRecord, upsertDevice, deviceRows } from './version.js';
+import { HAND_REFS, AMOUNTS, LOOKUP_CATS, lookupCat, cleanAmount, amountText, sizeText, estimateLookup, buildLookupCsv, readFilledCsv, AI_LOOKUP_PROMPT } from './lookup.js';
 import { partyTemplate, startCounts, parsePartyText, partyMemo, partyEntries, partyTotals, cleanGrams } from './party.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros } from './bank.js';
@@ -930,6 +931,7 @@ function openScreen(id) {
   if (id === 'scr-aikey') renderAiKey();
   if (id === 'scr-sleep') renderSleepScreen();
   if (id === 'scr-photo') resetPhotoQuick();
+  if (id === 'scr-lookup') { renderLookup(); setBox('lookupNote', null, ''); }
 }
 function hideTopScreen() {
   const id = screenStack.pop();
@@ -1145,38 +1147,206 @@ $('dayExercise').addEventListener('input', () => setTimeout(renderExercisePreset
 $('dayExMin').addEventListener('input', () => setTimeout(renderExercisePresets, 0));
 
 /* 拍照記 */
-let photoQuickDraft = null;
+/* ---------------- 拍照記・待查 ---------------- */
+// 拍照（最多 3 張）＋用手比大小＋數量；選了類別就先粗估，記成「待查」（pending）。之後在待查清單補。
+const pq = { ref: null, amt: null, n: 1, cat: null };
 function resetPhotoQuick() {
-  photoQuickDraft = null;
+  formPhotos.pq = [];
+  Object.assign(pq, { ref: null, amt: null, n: 1, cat: null });
   $('photoQuickName').value = '';
   $('photoQuickKcal').value = '';
-  $('photoQuickPreviewWrap').classList.add('hidden');
-  $('photoQuickShoot').classList.remove('hidden');
+  $('pqAmtOther').value = '';
+  renderPhotoQuick();
 }
-$('photoQuickShoot').addEventListener('click', () => $('photoQuickInput').click());
-$('photoQuickRetake').addEventListener('click', () => $('photoQuickInput').click());
-$('photoQuickInput').addEventListener('change', async (e) => {
-  const file = e.target.files && e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
-  try {
-    photoQuickDraft = await compressImage(file);
-    $('photoQuickPreview').src = photoQuickDraft;
-    $('photoQuickPreviewWrap').classList.remove('hidden');
-    $('photoQuickShoot').classList.add('hidden');
-  } catch (err) { showToast('照片讀取失敗'); }
+function pqLookup() {
+  const lk = {};
+  if (pq.ref) lk.ref = pq.ref;
+  if (pq.amt) lk.amt = pq.amt;
+  if (pq.n !== 1) lk.n = pq.n;
+  if (pq.cat) lk.cat = pq.cat;
+  return Object.keys(lk).length ? lk : null;
+}
+function renderPhotoQuick() {
+  renderPhotoStrip('pq');
+  const has = formPhotos.pq.length > 0;
+  $('pq-photos').classList.toggle('hidden', !has);
+  $('photoQuickShoot').classList.toggle('hidden', has);
+  $('pqRefs').innerHTML = HAND_REFS.map(r => `<button type="button" data-pq-ref="${r.id}" class="toggle-btn ref-btn${pq.ref === r.id ? ' is-active' : ''}"><span class="ref-ic">${r.icon}</span><span>${r.label}</span><span class="ref-hint">${r.hint}</span></button>`).join('');
+  $('pqAmts').innerHTML = AMOUNTS.map(a => `<button type="button" data-pq-amt="${a.v}" class="toggle-btn${pq.amt && Math.abs(pq.amt - a.v) < 0.001 ? ' is-active' : ''}">${a.t}</button>`).join('');
+  $('pqN').textContent = amountText(pq.n);
+  $('pqCats').innerHTML = LOOKUP_CATS.map(c => `<button type="button" data-pq-cat="${c.id}" class="toggle-btn justify-start text-left${pq.cat === c.id ? ' is-active' : ''}">${c.icon} ${c.label}</button>`).join('')
+    + `<button type="button" data-pq-cat="" class="toggle-btn${pq.cat ? '' : ' is-active'}">不確定</button>`;
+  const est = estimateLookup(pqLookup());
+  const box = $('pqEst');
+  box.classList.toggle('hidden', !est && !pq.cat);
+  box.textContent = est
+    ? '粗估約 ' + est.kcal + ' 大卡（' + sizeText(pqLookup()) + '）。會標成「待查」，之後再查正確的。'
+    : pq.cat ? '再選「多大」，就能先粗估熱量。' : '';
+}
+$('scr-photo').addEventListener('click', (e) => {
+  const ref = e.target.closest('[data-pq-ref]');
+  if (ref) { const id = ref.getAttribute('data-pq-ref'); pq.ref = pq.ref === id ? null : id; if (pq.ref && !pq.amt) pq.amt = 1; renderPhotoQuick(); return; }
+  const amt = e.target.closest('[data-pq-amt]');
+  if (amt) { pq.amt = Number(amt.getAttribute('data-pq-amt')); $('pqAmtOther').value = ''; if (!pq.ref) pq.ref = 'fist'; renderPhotoQuick(); return; }
+  const cat = e.target.closest('[data-pq-cat]');
+  if (cat) { pq.cat = cat.getAttribute('data-pq-cat') || null; renderPhotoQuick(); }
 });
+$('pqAmtOther').addEventListener('input', (e) => {
+  const v = cleanAmount(e.target.value);
+  if (v) { pq.amt = v; if (!pq.ref) pq.ref = 'fist'; }
+  renderPhotoQuick();
+});
+$('pqMinus').addEventListener('click', () => { pq.n = Math.max(1, pq.n - 1); renderPhotoQuick(); });
+$('pqPlus').addEventListener('click', () => { pq.n = Math.min(20, pq.n + 1); renderPhotoQuick(); });
+$('photoQuickShoot').addEventListener('click', () => $('photoQuickInput').click());
 $('photoQuickSave').addEventListener('click', async () => {
   const name = $('photoQuickName').value.trim();
   const kcal = num($('photoQuickKcal').value);
-  if (!photoQuickDraft && !name && kcal == null) { showToast('請先拍照，或寫下吃了什麼'); return; }
+  const photos = formPhotos.pq.map(p => p.src);
+  const lk = pqLookup();
+  if (!photos.length && !name && kcal == null && !lk) { showToast('請先拍照，或寫下吃了什麼'); return; }
+  const est = kcal == null ? estimateLookup(lk) : null;
+  const cat = lk && lookupCat(lk.cat);
   await addEntry({
-    name: name || MEAL_META[ui.meal].label + '拍照待查', nutr: { kcal: kcal || 0 }, meal: ui.meal,
-    photo: photoQuickDraft, pending: kcal == null
+    name: name || (cat ? '待查・' + cat.label : MEAL_META[ui.meal].label + '拍照待查'),
+    nutr: est || { kcal: kcal || 0 }, meal: ui.meal,
+    photo: photos[0] || null, morePhotos: photos.slice(1), pending: kcal == null,
+    extra: lk ? { lookup: lk } : null
   });
   resetPhotoQuick();
   closeScreen();
 });
+
+/* ---------------- 待查清單 ---------------- */
+function pendingRows() {
+  const rows = [];
+  Object.keys(state.logs).sort().forEach(date => (state.logs[date] || []).forEach(it => { if (it.pending) rows.push({ date, it }); }));
+  return rows;
+}
+function renderLookupTile() {
+  const n = pendingRows().length;
+  $('lookupTile').classList.toggle('hidden', !n);
+  $('lookupTileT').textContent = '還有 ' + n + ' 筆待查';
+}
+function renderLookup() {
+  const rows = pendingRows();
+  $('lookupList').innerHTML = rows.length ? rows.map(({ date, it }) => {
+    const size = sizeText(it.lookup);
+    return `<button type="button" data-lookup-edit="${esc(date)}|${esc(it.id)}" class="pick-row">
+      ${it.hasPhoto ? `<img data-photo-id="${esc(it.id)}" alt="" class="w-16 h-16 rounded-xl object-cover border border-stone-200 bg-stone-100 shrink-0" />` : ''}
+      <span class="min-w-0 flex-1 text-left">
+        <span class="block text-lg font-semibold text-stone-900 break-words">${esc(it.name)}</span>
+        <span class="block text-base text-stone-500">${esc(fmtMD(date))} ${MEAL_META[it.meal].label}${size ? '・' + esc(size) : ''}</span>
+        <span class="block text-base text-amber-800 tabular-nums">${it.kcal ? '目前估 ' + it.kcal + ' 大卡' : '還沒有熱量'}</span>
+      </span>
+      <span class="pick-add">修改</span></button>`;
+  }).join('') : '<p class="rounded-2xl bg-emerald-50 text-emerald-900 p-4 text-lg">👍 沒有待查的記錄了</p>';
+  hydratePhotos($('lookupList'));
+  $('lookupExportBtn').disabled = !rows.length;
+}
+$('lookupList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-lookup-edit]');
+  if (!b) return;
+  const [date, id] = b.getAttribute('data-lookup-edit').split('|');
+  ui.date = date;
+  renderAll();
+  openEditModal(id);
+});
+// 照片檔名：編號_第幾張.jpg（AI、營養師對照表格用）
+async function lookupFiles() {
+  const rows = pendingRows();
+  const files = [];
+  const csvRows = [];
+  for (const { date, it } of rows) {
+    const names = [];
+    const srcs = await entryPhotos(it);
+    srcs.forEach((src, i) => {
+      const name = it.id + '_' + (i + 1) + '.jpg';
+      names.push(name);
+      files.push(new File([dataUrlToBlob(src)], name, { type: 'image/jpeg' }));
+    });
+    csvRows.push({ id: it.id, date, meal: MEAL_META[it.meal].label, name: it.name, lookup: it.lookup, kcal: it.kcal, photos: names });
+  }
+  const csvName = '待查表_' + todayStr() + '.csv';
+  files.unshift(new File([buildLookupCsv(csvRows)], csvName, { type: 'text/csv' }));
+  return files;
+}
+function dataUrlToBlob(dataUrl) {
+  const [head, b64] = dataUrl.split(',');
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: (head.match(/data:([^;]+)/) || [])[1] || 'image/jpeg' });
+}
+$('lookupExportBtn').addEventListener('click', async () => {
+  const files = await lookupFiles();
+  // 手機：用分享（可以直接傳到 LINE、Email、ChatGPT）；電腦：一個一個下載
+  try {
+    if (navigator.canShare && navigator.canShare({ files })) {
+      await navigator.share({ files, title: '待查表' });
+      return;
+    }
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+  }
+  for (const f of files) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(f);
+    a.download = f.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    await new Promise(r => setTimeout(r, 300));   // 連續下載太快，瀏覽器會擋
+  }
+  showToast('已下載待查表和 ' + (files.length - 1) + ' 張照片');
+});
+$('lookupPromptBtn').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(AI_LOOKUP_PROMPT); showToast('已複製，貼給 AI 時連同表格和照片一起傳'); }
+  catch (e) { $('lookupPaste').value = AI_LOOKUP_PROMPT; showToast('無法自動複製，說明放在下面的框框裡，請自己複製'); }
+});
+$('lookupFileBtn').addEventListener('click', () => $('lookupFileInput').click());
+$('lookupFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const buf = await file.arrayBuffer();
+  let text = new TextDecoder('utf-8').decode(buf);
+  // Excel 另存的 CSV 可能是 Big5
+  if (text.includes('�')) { try { text = new TextDecoder('big5').decode(buf); } catch (err) { /* 不支援就用原本的 */ } }
+  $('lookupPaste').value = text;
+  importLookup();
+});
+$('lookupImportBtn').addEventListener('click', importLookup);
+function findEntry(id) {
+  for (const [date, list] of Object.entries(state.logs)) {
+    const it = (list || []).find(x => x.id === id);
+    if (it) return { date, it };
+  }
+  return null;
+}
+function importLookup() {
+  const { items, error } = readFilledCsv($('lookupPaste').value);
+  if (error) { setBox('lookupNote', 'err', error); return; }
+  const found = [];
+  const missing = [];
+  items.forEach(row => { const hit = findEntry(row.id); if (hit) found.push({ row, ...hit }); else missing.push(row.id); });
+  if (!found.length) { setBox('lookupNote', 'err', '表格裡的編號都對不到這台的記錄（可能已經刪掉了）。'); return; }
+  const list = found.map(({ row, it }) => '・' + (row.name || it.name) + '：' + (it.pending ? '' : '（已經查過）') + it.kcal + ' → ' + row.kcal + ' 大卡').join('\n');
+  openConfirm('回填 ' + found.length + ' 筆', list + (missing.length ? '\n\n另外 ' + missing.length + ' 筆對不到記錄，會略過。' : ''), () => {
+    found.forEach(({ row, it }) => {
+      Object.assign(it, { kcal: row.kcal, multiplier: 1, pending: false, updatedAt: now() });
+      if (row.name) it.name = row.name;
+      ['p', 'c', 'f'].forEach(k => { it[k] = row[k] != null ? row[k] : null; });
+      it.ex = null;   // 粗估的六大類份數不準，填好的表沒有就清掉
+    });
+    persist();
+    renderAll();
+    renderLookup();
+    $('lookupPaste').value = '';
+    setBox('lookupNote', 'ok', '已回填 ' + found.length + ' 筆' + (missing.length ? '，' + missing.length + ' 筆對不到記錄' : '') + '。');
+  }, '回填');
+}
 
 function nutrLine(it) {
   const parts = [];
@@ -2204,6 +2374,8 @@ function renderBanners() {
 }
 function renderAll() {
   renderSummary();
+  renderLookupTile();
+  if (screenStack.includes('scr-lookup')) renderLookup();
   renderAiUi();
   renderWeeklyCard();
   renderMealSelector();
@@ -2305,9 +2477,9 @@ $('foodKjInput').addEventListener('input', (e) => {
 // 格式 x_<記錄id>_<時間>，IndexedDB 和雲端都用這個 key。key 裡不能有「-」：舊版 App 清雲端照片時，
 // 把「-」前面那段當記錄 id，那筆記錄還在就刪掉；x_ 開頭的對不到記錄，舊版不會誤刪。
 const MAX_PHOTOS = 3;
-const PHOTO_INPUT = { add: 'foodPhotoInput', edit: 'editLogPhotoInput' };
+const PHOTO_INPUT = { add: 'foodPhotoInput', edit: 'editLogPhotoInput', pq: 'photoQuickInput' };
 // [{ src, key }]：key＝'@main' 原本的第 1 張、'x_…' 原本的第 2、3 張、null 新拍的
-const formPhotos = { add: [], edit: [] };
+const formPhotos = { add: [], edit: [], pq: [] };
 function newPhotoKey(id) { return 'x_' + id + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
 function morePhotoKeys(it) {
   return it && it.hasPhoto && Array.isArray(it.morePhotos) ? it.morePhotos.filter(k => typeof k === 'string' && k.startsWith('x_')) : [];
@@ -2332,7 +2504,7 @@ async function addFormPhoto(prefix, file, maxDim) {
   if (formPhotos[prefix].length >= MAX_PHOTOS) { showToast('最多 3 張照片，請先移除一張'); return null; }
   const src = await compressImage(file, maxDim);
   formPhotos[prefix].push({ src, key: null });
-  renderPhotoStrip(prefix);
+  if (prefix === 'pq') renderPhotoQuick(); else renderPhotoStrip(prefix);
   return src;
 }
 document.addEventListener('click', (e) => {
@@ -2342,7 +2514,7 @@ document.addEventListener('click', (e) => {
   if (del) {
     const [prefix, i] = del.getAttribute('data-ph-del').split(':');
     formPhotos[prefix].splice(Number(i), 1);
-    renderPhotoStrip(prefix);
+    if (prefix === 'pq') renderPhotoQuick(); else renderPhotoStrip(prefix);
   }
 });
 Object.entries(PHOTO_INPUT).forEach(([prefix, id]) => $(id).addEventListener('change', async (e) => {
@@ -2515,6 +2687,10 @@ async function openEditModal(id) {
   for (const k of morePhotoKeys(item)) { const src = await getPhoto(k); if (src) formPhotos.edit.push({ src, key: k }); }
   renderPhotoStrip('edit');
   fillLabelCalc('edit', item);
+  const lk = item.lookup;
+  const lkText = lk ? [sizeText(lk), (lookupCat(lk.cat) || {}).label].filter(Boolean).join('・') : '';
+  $('editLookupInfo').classList.toggle('hidden', !lkText);
+  $('editLookupInfo').textContent = '記的時候用手比：' + lkText;
   openModal('editLogModal');
 }
 $('editLogForm').addEventListener('submit', async (e) => {

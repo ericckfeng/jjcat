@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/app.css?v=41" />
+  <link rel="stylesheet" href="css/app.css?v=42" />
 </head>
 <body class="bg-stone-50 text-stone-800 min-h-screen pb-24 sm:pb-10">
   <!-- Header -->
@@ -141,12 +141,13 @@
         <h2 class="sec-title">記錄吃的</h2>
         <div class="grid grid-cols-2 gap-3">
           <button type="button" data-screen="scr-quick" class="tile"><span class="tile-ic">⭐</span><span class="tile-t">常吃的</span><span class="tile-s">點一下就記好</span></button>
-          <button type="button" data-screen="scr-photo" class="tile"><span class="tile-ic">📷</span><span class="tile-t">拍照記</span><span class="tile-s">先拍，熱量之後補</span></button>
+          <button type="button" data-screen="scr-photo" class="tile"><span class="tile-ic">📷</span><span class="tile-t">拍照記</span><span class="tile-s">找不到、不知道熱量：先拍，之後再查</span></button>
           <button type="button" data-screen="scr-est" class="tile"><span class="tile-ic">✋</span><span class="tile-t">估份量</span><span class="tile-s">自助餐、家常菜</span></button>
           <button type="button" data-screen="scr-manual" class="tile"><span class="tile-ic">✏️</span><span class="tile-t">自己輸入</span><span class="tile-s">知道熱量時用</span></button>
           <button type="button" id="aiTile" data-screen="scr-ai" class="tile col-span-2 tile-wide hidden"><span class="tile-ic">🤖</span><span class="min-w-0"><span class="tile-t block">AI 幫我認</span><span class="tile-s block">拍一張或說一句，AI 拆成一樣一樣</span></span></button>
           <button type="button" data-screen="scr-party" class="tile col-span-2 tile-wide"><span class="tile-ic">🥟</span><span class="min-w-0"><span class="tile-t block">吃到飽・聚餐</span><span id="partyTileSub" class="tile-s block">拿一輪按一下，最後自動算熱量</span></span></button>
           <button type="button" data-screen="scr-food" class="tile col-span-2 tile-wide"><span class="tile-ic">🔍</span><span class="min-w-0"><span class="tile-t block">查食物・秤克數</span><span class="tile-s block">輸入名稱和克數，算出蛋白質等營養素</span></span></button>
+          <button type="button" id="lookupTile" data-screen="scr-lookup" class="tile col-span-2 tile-wide hidden" style="background:#fffbeb;border-color:#fcd34d"><span class="tile-ic">🔎</span><span class="min-w-0"><span id="lookupTileT" class="tile-t block">還有待查的記錄</span><span class="tile-s block">一筆一筆補，或整份給 AI／營養師填</span></span></button>
         </div>
       </section>
 
@@ -395,21 +396,62 @@
 
   <!-- 拍照記 -->
   <div id="scr-photo" class="screen hidden" role="dialog" aria-label="拍照記">
-    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>📷 拍照記</h2></div>
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>📷 拍照記・待查</h2></div>
     <div class="scr-body">
       <div><div class="scr-label">哪一餐？</div><div class="meal-picker"></div></div>
       <input id="photoQuickInput" type="file" accept="image/*" capture="environment" class="hidden" />
       <button type="button" id="photoQuickShoot" class="big-camera">
         <span class="text-5xl">📷</span><span>按這裡拍照</span><span class="text-sm font-normal text-stone-500">也可以選手機裡的照片</span>
       </button>
-      <div id="photoQuickPreviewWrap" class="hidden space-y-2">
-        <img id="photoQuickPreview" alt="餐點照片" class="w-full max-h-72 object-contain rounded-2xl bg-stone-100 border border-stone-200" />
-        <button type="button" id="photoQuickRetake" class="btn-secondary w-full">重拍</button>
+      <div id="pq-photos" class="photo-strip hidden"></div>
+      <label class="block"><span class="scr-label">吃了什麼？（可以不填）</span><input id="photoQuickName" type="text" class="field" placeholder="例如：雞腿便當、不知名炸物" /></label>
+      <div class="rounded-2xl bg-white border border-stone-200 p-3 space-y-3">
+        <div class="scr-label mb-0">大概多大？用手比比看（可以不選）</div>
+        <div id="pqRefs" class="grid grid-cols-3 gap-2"></div>
+        <div id="pqAmts" class="grid grid-cols-4 gap-2"></div>
+        <label class="lb-line text-lg text-stone-700">其他：<input id="pqAmtOther" type="number" inputmode="decimal" min="0" max="20" step="any" placeholder="個" class="field tabular-nums text-center" style="width:6rem" /> 個</label>
+        <div class="flex items-center gap-3 flex-wrap text-lg text-stone-700">
+          <span class="font-semibold">數量</span>
+          <button type="button" id="pqMinus" class="toggle-btn" style="width:3.25rem" aria-label="少一個">−</button>
+          <span id="pqN" class="text-2xl font-bold tabular-nums w-10 text-center">1</span>
+          <button type="button" id="pqPlus" class="toggle-btn" style="width:3.25rem" aria-label="多一個">＋</button>
+          <span class="text-base text-stone-500">（拿了幾份這麼大的）</span>
+        </div>
       </div>
-      <label class="block"><span class="scr-label">吃了什麼？（可以不填）</span><input id="photoQuickName" type="text" class="field" placeholder="例如：雞腿便當" /></label>
-      <label class="block"><span class="scr-label">熱量 kcal（不知道就空著）</span><input id="photoQuickKcal" type="number" inputmode="numeric" min="0" max="5000" class="field tabular-nums" placeholder="之後看照片再補" /></label>
+      <div class="rounded-2xl bg-white border border-stone-200 p-3 space-y-2">
+        <div class="scr-label mb-0">是哪一類？（選了會先粗估熱量）</div>
+        <div id="pqCats" class="grid grid-cols-2 gap-2"></div>
+        <p id="pqEst" class="hidden rounded-xl bg-amber-50 text-amber-900 p-3 text-base leading-relaxed"></p>
+      </div>
+      <label class="block"><span class="scr-label">知道熱量就填 kcal（不知道就空著）</span><input id="photoQuickKcal" type="number" inputmode="numeric" min="0" max="5000" class="field tabular-nums" placeholder="之後再查" /></label>
     </div>
     <div class="scr-foot"><button type="button" id="photoQuickSave" class="btn-primary btn-xl w-full">儲存</button></div>
+  </div>
+
+  <!-- 待查清單：一筆一筆補，或匯出待查表給 AI／營養師填，再回填 -->
+  <div id="scr-lookup" class="screen hidden" role="dialog" aria-label="待查清單">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>🔎 待查清單</h2></div>
+    <div class="scr-body">
+      <p class="text-base text-stone-600 leading-relaxed">還不知道正確熱量的記錄（拍照待查、粗估的）。點一筆就能修改；也可以整份匯出，給 AI 或營養師填好再匯入。</p>
+      <div id="lookupList" class="space-y-2"></div>
+      <div class="rounded-2xl bg-white border border-stone-200 p-3 space-y-3">
+        <div class="text-lg font-bold text-stone-800">一次補完</div>
+        <ol class="list-decimal pl-6 space-y-1 text-base text-stone-700 leading-relaxed">
+          <li>按「匯出待查表」：會得到一個表格和這些照片。</li>
+          <li>會用 AI 的：把表格、照片和「給 AI 的說明」一起貼給 ChatGPT 或 Gemini。<br>不會用的：傳給營養師，請他填「熱量」那幾欄。</li>
+          <li>拿到填好的表，貼到下面或選檔案，按「回填」。</li>
+        </ol>
+        <button type="button" id="lookupExportBtn" class="btn-primary btn-xl w-full">📤 匯出待查表＋照片</button>
+        <button type="button" id="lookupPromptBtn" class="btn-secondary w-full">📋 複製給 AI 的說明</button>
+        <textarea id="lookupPaste" rows="5" class="field font-mono text-base" placeholder="把填好的表格貼在這裡（AI 回的文字整段貼上就可以）"></textarea>
+        <input id="lookupFileInput" type="file" accept=".csv,text/csv,text/plain" class="hidden" />
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" id="lookupFileBtn" class="btn-secondary">選檔案</button>
+          <button type="button" id="lookupImportBtn" class="btn-primary">📥 回填</button>
+        </div>
+        <p id="lookupNote" class="hidden rounded-2xl whitespace-pre-line break-words p-3 text-base leading-relaxed"></p>
+      </div>
+    </div>
   </div>
 
   <!-- 估份量 -->
@@ -425,6 +467,7 @@
       <label class="flex items-start gap-3 rounded-2xl bg-white border border-stone-200 p-3 text-base text-stone-700"><input id="partyWeighToggle" type="checkbox" class="big-check mt-1" /><span><b>⚖️ 秤重模式</b>（第一次去可以開）：每一類拿一顆放在秤上，連秤的數字一起拍，再填幾公克。之後可以用重量把熱量校正得更準。</span></label>
       <input id="partyPhotoInput" type="file" accept="image/*" capture="environment" class="hidden" />
       <div id="partyOld" class="hidden rounded-2xl bg-amber-50 text-amber-900 p-3 text-base leading-relaxed"></div>
+      <button type="button" data-screen="scr-photo" class="btn-secondary w-full text-lg">找不到對應的？📷 先拍照記成「待查」</button>
       <div id="partyRows" class="space-y-4"></div>
       <details class="rounded-2xl bg-white border border-stone-200 p-3">
         <summary class="text-lg font-semibold text-stone-800 cursor-pointer">用手機備忘錄記的？貼上來</summary>
@@ -1010,6 +1053,7 @@
           <input id="editLogPhotoInput" type="file" accept="image/*" capture="environment" class="hidden" />
           <div id="edit-photos" class="photo-strip"></div>
         </div>
+        <p id="editLookupInfo" class="hidden rounded-xl bg-amber-50 text-amber-900 px-3 py-2 text-base"></p>
         <label class="block"><span class="lbl">食物名稱</span><input id="editLogNameInput" type="text" required class="field" /></label>
         <div class="grid grid-cols-3 gap-2">
           <label class="block"><span class="lbl">總熱量</span><input id="editLogKcalInput" type="number" inputmode="numeric" min="0" max="10000" step="1" required class="field font-semibold tabular-nums" /></label>
@@ -1142,6 +1186,6 @@
     <button id="toastAction" type="button" class="hidden font-bold text-emerald-300 hover:text-emerald-200 shrink-0"></button>
   </div>
 
-  <script type="module" src="js/app.js?v=41"></script>
+  <script type="module" src="js/app.js?v=42"></script>
 </body>
 </html>

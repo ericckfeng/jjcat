@@ -70,3 +70,29 @@ test('第二批：清空在最下面、沒記錄時不出現；自己輸入不�
   await expect(page.locator('#clearDayBtn')).toBeVisible();
   await expect(page.locator('#clearDayBtn')).toHaveText('清空這一天的飲食記錄');
 });
+
+test('小成就：新得到的小芽恭喜一次；點「連續 N 天」打開小成就頁；報告分頁也有入口', async ({ page }) => {
+  await openApp(page);
+  // 前 6 天都有記錄（測試直接放資料）
+  await page.evaluate(() => {
+    const a = window.__dietApp; const t = a.ui.date;
+    const d = (n) => new Date(Date.parse(t + 'T00:00:00Z') - n * 86400000).toISOString().slice(0, 10);
+    for (let i = 1; i <= 6; i++) a.state.logs[d(i)] = [{ id: 'it' + i, name: '飯', kcal: 300, meal: 'lunch', time: '12:00', multiplier: 1, updatedAt: 1 }];
+  });
+  await page.click('[data-screen=scr-manual]');
+  await page.fill('#foodNameInput', '香蕉'); await page.fill('#foodKcalInput', '90');
+  await page.click('#scr-manual [form=addFoodForm]');
+  // 今天剛好連續 7 天 → 小芽第一句恭喜
+  await expect(page.locator('#mascotMsg')).toContainText('得到新的小成就：🔥 連續記錄 7 天');
+  const seen = await page.evaluate(() => window.__dietApp.state.meta.badgesSeen);
+  expect(seen).toContain('streak-7');
+  await page.click('#mascotChips >> text=連續 7 天');
+  await expect(page.locator('#scr-badges')).toBeVisible();
+  await expect(page.locator('#badgeSummary')).toContainText('現在連續記錄 7 天');
+  await expect(page.locator('[data-badge=streak-7]')).toContainText('得到');
+  await expect(page.locator('[data-badge-next=streak-14]')).toContainText('再 7 天');
+  await closeScreens(page);
+  // 報告分頁也有入口
+  await page.click('.mobile-nav-tab[data-tab=report]');
+  await expect(page.locator('#badgeTileSub')).toContainText('已經得到');
+});

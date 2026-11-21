@@ -57,6 +57,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/barcode.js` | **純函式**：條碼：號碼整理、檢查碼、UPC／EAN 比對、在我的食物和食物資料庫找條碼、Open Food Facts 回應 → 我的食物表單（有單元測試）。拍照辨識（BarcodeDetector／ZXing）在 `app.js` |
 | `js/foodbook.js` | **純函式**：AI 建檔小工具的提示詞與回傳格式、整理 AI 回傳、驗算提醒（熱量／公克、三大營養素、長條圖估讀）、匯出成資料庫檔（有單元測試） |
 | `tools/foodbook.html`、`tools/foodbook.js` | AI 建檔小工具（獨立頁面）：書頁照片／掃描 PDF（pdf.js）→ Gemini 讀數字，或「用你自己的 AI」（複製提示詞 → 貼回答）→ 對照照片校對 → 資料庫檔；進度存 IndexedDB `foodbook-tool` |
+| `js/achievements.js` | **純函式**：小成就（連續／累計記錄、喝水、量體重、睡眠、運動、體重前進），全部從記錄算、不存；哪些已經慶祝過存 `meta.badgesSeen`（有單元測試） |
 | `js/lookup.js` | **純函式**：拍照記・待查的手掌法粗估（`LOOKUP_CATS`）、大小寫法、待查表 CSV 匯出與回填（有單元測試） |
 | `js/version.js` | **純函式**：版本號（由 `scripts/bump.py` 改）、有沒有新版、雲端要求的最低版本 `DATA_MIN_REV`、「我的裝置」清單（有單元測試） |
 | `js/nutrition.js` | 餐別、營養素、六大類代換表、預設快選 |

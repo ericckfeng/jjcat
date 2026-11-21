@@ -78,6 +78,7 @@ export function mascotSVG(mood = 'happy') {
   ctx = {
     isToday, hour, count, kcal, targetKcal, meals,
     streak: { n, todayLogged },
+    newBadge,   // 剛得到的小成就（js/achievements.js），沒有就是 null
     weight: { now, week, first, measuredToday } | null,
     targetWeight, bmi, bmiLabel,
     water, waterGoal,   // waterGoal：這天的喝水目標（沒設是 null）
@@ -101,7 +102,9 @@ export function buildMascotMessages(ctx) {
   if (w && ctx.targetWeight && Math.abs(w.now - ctx.targetWeight) <= 0.3) {
     add(100, 'cheer', `達成目標體重 ${ctx.targetWeight} 公斤了！你真的很厲害 🎉`, 'goal-' + ctx.targetWeight);
   }
-  if (ctx.isToday && [3, 7, 14, 21, 30, 50, 60, 100, 150, 200, 365].includes(ctx.streak.n) && ctx.streak.todayLogged) {
+  const nb = ctx.isToday && ctx.newBadge;
+  if (nb) add(95, 'cheer', `得到新的小成就：${nb.emoji} ${nb.title}！${nb.life ? nb.life + '，' : ''}持續就是最大的力量 🎉`, 'badge-' + nb.id);
+  if (ctx.isToday && [3, 7, 14, 21, 30, 50, 60, 100, 150, 200, 365].includes(ctx.streak.n) && ctx.streak.todayLogged && !(nb && nb.group === 'streak')) {
     add(90, 'cheer', `連續記錄 ${ctx.streak.n} 天！持續就是最大的力量 🎉`, 'streak-' + ctx.streak.n);
   }
   if (w && w.week != null) {

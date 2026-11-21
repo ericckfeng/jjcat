@@ -60,3 +60,16 @@ test('小貓、營養師每個姿勢都畫得出來', () => {
     }
   });
 });
+
+test('剛得到小成就：小芽第一句恭喜；連續記錄的成就不會和舊的連續訊息重複', async () => {
+  const { buildMascotMessages } = await import('../../js/mascot.js');
+  const base = { isToday: true, hour: 12, count: 2, kcal: 1500, targetKcal: 1800, meals: 2, streak: { n: 7, todayLogged: true }, weight: null, water: 0 };
+  const m = buildMascotMessages({ ...base, newBadge: { id: 'streak-7', group: 'streak', emoji: '🔥', title: '連續記錄 7 天', life: '' } });
+  assert.equal(m[0].key, 'badge-streak-7');
+  assert.equal(m[0].text, '得到新的小成就：🔥 連續記錄 7 天！持續就是最大的力量 🎉');
+  assert.equal(m.some(x => x.key === 'streak-7'), false);
+  const k = buildMascotMessages({ ...base, newBadge: { id: 'kg-2', group: 'kg', emoji: '🎯', title: '少了 2 公斤', life: '≈ 少背 4 瓶 500 毫升的水' } });
+  assert.equal(k[0].text, '得到新的小成就：🎯 少了 2 公斤！≈ 少背 4 瓶 500 毫升的水，持續就是最大的力量 🎉');
+  assert.ok(k.some(x => x.key === 'streak-7'), '別的成就：連續 7 天的訊息照樣有');
+  assert.equal(buildMascotMessages({ ...base, isToday: false, newBadge: { id: 'x', group: 'days', emoji: '📒', title: 't' } }).some(x => x.key === 'badge-x'), false);
+});

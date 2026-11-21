@@ -18,6 +18,7 @@ import { customFoodFromForm, formFromCustomFood, servingNutrients, servingKcal, 
 import { packFromFile, searchPacks, groupHits, packRows, myFoodsFile, packToFile, isMyFoodsFile, planMyFoodsImport } from './packs.js';
 import { toCsv } from './lookup.js';
 import { normalizeBarcode, checkDigitOk, findByBarcode, offUrl, offToForm } from './barcode.js';
+import { computeBadges, badgesToShow, newBadges, remainText } from './achievements.js';
 import { comboFromCart, resolveCombo, comboTotals, comboSummary, searchCombos, sortCombos } from './combos.js';
 import { HAND_REFS, AMOUNTS, LOOKUP_CATS, lookupCat, cleanAmount, amountText, sizeText, estimateLookup, buildLookupCsv, readFilledCsv, AI_LOOKUP_PROMPT } from './lookup.js';
 import { partyTemplate, startCounts, partyEntries, partyTotals } from './party.js';
@@ -930,6 +931,7 @@ function openScreen(id) {
   if (id === 'scr-about') { renderAbout(); checkLatest(true); }
   if (id === 'scr-data') { renderCloud(); renderBackupInfo(); }   // 關掉自動同步的人也要看得到雲端區塊
   if (id === 'scr-weekly') renderWeekly();
+  if (id === 'scr-badges') renderBadges();
   if (id === 'scr-ai') { resetAi(); ['aiFallbackBtn', 'aiPasteFallbackBtn', 'aiPasteWrap'].forEach(x => $(x).classList.add('hidden')); $('aiPasteText').value = ''; }
   if (id === 'scr-manual') { setBox('add-lb-note', null, ''); manualBarcode = ''; }
   if (id === 'scr-aikey') renderAiKey();
@@ -1864,6 +1866,60 @@ function computeStreak(date) {
   while (has(d) && n < 2000) { n++; d = addDays(d, -1); }
   return { n, todayLogged };
 }
+/* ---------------- 小成就（js/achievements.js；全部從記錄算） ---------------- */
+// 體重前進的方向：有目標體重看目標，沒有就看 BMI（過重想減、過輕想增、正常不算）
+function weightDir() {
+  const w = weightInfo(todayStr());
+  if (!w) return 0;
+  const tw = num(state.targets.weight);
+  if (tw) return Math.abs(w.now - tw) < 0.05 ? 0 : Math.sign(tw - w.now);
+  const bmi = calcBmi(w.now, state.profile.height);
+  return bmi == null ? -1 : bmi >= 24 ? -1 : bmi < 18.5 ? 1 : 0;
+}
+function currentBadges() {
+  const today = todayStr();
+  const dates = [...new Set([...Object.keys(state.logs), ...Object.keys(state.days)])].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today).sort();
+  const facts = dates.map(date => {
+    const d = state.days[date] || {};
+    const water = num(d.water) || 0;
+    return { date, food: (state.logs[date] || []).length > 0, water: water > 0 && water >= (dayWaterGoal(date) || 1500),
+      weigh: num(d.weight) != null, sleep: daySleep(d).night > 0, move: Boolean(num(d.exMin) > 0 || String(d.exercise || '').trim()) };
+  });
+  const weights = dates.filter(date => num((state.days[date] || {}).weight) != null).map(date => ({ date, kg: num(state.days[date].weight) }));
+  return computeBadges({ facts, weights, dir: weightDir(), today });
+}
+// 這台裝置還沒慶祝過的新成就；第一次用這個功能時，以前得到的全部當成看過（不要一次放一堆彩帶）
+function freshBadges(badges) {
+  if (!Array.isArray(state.meta.badgesSeen)) {
+    state.meta.badgesSeen = badges.filter(b => b.earnedOn).map(b => b.id);
+    persistLocal();
+    return [];
+  }
+  return newBadges(badges, state.meta.badgesSeen);
+}
+function markBadgesSeen(list) {
+  if (!list.length) return;
+  state.meta.badgesSeen = [...new Set([...(state.meta.badgesSeen || []), ...list.map(b => b.id)])];
+  persistLocal();
+}
+function renderBadges() {
+  const { stats, badges } = currentBadges();
+  const got = badges.filter(b => b.earnedOn);
+  $('badgeSummary').innerHTML = `<div class="text-xl font-bold">已經得到 ${got.length} 個小成就</div>
+    <div>🔥 ${stats.streak ? '現在連續記錄 ' + stats.streak + ' 天' : '今天記一筆，就開始連續'}${stats.longest > stats.streak ? '（最長 ' + stats.longest + ' 天）' : ''}</div>
+    <div>📒 累計記錄 ${stats.days} 天</div>`;
+  $('badgeList').innerHTML = badgesToShow(badges).map(({ group, earned, next }) => `<section class="space-y-2">
+    <h3 class="text-lg font-bold text-stone-900">${group.emoji} ${esc(group.name)}<span class="text-sm font-normal text-stone-500">　${esc(group.hint)}</span></h3>
+    <div class="badge-grid">${earned.map(b => `<div class="badge" data-badge="${b.id}"><span class="b-ic">${b.emoji}</span><span class="b-t">${esc(b.title)}</span>${b.life ? `<span class="b-s">${esc(b.life)}</span>` : ''}<span class="b-s">${fmtMD(b.earnedOn)} 得到</span></div>`).join('')}
+      ${next ? `<div class="badge next" data-badge-next="${next.id}"><span class="b-ic">${next.emoji}</span><span class="b-t">${esc(next.title)}</span><span class="b-s">${esc(remainText(next))}</span>
+        <span class="b-bar"><span style="width:${Math.min(100, Math.round((next.have || 0) / next.need * 100))}%"></span></span></div>` : ''}</div>
+  </section>`).join('');
+}
+function renderBadgeTile(badges) {
+  const n = badges.filter(b => b.earnedOn).length;
+  $('badgeTileSub').textContent = n ? '已經得到 ' + n + ' 個：連續記錄、喝水、量體重…' : '連續記錄、喝水、量體重…';
+}
+
 function weightInfo(date) {
   const keys = Object.keys(state.days).filter(k => k <= date && num(state.days[k].weight) != null).sort();
   if (!keys.length) return null;
@@ -2387,8 +2443,15 @@ function renderMascot() {
   const card = $('mascotCard');
   const insights = dayInsights(ui.date);
   const pals = palsOn();
-  if (!pals.sprout && !pals.cat && !pals.doc) { card.classList.add('hidden'); renderTips(insights); return; }
   const isToday = ui.date === todayStr();
+  const { badges } = currentBadges();
+  renderBadgeTile(badges);
+  const fresh = isToday ? freshBadges(badges) : [];
+  if (!pals.sprout && !pals.cat && !pals.doc) {
+    card.classList.add('hidden'); renderTips(insights);
+    if (fresh.length) { markBadgesSeen(fresh); showToast('🏅 得到新的小成就：' + fresh[0].title, '看看', () => openScreen('scr-badges'), 8000); }
+    return;
+  }
   const t = dayTotals(ui.date);
   const d = getDay(ui.date, false);
   const w = weightInfo(ui.date);
@@ -2396,7 +2459,7 @@ function renderMascot() {
   const streak = computeStreak(ui.date);
   mascotMsgs = castMessages(buildMascotMessages({
     isToday, hour: new Date().getHours(), count: t.count, kcal: t.kcal, targetKcal: state.targets.kcal,
-    meals: MEAL_KEYS.filter(k => t.meals[k] > 0).length, streak, weight: w,
+    meals: MEAL_KEYS.filter(k => t.meals[k] > 0).length, streak, weight: w, newBadge: fresh[0] || null,
     targetWeight: num(state.targets.weight), bmi, water: num(d.water) || 0, waterGoal: dayWaterGoal(ui.date),
     protein: t.macroItems ? t.p : 0, proteinTarget: num(state.targets.p),
     lastNight: daySleep(getDay(ui.date, false)),
@@ -2410,11 +2473,15 @@ function renderMascot() {
   card.classList.remove('hidden');
   mascotIdx = 0;
   showMascotMsg();
+  markBadgesSeen(fresh);
   const chips = [];
-  if (streak.n >= 1) chips.push('🔥 連續 ' + streak.n + ' 天');
+  // 連續天數和小成就可以點，打開「我的小成就」
+  if (streak.n >= 1) chips.push(`<button type="button" data-screen="scr-badges" class="mascot-chip">🔥 連續 ${streak.n} 天 ›</button>`);
+  const nBadges = badges.filter(b => b.earnedOn).length;
+  if (nBadges) chips.push(`<button type="button" data-screen="scr-badges" class="mascot-chip">🏅 小成就 ${nBadges} ›</button>`);
   if (w && w.week != null) { const dl = r1(w.now - w.week); chips.push('⚖️ 這週 ' + (dl > 0 ? '+' : dl < 0 ? '−' : '±') + Math.abs(dl) + ' kg'); }
   if (bmi) chips.push('BMI ' + bmi);
-  $('mascotChips').innerHTML = chips.map(c => `<span class="mascot-chip">${c}</span>`).join('');
+  $('mascotChips').innerHTML = chips.map(c => c.startsWith('<button') ? c : `<span class="mascot-chip">${c}</span>`).join('');
   const top = mascotMsgs[0];
   if (top && top.mood === 'cheer' && state.meta.lastCheer !== top.key) {
     state.meta.lastCheer = top.key;

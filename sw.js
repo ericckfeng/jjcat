@@ -28,6 +28,7 @@ const CORE = [
   './js/combos.js',
   './js/packs.js',
   './js/barcode.js',
+  './js/achievements.js',
   './js/characters.js',
   './js/version.js',
   './tfda_foods.json',

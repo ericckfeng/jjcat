@@ -92,6 +92,7 @@
 | `servings` | （選填，第 1 步起）以份計的我的食物吃了幾份（這時沒有 `grams`） |
 | `fiber` | （選填，第 1 步起）膳食纖維 g。只有查食物／我的食物有纖維資料時才有；很多記錄沒有，合計時要註明「有填纖維的 N 筆」 |
 | `comboId` | （選填，第 3 步起）從套餐放進購物車再記的：`combos` 的 id（套餐依最近用的排序）。在購物車改過克數也照樣帶著；套餐刪掉後記錄照舊 |
+| `src`、`srcName`、`packFoodId` | （選填，第 4 步起）從食物資料庫記的：資料庫 id、資料庫名稱快照（後面加「・」和那一列的資料來源，例如「外食連鎖店・麥當勞官方」）、資料庫裡那樣食物的 id。資料庫刪掉後記錄照舊，首頁記錄和營養師報告照樣顯示「資料來源」 |
 | `foodId` | （選填，v11 起）食物資料庫的 id（`tfda_foods.json` 的 TFDA 整合編號） |
 | `backfill` | （選填，v32 起）`true`＝事後補記：`time` 是記錄的時間、不是吃的時間。記在過去的日期時自動標。報告的夜間進食不算這些。（v33 起，晚上 10 點到清晨 5 點記的會問吃的時間，直接改 `time`，不再標 `backfill`） |
 | `ai` | （選填，v27 起）這筆是 AI 估算的：`'photo'` 拍照、`'text'` 用說的／打字。沒有 `foodId` |
@@ -161,6 +162,25 @@
 - `snapshot`：存的時候那樣食物的資料（和食物同形狀，只留算營養要用的欄位）。選套餐時，資料庫／我的食物裡還找得到就用**現在**的數字（使用者改了我的食物，套餐跟著改）；找不到（TFDA 刪掉、我的食物刪掉、AI 估的、資料庫還沒載入）才用 snapshot。我的食物從以份計改成以克計（或反過來）時，`grams` 的意思不同了，也用 snapshot。
 - 清單照規則 5 合併（`id`＋`updatedAt`），刪除用 `tomb['combos:<id>']`。匯入備份檔和我的食物一樣「只加不刪」。
 - 同名再存一次＝更新那個套餐（同一個 `id`，換掉 `items`）。
+- 第 4 步起，食物資料庫的品項記 `src`（資料庫 id）＋`packFoodId`，snapshot 也存 `brand`、`base`、`variant`、`source`。
+
+### FoodPack（食物資料庫，最上層 `foodPacks`，第 4 步起）
+
+```
+{ id: 'pk_xxxx', name, org?, title?, edition?, url?, note?, askBy: 'serving' | 'grams', updatedAt,
+  foods: [{ id: 'pf_xxxx', name, base, variant?, brand?, category?, aliases?, note?, source?, barcode?,
+            serving?: { label?, g?, ml? },
+            perServing? | per100g?: { kcal, p?, f?, c?, sugar?, na?, fiber?, sfa?, tfa? }, exPerServing? | exPer100g? }] }
+```
+
+- 由整理工具（`tools/foodpack.html`）把試算表做成**資料庫檔** `{ app: 'diet-tracker-foods', version: 1, exportedAt, pack: { id, name, ... }, foods }`，App「我的食物 → 匯入食物資料庫」讀進來（「資料與備份」的匯入也認得）。格式和換算都在 `js/packs.js`。
+- `id`：`pk_` ＋ 名稱和整理者的雜湊；同一個名稱和整理者再做一次＝新版，匯入時問「換成新版／保留舊版」（整包換掉）。食物 `id`：`pf_` ＋ 店家和品名的雜湊，新版裡同一樣的 id 不變。
+- `base`／`variant`：名稱結尾括號裡的是規格（「珍珠奶茶(大杯/無糖)」→ `珍珠奶茶`／`大杯/無糖`）。查食物時同一個 `base` 收成一列，點進去依店家分開列。各家的數字不合併、不平均。
+- `askBy: 'serving'`（外食）：一律存 `perServing`，問幾份，`serving.g`／`ml` 只是說明。`'grams'`（食材份量表）：有每份克數就存 `per100g`，問幾克。
+- `sfa`（飽和脂肪 g）、`tfa`（反式脂肪 g）：存起來，App 還不顯示、不算進記錄（2026-11-21 使用者決定）。
+- 清單照規則 5 合併（`id`＋`updatedAt`，整包比較），刪除用 `tomb['foodPacks:<id>']`。會同步到自己的其他裝置；不放進公開的 App 程式碼（著作權、準確度由整理的人負責）。
+
+### meta（只存在這台裝置）
 
 ### meta（只存在這台裝置）
 
@@ -197,6 +217,7 @@
 | v3（Rev. 43） | 2026-11-21 | 拿掉吃到飽速記畫面（使用者覺得用不到）。格式沒變：舊記錄的 `party` 欄位保留；裝置上還沒記下來的 `meta.party` 開 App 時問一次要不要記下來。首頁角色改成可以複選：小芽、小貓、營養師（`meta.cat`、`meta.doc`、`meta.docSeen`，只存這台裝置）。 |
 | v3（Rev. 45，第 1 步） | 2026-11-21 | 最上層新增 `customFoods`（我的食物），「常吃的」`quickItems` 停用（不顯示、不新增，資料保留）。記錄新增 `customFoodId`、`servings`、`fiber`。`tfda_foods.json` 加回 `fiber`。**發佈時用 `python3 scripts/bump.py --min-rev`**，把 `DATA_MIN_REV` 調成這一版：還沒更新的 App 會暫停同步、提示更新。 |
 | v3（Rev. 47，第 3 步） | 2026-11-21 | 最上層新增 `combos`（套餐），記錄新增選填 `comboId`。**沒有調 `DATA_MIN_REV`**：Rev. 39 起的 App 都會原樣保留、照規則合併看不懂的最上層清單，`DATA_MIN_REV` 已經是 45。樣本：`backup-v3-combos.json`。 |
+| v3（Rev. 47 或之後，第 4 步） | 2026-11-21 | 最上層新增 `foodPacks`（食物資料庫）；記錄新增選填 `src`、`srcName`、`packFoodId`；套餐的品項可以有 `src`＋`packFoodId`。沒有調 `DATA_MIN_REV`（理由同套餐）。樣本：`backup-v3-foodpacks.json`。 |
 | v3（App v23） | 2026-11-19 | 每日欄位新增 `smm`（骨骼肌）；`targets.bodyFat`（目標體脂率）；`targets.calc.bmrSource` 可為 `ffm`。每日 CSV 最後再加一欄骨骼肌。 |
 | v3（App v24） | 2026-11-19 | 每日欄位新增 `vfl`、`pa`、`ecw`。每日 CSV 最後加三欄。 |
 | v3（App v25） | 2026-11-19 | 每日欄位新增 `vfa`（內臟脂肪面積）。每日 CSV 最後加一欄。 |

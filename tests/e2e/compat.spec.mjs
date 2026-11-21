@@ -102,6 +102,18 @@ test('最早單檔版的欄位（targetKcal）不會被當成新資料存起來'
   for (const it of s.logs['2026-10-01']) { expect(it.photo).toBeUndefined(); expect(it.baseKcal).toBeUndefined(); }
 });
 
+test('食物資料庫（foodPacks）備份檔：資料庫匯入、看不懂的欄位保留、記錄的資料來源照樣顯示、查得到', async ({ page }) => {
+  await openApp(page);
+  expect(await importFile(page, fx('backup-v3-foodpacks.json'))).toContain('匯入完成');
+  const s = await appState(page);
+  expect(s.foodPacks[0]).toMatchObject({ id: 'pk_fx', futureField: 1 });
+  expect(s.foodPacks[0].foods[0].perServing.sfa).toBe(3.1);
+  await closeScreens(page);
+  await page.click('[data-food-open=all]');
+  await page.fill('#foodSearch', '漢堡');
+  await expect(page.locator('#foodPacks')).toContainText('台灣麥當勞');
+});
+
 test('套餐（combos）備份檔：套餐都匯入、看不懂的欄位保留；資料庫找不到、刪掉、AI 估的品項用 snapshot 照樣能放進購物車', async ({ page }) => {
   await openApp(page);
   expect(await importFile(page, fx('backup-v3-combos.json'))).toContain('匯入完成');

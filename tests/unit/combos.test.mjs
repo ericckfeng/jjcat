@@ -98,3 +98,16 @@ test('同步：combos 以 id＋updatedAt 合併，刪除用 tomb combos:<id>', (
   const m = mergeData(local, remote);
   assert.deepEqual(m.combos.map(c => c.name), ['A2', 'C']);
 });
+
+test('食物資料庫的食物：記 src＋packFoodId；資料庫還在就用現在的、刪掉了用 snapshot', () => {
+  const burger = { id: 'pf_1', name: '漢堡', brand: '麥當勞', base: '漢堡', serving: { g: 102 }, perServing: { kcal: 260 } };
+  const { combo } = comboFromCart([{ food: burger, grams: 2 }], { id: 'cb', name: '速食', now: 1, packOf: (f) => (f === burger ? 'pk_a' : null) });
+  assert.deepEqual([combo.items[0].src, combo.items[0].packFoodId, combo.items[0].foodId], ['pk_a', 'pf_1', undefined]);
+  assert.equal(combo.items[0].snapshot.brand, '麥當勞');
+  const newer = { ...burger, perServing: { kcal: 270 } };
+  assert.equal(resolveCombo(combo, { packs: [{ id: 'pk_a', foods: [newer] }] })[0].food, newer);
+  const gone = resolveCombo(combo, { packs: [] })[0];
+  assert.equal(gone.fromSnapshot, true);
+  assert.equal(gone.food.perServing.kcal, 260);
+  assert.equal(gone.food.id, undefined);
+});

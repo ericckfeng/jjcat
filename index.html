@@ -194,6 +194,16 @@
         <input id="myFoodSearch" type="search" class="field text-lg" placeholder="搜尋我的食物" />
         <div id="myFoodList" class="space-y-2"></div>
       </section>
+      <section class="bg-white rounded-2xl border border-stone-200 p-4 space-y-3">
+        <div>
+          <h2 class="text-lg font-bold text-stone-900">📚 食物資料庫</h2>
+          <p class="text-base text-stone-600 leading-relaxed">自己或營養師整理的表（例如連鎖店外食營養表、醫院的份量表），各自一個資料庫，和衛福部資料分開。匯入後在「查食物」找得到，也會同步到你的其他裝置。</p>
+        </div>
+        <div id="packList" class="space-y-2"></div>
+        <button type="button" id="packImportBtn" class="btn-secondary w-full">匯入食物資料庫</button>
+        <input id="packImportInput" type="file" accept="application/json,.json" class="hidden" />
+        <a href="tools/foodpack.html" target="_blank" rel="noopener" class="block text-base text-emerald-700 underline">試算表做成資料庫：打開整理工具 ›</a>
+      </section>
     </div>
 
     <!-- TAB 3: TRENDS -->
@@ -383,13 +393,24 @@
       <div><div class="scr-label">記到哪一餐？</div><div class="meal-picker"></div></div>
       <div id="foodCart" class="hidden rounded-2xl bg-emerald-50 border border-emerald-200 p-3 space-y-2"></div>
       <input id="foodSearch" type="search" class="field text-lg" placeholder="輸入食物，例如：雞胸肉、地瓜" autocomplete="off" />
+      <div id="foodFilter" class="flex flex-wrap gap-2"></div>
       <div id="foodMine" class="space-y-2"></div>
+      <div id="foodPacks" class="space-y-2"></div>
       <div id="foodResults" class="space-y-2"></div>
       <p id="foodSource" class="text-sm text-stone-500 leading-relaxed"></p>
     </div>
     <div class="scr-foot">
       <button type="button" id="foodDoneBtn" data-back class="btn-primary btn-xl w-full">完成</button>
       <button type="button" id="foodCartSaveBtn" class="hidden btn-primary btn-xl w-full"></button>
+    </div>
+  </div>
+
+  <!-- 同一個品項好幾家／好幾種（從查食物的食物資料庫點進來） -->
+  <div id="scr-pick" class="screen hidden" role="dialog" aria-label="選哪一家">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2 id="pickTitle"></h2></div>
+    <div class="scr-body">
+      <p class="text-base text-stone-600">選你吃的那一家、那一種：</p>
+      <div id="pickList" class="space-y-2"></div>
     </div>
   </div>
 

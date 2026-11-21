@@ -93,7 +93,7 @@ export function servingKcal(food) {
 // 「1 包 35 g」「1 碗」「100 g」
 export function servingText(food) {
   const s = food.serving || {};
-  if (isPerServing(food)) return s.label || '1 份';
+  if (isPerServing(food)) return (s.label || '1 份') + (s.g ? '（' + s.g + ' g）' : '');
   const g = s.g || 100;
   return (s.label ? s.label + ' ' : '') + g + ' g';
 }

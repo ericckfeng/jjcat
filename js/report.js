@@ -279,6 +279,7 @@ export async function buildReportHTML(ctx, opts) {
           if (it.multiplier && it.multiplier !== 1) sub.push('×' + it.multiplier + '份');
           if (it.p != null || it.c != null || it.f != null) sub.push('P' + fmt(it.p || 0, 1) + ' C' + fmt(it.c || 0, 1) + ' F' + fmt(it.f || 0, 1));
           if (it.ex) sub.push(EX_KEYS.filter(k => it.ex[k]).map(k => EX_META[k].short + fmt(it.ex[k], 1)).join(' '));
+          if (it.srcName) sub.push('資料來源：' + esc(it.srcName));
           h += `<div class="item">${img}<div class="nm">${esc(it.name)}${it.pending ? '<span class="tag">暫估待修</span>' : ''}<div class="sub">${sub.join('・')}</div></div><div class="kc">${fmt(it.kcal)}</div></div>`;
         }
         h += '</div>';

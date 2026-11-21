@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>食物資料庫整理工具｜飲控隨身記</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 讀 Excel（.xlsx）用；載入失敗時仍可讀 CSV -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="../css/app.css" />
+  <style>
+    body { background: #fafaf9; }
+    .step { background: #fff; border: 1px solid #e7e5e4; border-radius: 1rem; padding: 1rem; }
+    .step h2 { font-size: 1.15rem; font-weight: 700; color: #1c1917; margin-bottom: .5rem; }
+    .tbl { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    .tbl th, .tbl td { border-bottom: 1px solid #e7e5e4; padding: .35rem .4rem; text-align: left; vertical-align: top; }
+    .tbl th { background: #f5f5f4; font-weight: 600; white-space: nowrap; }
+    .tbl td.n { text-align: right; font-variant-numeric: tabular-nums; }
+    .scroll-x { overflow-x: auto; }
+    .muted { color: #78716c; }
+  </style>
+</head>
+<body class="text-stone-800">
+  <main class="max-w-4xl mx-auto px-4 py-6 space-y-4">
+    <header class="space-y-1">
+      <h1 class="text-2xl font-bold text-stone-900">📚 食物資料庫整理工具</h1>
+      <p class="text-base text-stone-600 leading-relaxed">把試算表（例如連鎖店外食營養表、營養師給的份量表）整理成「飲控隨身記」用的資料庫檔：對好欄位、合併重複的、標出要確認的數字，再到 App「我的食物 → 匯入食物資料庫」。表格只在這台電腦的瀏覽器裡處理，不會上傳到任何地方。</p>
+    </header>
+
+    <section class="step space-y-3">
+      <h2>1. 讀入表格</h2>
+      <p class="text-base text-stone-600">Excel（.xlsx）或 CSV。第一列要是欄位名稱，之後一列一樣食物。Google 試算表可以「檔案 → 下載 → Microsoft Excel」，或貼上分享連結（要設成「知道連結的人都能檢視」）。</p>
+      <input id="fileInput" type="file" accept=".xlsx,.xls,.csv,.tsv,.txt" class="field" />
+      <div class="flex gap-2">
+        <input id="sheetUrl" type="url" class="field flex-1" placeholder="或貼上 Google 試算表連結" />
+        <button type="button" id="sheetUrlBtn" class="btn-secondary shrink-0 px-4">讀取</button>
+      </div>
+      <label id="sheetPickWrap" class="hidden block"><span class="scr-label">要用哪一個工作表？</span><select id="sheetPick" class="field"></select></label>
+      <p id="loadNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
+    </section>
+
+    <section id="stepMap" class="step space-y-3 hidden">
+      <h2>2. 欄位對照</h2>
+      <p class="text-base text-stone-600">已經自動對好，對錯的改一下；用不到的欄選「不用」。<b>名稱</b>和<b>熱量</b>一定要有。</p>
+      <div class="scroll-x"><table class="tbl"><thead><tr><th>表格的欄位</th><th>第一列的值</th><th>對到</th></tr></thead><tbody id="mapRows"></tbody></table></div>
+    </section>
+
+    <section id="stepInfo" class="step space-y-3 hidden">
+      <h2>3. 資料庫資訊</h2>
+      <div class="grid sm:grid-cols-2 gap-3">
+        <label class="block"><span class="scr-label">名稱（App 裡看到的）</span><input id="pkName" class="field" placeholder="例如：外食連鎖店 2026" /></label>
+        <label class="block"><span class="scr-label">整理者／機構</span><input id="pkOrg" class="field" placeholder="例如：自己整理、三軍總醫院" /></label>
+        <label class="block"><span class="scr-label">版本／年份</span><input id="pkEdition" class="field" placeholder="例如：2026-11" /></label>
+        <label class="block"><span class="scr-label">出處網址（可不填）</span><input id="pkUrl" class="field" /></label>
+      </div>
+      <label class="block"><span class="scr-label">說明（可不填）</span><input id="pkNote" class="field" placeholder="例如：各店官方營養標示，部分為營養師估算" /></label>
+      <div>
+        <div class="scr-label">記的時候問</div>
+        <div class="grid sm:grid-cols-2 gap-2">
+          <button type="button" data-askby="serving" class="toggle-btn">吃了幾份（外食、店家品項）</button>
+          <button type="button" data-askby="grams" class="toggle-btn">吃了幾克（食材份量表，有每份克數的）</button>
+        </div>
+      </div>
+      <p class="text-sm muted">同一個名稱和整理者，再做一次就是新版：App 匯入時會問要不要換成新版，已經記的記錄不受影響。</p>
+    </section>
+
+    <section id="stepCheck" class="step space-y-3 hidden">
+      <h2>4. 檢查與整理</h2>
+      <div id="checkSummary" class="text-base"></div>
+      <div id="checkBody" class="space-y-3"></div>
+    </section>
+
+    <section id="stepOut" class="step space-y-3 hidden">
+      <h2>5. 預覽與下載</h2>
+      <div class="scroll-x"><table class="tbl"><thead><tr><th>店家</th><th>品項</th><th>規格</th><th>一份</th><th>熱量</th><th>蛋白質</th><th>脂肪</th><th>碳水</th><th>糖</th><th>鈉</th></tr></thead><tbody id="previewRows"></tbody></table></div>
+      <p id="previewMore" class="text-sm muted"></p>
+      <div class="grid sm:grid-cols-2 gap-2">
+        <button type="button" id="dlJson" class="btn-primary btn-xl">下載資料庫檔（給 App 匯入）</button>
+        <button type="button" id="dlCsv" class="btn-secondary btn-xl">下載 CSV（給人看、給營養師）</button>
+      </div>
+      <p id="outNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
+    </section>
+  </main>
+  <script type="module" src="foodpack.js"></script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+{
+  "app": "diet-tracker",
+  "version": 3,
+  "exportedAt": "2026-11-26T12:00:00.000Z",
+  "targets": {
+    "kcal": 1800
+  },
+  "logs": {
+    "2026-11-25": [
+      {
+        "id": "item_pk1",
+        "name": "台灣麥當勞 漢堡 1 份",
+        "kcal": 260,
+        "meal": "lunch",
+        "time": "12:00",
+        "multiplier": 1,
+        "servings": 1,
+        "src": "pk_fx",
+        "srcName": "外食連鎖店・麥當勞官方",
+        "packFoodId": "pf_b1",
+        "updatedAt": 1764050000000
+      }
+    ]
+  },
+  "days": {},
+  "quickItems": [],
+  "foodPacks": [
+    {
+      "id": "pk_fx",
+      "name": "外食連鎖店",
+      "org": "自己整理",
+      "edition": "2026",
+      "askBy": "serving",
+      "updatedAt": 1764040000000,
+      "futureField": 1,
+      "foods": [
+        {
+          "id": "pf_b1",
+          "name": "漢堡",
+          "base": "漢堡",
+          "brand": "台灣麥當勞",
+          "serving": {
+            "g": 102,
+            "label": "1份"
+          },
+          "perServing": {
+            "kcal": 260,
+            "p": 12.2,
+            "sfa": 3.1
+          },
+          "source": "麥當勞官方"
+        }
+      ]
+    }
+  ],
+  "tomb": {
+    "foodPacks:pk_gone": 1764040000000
+  },
+  "photos": {}
+}

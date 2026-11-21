@@ -1,7 +1,8 @@
 // 套餐 combos（純函式，有單元測試）
 // 購物車「存成套餐」；記的時候選套餐 → 整組放進購物車 → 可以改克數、拿掉 → 記到某餐（和查食物同一套流程）。
 // 形狀：{ id: 'cb_xxxx', name, items: [Item], updatedAt }
-//   Item：{ foodId | customFoodId, snapshot, grams, weighed }
+//   Item：{ foodId | customFoodId | (src＋packFoodId), snapshot, grams, weighed }
+//     src＋packFoodId：食物資料庫（foodPacks）的 id 和裡面那樣食物的 id
 //     grams：記的時候填的數字（以份計的食物是「幾份」，和記錄的 grams／servings 一樣）
 //     weighed：'asis' 或 'cooked'（秤的是熟重）
 //     snapshot：存的時候那樣食物的資料（和食物同形狀，只留算營養要用的欄位）。
@@ -11,7 +12,7 @@ import { normalize, expandQuery, nutrientsFor, cookConversion } from './foods.js
 import { isPerServing, servingNutrients } from './myfoods.js';
 import { sumNutr } from './meals.js';
 
-const SNAP_KEYS = ['id', 'name', 'category', 'state', 'note', 'per100g', 'exPer100g', 'perServing', 'exPerServing', 'serving', 'ai'];
+const SNAP_KEYS = ['id', 'name', 'brand', 'base', 'variant', 'source', 'category', 'state', 'note', 'per100g', 'exPer100g', 'perServing', 'exPerServing', 'serving', 'ai'];
 
 export function snapshotOf(food) {
   const s = {};
@@ -19,13 +20,15 @@ export function snapshotOf(food) {
   return s;
 }
 
-// 購物車 [{ food, grams, weighed }] → 套餐。mine：這樣食物是不是我的食物（app.js 判斷）
-export function comboFromCart(cart, { id, name, now, mine = () => false }) {
+// 購物車 [{ food, grams, weighed }] → 套餐。mine：這樣食物是不是我的食物；packOf：在哪個食物資料庫（pack id 或 null）（app.js 判斷）
+export function comboFromCart(cart, { id, name, now, mine = () => false, packOf = () => null }) {
   const n = String(name || '').trim();
   if (!n) return { error: '請幫套餐取個名字' };
   const items = (cart || []).filter(c => c && c.food && Number(c.grams) > 0).map(c => {
     const it = { snapshot: snapshotOf(c.food), grams: Number(c.grams), weighed: c.weighed === 'cooked' ? 'cooked' : 'asis' };
+    const src = c.food.id ? packOf(c.food) : null;
     if (c.food.id && mine(c.food)) it.customFoodId = c.food.id;
+    else if (src) { it.src = src; it.packFoodId = c.food.id; }
     else if (c.food.id && !c.food.ai) it.foodId = c.food.id;
     return it;
   });
@@ -34,19 +37,21 @@ export function comboFromCart(cart, { id, name, now, mine = () => false }) {
 }
 
 // 套餐裡的每一樣 → 要放進購物車的 { food, grams, weighed, fromSnapshot }
-// tfda：TFDA 食物清單（還沒載入就給 null，一律用 snapshot）；mine：我的食物清單
-export function resolveCombo(combo, { tfda = null, mine = [] } = {}) {
+// tfda：TFDA 食物清單（還沒載入就給 null，一律用 snapshot）；mine：我的食物清單；packs：食物資料庫清單
+export function resolveCombo(combo, { tfda = null, mine = [], packs = [] } = {}) {
   const byTfda = tfda ? new Map(tfda.map(f => [f.id, f])) : null;
   const byMine = new Map((mine || []).map(f => [f.id, f]));
+  const byPack = new Map((packs || []).map(p => [p.id, new Map((p.foods || []).map(f => [f.id, f]))]));
   return ((combo && combo.items) || []).filter(it => it && Number(it.grams) > 0).map(it => {
     let food = null;
     if (it.customFoodId) food = byMine.get(it.customFoodId) || null;
+    else if (it.src) food = (byPack.get(it.src) && byPack.get(it.src).get(it.packFoodId)) || null;
     else if (it.foodId && byTfda) food = byTfda.get(it.foodId) || null;
     const snap = { ...(it.snapshot || {}) };
     if (!snap.name) snap.name = '（沒有名稱）';
     if (!snap.per100g && !snap.perServing) snap.per100g = {};
     // 用 snapshot 記下來的記錄：TFDA 的照樣帶 foodId；刪掉的我的食物不再連到它
-    if (it.foodId) snap.id = it.foodId; else delete snap.id;
+    if (it.foodId) snap.id = it.foodId; else delete snap.id;   // 資料庫刪掉的食物也不再連到它
     // 我的食物從「以份計」改成「以克計」（或反過來）時，填的數字意思不同了：也用 snapshot
     if (food && isPerServing(food) !== isPerServing(snap)) food = null;
     const fromSnapshot = !food;

@@ -26,6 +26,7 @@ const CORE = [
   './js/lookup.js',
   './js/myfoods.js',
   './js/combos.js',
+  './js/packs.js',
   './js/characters.js',
   './js/version.js',
   './tfda_foods.json',

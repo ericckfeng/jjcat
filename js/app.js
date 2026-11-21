@@ -144,7 +144,7 @@ function persistLocal() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
-    showToast('⚠ 無法儲存，請先下載備份');
+    showError('⚠ 無法儲存，請先下載備份');
   }
 }
 // 資料有變：存起來並安排同步
@@ -330,10 +330,13 @@ function compressImage(file, maxDim = 900) {
 }
 
 /* ---------------- Toast / Confirm / Modal ---------------- */
+// 畫面下方的提示：字和一般內文一樣大，停 5 秒（有「復原」這類按鈕 7 秒），點一下就關。
+// 錯誤（showError）不會自己消失，要按「知道了」，長輩才不會漏看。
 let toastTimer = null;
 let toastActionFn = null;
-function showToast(msg, actionLabel, actionFn, ms) {
+function showToast(msg, actionLabel, actionFn, ms, sticky = false) {
   $('toastMsg').textContent = msg;
+  $('toast').classList.toggle('toast-err', sticky);
   const btn = $('toastAction');
   if (actionLabel && actionFn) {
     btn.textContent = actionLabel; btn.classList.remove('hidden'); toastActionFn = actionFn;
@@ -342,13 +345,16 @@ function showToast(msg, actionLabel, actionFn, ms) {
   }
   $('toast').classList.remove('hidden');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => $('toast').classList.add('hidden'), ms || (actionFn ? 5000 : 2400));
+  if (!sticky) toastTimer = setTimeout(() => $('toast').classList.add('hidden'), ms || (actionFn ? 7000 : 5000));
 }
-$('toastAction').addEventListener('click', () => {
+function showError(msg) { showToast(msg, '知道了', () => {}, 0, true); }
+$('toastAction').addEventListener('click', (e) => {
+  e.stopPropagation();
   if (toastActionFn) toastActionFn();
   toastActionFn = null;
   $('toast').classList.add('hidden');
 });
+$('toast').addEventListener('click', () => { clearTimeout(toastTimer); toastActionFn = null; $('toast').classList.add('hidden'); });
 
 let pendingConfirm = null;
 let pendingCancel = null;
@@ -357,6 +363,8 @@ function openConfirm(title, message, onOk, okLabel = '確定', onCancel = null, 
   $('confirmTitle').textContent = title;
   $('confirmMessage').textContent = message;
   $('confirmOkBtn').textContent = okLabel;
+  // 刪除、清空這類才用紅色；「加入」「匯入」用綠色，不要嚇到人
+  $('confirmOkBtn').classList.toggle('btn-danger', /刪除|清空|移除|中斷|不要了|換掉/.test(okLabel + title));
   $('confirmCancelBtn').textContent = cancelLabel;
   pendingConfirm = onOk;
   pendingCancel = onCancel;
@@ -404,14 +412,14 @@ function nutrFieldsHTML(prefix) {
   return `
     <div class="space-y-2 pt-1">
       <div class="grid grid-cols-3 gap-1.5">
-        ${MACRO_KEYS.map(k => `<label class="block"><span class="block text-[0.625rem] text-stone-500 mb-0.5">${MACRO_META[k].label} (g)</span>${inp(prefix + '-' + k, 'g', 'any')}</label>`).join('')}
+        ${MACRO_KEYS.map(k => `<label class="block"><span class="block text-xs text-stone-600 mb-0.5">${MACRO_META[k].label} (g)</span>${inp(prefix + '-' + k, 'g', 'any')}</label>`).join('')}
       </div>
       <div class="flex items-center justify-between pt-1">
-        <span class="text-[0.6875rem] font-semibold text-stone-600">六大類份數</span>
-        <button type="button" data-derive="${prefix}" class="derive-btn text-[0.6875rem] font-semibold text-emerald-700 hover:underline">依份數推算熱量／營養素</button>
+        <span class="text-sm font-semibold text-stone-700">六大類份數</span>
+        <button type="button" data-derive="${prefix}" class="derive-btn text-sm font-semibold text-emerald-700 underline py-1">依份數推算熱量／營養素</button>
       </div>
       <div class="grid grid-cols-3 gap-1.5">
-        ${EX_KEYS.map(k => `<label class="block"><span class="block text-[0.625rem] text-stone-500 mb-0.5">${EX_META[k].emoji} ${EX_META[k].short}</span>${inp(prefix + '-ex-' + k, '份', 'any')}</label>`).join('')}
+        ${EX_KEYS.map(k => `<label class="block"><span class="block text-xs text-stone-600 mb-0.5">${EX_META[k].emoji} ${EX_META[k].short}</span>${inp(prefix + '-ex-' + k, '份', 'any')}</label>`).join('')}
       </div>
     </div>`;
 }
@@ -438,7 +446,7 @@ document.addEventListener('click', (e) => {
   if (!b) return;
   const prefix = b.getAttribute('data-derive');
   const n = readNutrFields(prefix);
-  if (!n.ex) { showToast('請先填六大類份數'); return; }
+  if (!n.ex) { showError('請先填六大類份數'); return; }
   const d = deriveFromEx(n.ex);
   const filled = [];
   const kEl = $(KCAL_FIELD[prefix]);
@@ -574,13 +582,13 @@ function renderSummary() {
       EX_KEYS.map(k => meterHTML(EX_META[k].emoji + ' ' + EX_META[k].short, t.ex[k], tg.ex && tg.ex[k], '份', 'bg-emerald-500')).join('') + '</div>';
   }
   if (!html) {
-    html = '<p class="text-[0.6875rem] text-stone-400">提示：在右上「目標」填入營養師給的三大營養素／六大類份數，這裡會顯示每日進度。</p>';
+    html = '<p class="text-sm text-stone-500">提示：在右上「目標」填入營養師給的三大營養素／六大類份數，這裡會顯示每日進度。</p>';
   }
   if (t.macroItems && t.macroItems < t.count) {
-    html += `<p class="text-[0.6875rem] text-stone-400">營養素只計入有填的 ${t.macroItems}/${t.count} 筆</p>`;
+    html += `<p class="text-sm text-stone-500">營養素只計入有填的 ${t.macroItems}/${t.count} 筆</p>`;
   }
   if (t.pending) {
-    html += `<p class="text-[0.6875rem] font-semibold text-amber-700">⚠ 有 ${t.pending} 筆「暫估待修」，記得對照照片修正</p>`;
+    html += `<p class="text-base font-semibold text-amber-800">⚠ 有 ${t.pending} 筆「暫估待修」，記得對照照片修正</p>`;
   }
   $('summaryNutr').innerHTML = html;
 }
@@ -589,8 +597,8 @@ function meterHTML(label, val, target, unit, bar) {
   const pct = target ? Math.min(100, v / target * 100) : 0;
   const over = target && v > target * 1.1;
   return `<div class="bg-stone-50 rounded-xl p-2">
-    <div class="text-[0.6875rem] text-stone-500 leading-tight">${label}</div>
-    <div class="text-xs font-bold tabular-nums ${over ? 'text-rose-600' : 'text-stone-800'}">${fmt(v, 1)}${target ? `<span class="font-normal text-stone-400"> / ${fmt(target, 1)}</span>` : ''}<span class="font-normal text-stone-400 text-[0.625rem]"> ${unit}</span></div>
+    <div class="text-xs text-stone-600 leading-tight">${label}</div>
+    <div class="text-sm font-bold tabular-nums ${over ? 'text-rose-600' : 'text-stone-800'}">${fmt(v, 1)}${target ? `<span class="font-normal text-stone-400"> / ${fmt(target, 1)}</span>` : ''}<span class="font-normal text-stone-400 text-[0.625rem]"> ${unit}</span></div>
     ${target ? `<div class="mt-1 h-1.5 rounded-full bg-stone-200 overflow-hidden"><div class="h-full rounded-full ${over ? 'bg-rose-500' : bar}" style="width:${pct}%"></div></div>` : ''}
   </div>`;
 }
@@ -829,7 +837,7 @@ $('foodCart').addEventListener('click', (e) => {
 $('gramsSaveBtn').addEventListener('click', () => {
   const food = gramsDraft.food;
   const g = gramsValue();
-  if (!food || !g) { showToast(isPerServing(food) ? '請輸入幾份' : '請輸入公克數'); return; }
+  if (!food || !g) { showError(isPerServing(food) ? '請輸入幾份' : '請輸入公克數'); return; }
   const { weighed, entry } = cartEntryFor(food, g, gramsDraft.weighed);
   const editing = foodCart.find(x => x.key === gramsDraft.cartKey);
   if (editing) Object.assign(editing, { grams: g, weighed, entry });
@@ -921,7 +929,7 @@ function openScreen(id) {
   if (id === 'scr-about') { renderAbout(); checkLatest(true); }
   if (id === 'scr-data') { renderCloud(); renderBackupInfo(); }   // 關掉自動同步的人也要看得到雲端區塊
   if (id === 'scr-weekly') renderWeekly();
-  if (id === 'scr-ai') resetAi();
+  if (id === 'scr-ai') { resetAi(); $('aiFallbackBtn').classList.add('hidden'); }
   if (id === 'scr-manual') { setBox('add-lb-note', null, ''); manualBarcode = ''; }
   if (id === 'scr-aikey') renderAiKey();
   if (id === 'scr-sleep') renderSleepScreen();
@@ -1199,7 +1207,7 @@ $('photoQuickSave').addEventListener('click', async () => {
   const kcal = num($('photoQuickKcal').value);
   const photos = formPhotos.pq.map(p => p.src);
   const lk = pqLookup();
-  if (!photos.length && !name && kcal == null && !lk) { showToast('請先拍照，或寫下吃了什麼'); return; }
+  if (!photos.length && !name && kcal == null && !lk) { showError('請先拍照，或寫下吃了什麼'); return; }
   const est = kcal == null ? estimateLookup(lk) : null;
   const cat = lk && lookupCat(lk.cat);
   await addEntry({
@@ -1298,7 +1306,7 @@ $('lookupExportBtn').addEventListener('click', async () => {
 });
 $('lookupPromptBtn').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(AI_LOOKUP_PROMPT); showToast('已複製，貼給 AI 時連同表格和照片一起傳'); }
-  catch (e) { $('lookupPaste').value = AI_LOOKUP_PROMPT; showToast('無法自動複製，說明放在下面的框框裡，請自己複製'); }
+  catch (e) { $('lookupPaste').value = AI_LOOKUP_PROMPT; showError('無法自動複製，說明放在下面的框框裡，請自己複製'); }
 });
 $('lookupFileBtn').addEventListener('click', () => $('lookupFileInput').click());
 $('lookupFileInput').addEventListener('change', async (e) => {
@@ -1428,7 +1436,7 @@ function renderLogs() {
       </div>${mealGapHTML(mealKey)}<ul class="divide-y divide-stone-100">`;
     items.forEach(item => {
       const mult = item.multiplier && item.multiplier !== 1 ? ' × ' + item.multiplier + '份' : '';
-      const pending = item.pending ? '<span class="ml-1.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[0.625rem] font-bold">暫估待修</span>' : '';
+      const pending = item.pending ? '<span class="ml-1.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-xs font-bold">暫估待修</span>' : '';
       const thumb = item.hasPhoto
         ? `<button type="button" data-view-photo="${esc(item.id)}" class="view-photo-btn relative shrink-0" title="放大照片">
              <img data-photo-id="${esc(item.id)}" alt="餐點照片" class="w-14 h-14 rounded-xl object-cover border border-stone-200 bg-stone-100" />
@@ -1566,7 +1574,7 @@ function rangeStats(dates) {
   };
 }
 function statTile(label, value, sub = '') {
-  return `<div class="bg-stone-50 rounded-xl p-2.5"><div class="text-[0.6875rem] text-stone-500">${label}</div><div class="text-base font-bold text-stone-900 tabular-nums">${value}</div>${sub ? `<div class="text-[0.625rem] text-stone-400">${sub}</div>` : ''}</div>`;
+  return `<div class="bg-stone-50 rounded-xl p-2.5"><div class="text-xs text-stone-600">${label}</div><div class="text-base font-bold text-stone-900 tabular-nums">${value}</div>${sub ? `<div class="text-[0.625rem] text-stone-400">${sub}</div>` : ''}</div>`;
 }
 function renderTrends() {
   document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('is-active', Number(b.getAttribute('data-range')) === ui.trendRange));
@@ -1617,15 +1625,15 @@ function renderTrends() {
   let nh = '';
   if (s.macroDays) {
     const kc = MACRO_KEYS.reduce((sum, k) => sum + (s.avgMacro[k] || 0) * MACRO_META[k].kcalPerG, 0);
-    nh += `<div><div class="text-[0.6875rem] text-stone-500 mb-1.5">三大營養素（${s.macroDays} 天有填）</div><div class="grid grid-cols-3 gap-2">` +
+    nh += `<div><div class="text-sm text-stone-600 mb-1.5">三大營養素（${s.macroDays} 天有填）</div><div class="grid grid-cols-3 gap-2">` +
       MACRO_KEYS.map(k => meterHTML(MACRO_META[k].label + (kc ? ' ' + Math.round((s.avgMacro[k] || 0) * MACRO_META[k].kcalPerG / kc * 100) + '%' : ''), s.avgMacro[k], tg[k], 'g', MACRO_META[k].bar)).join('') + '</div></div>';
   }
   if (s.exDays) {
-    nh += `<div><div class="text-[0.6875rem] text-stone-500 mb-1.5">六大類份數（${s.exDays} 天有填）</div><div class="grid grid-cols-3 sm:grid-cols-6 gap-2">` +
+    nh += `<div><div class="text-sm text-stone-600 mb-1.5">六大類份數（${s.exDays} 天有填）</div><div class="grid grid-cols-3 sm:grid-cols-6 gap-2">` +
       EX_KEYS.map(k => meterHTML(EX_META[k].emoji + ' ' + EX_META[k].short, s.avgEx[k], tg.ex && tg.ex[k], '份', 'bg-emerald-500')).join('') + '</div></div>';
   }
-  if (!nh) nh = '<p class="text-xs text-stone-400">這段期間還沒有填營養素或六大類份數。用「份量估算」或在記錄時展開「營養素／六大類份數」就會出現在這裡。</p>';
-  if (s.pending) nh += `<p class="text-[0.6875rem] font-semibold text-amber-700">⚠ 這段期間有 ${s.pending} 筆暫估待修</p>`;
+  if (!nh) nh = '<p class="text-sm text-stone-500">這段期間還沒有填營養素或六大類份數。用「份量估算」或在記錄時展開「營養素／六大類份數」就會出現在這裡。</p>';
+  if (s.pending) nh += `<p class="text-base font-semibold text-amber-800">⚠ 這段期間有 ${s.pending} 筆暫估待修</p>`;
   $('trendNutr').innerHTML = nh;
 }
 
@@ -1827,7 +1835,7 @@ $('sleepClearBtn').addEventListener('click', () => {
   renderSleepScreen();
 });
 function addNap(min) {
-  if (!min || min <= 0 || min > 600) { showToast('請輸入 1–600 分鐘'); return; }
+  if (!min || min <= 0 || min > 600) { showError('請輸入 1–600 分鐘'); return; }
   const naps = [...(getDay(ui.date, false).naps || []), { id: uid('nap'), min: Math.round(min) }];
   setDayField('naps', naps);
   renderSleepScreen();
@@ -1896,7 +1904,7 @@ function renderTips(insights) {
 const aiKey = () => (state.meta.ai && state.meta.ai.key) || '';
 const AI_ERRORS = {
   key: 'API Key 不對或已經失效，請到右上 ⚙️ 設定的「AI 辨識」重新設定。',
-  quota: '免費額度暫時用完了（或太頻繁），請過一會兒再試。',
+  quota: '今天的免費次數可能用完了（Google 免費方案一天只能用幾十次），明天再用。現在可以先用「拍照記」存起來，之後再查。',
   referrer: '這把 Key 限制了可以使用的網站，請確認有加上 https://ericckfeng.github.io/*',
   forbidden: 'Google 拒絕了這個請求，請確認這把 Key 是 Gemini API 用的。',
   network: '連不上網路，請確認網路後再試一次。',
@@ -1987,7 +1995,7 @@ $('aiCheckBtn').addEventListener('click', async () => {
 });
 $('aiCheckCopy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(aiCheckText); showToast('已複製，可以貼到 LINE 傳給開發者'); }
-  catch (e) { showToast('這台裝置不能自動複製，請截圖'); }
+  catch (e) { showError('這台裝置不能自動複製，請截圖'); }
 });
 $('aiOffBtn').addEventListener('click', () => {
   delete state.meta.ai;
@@ -2032,7 +2040,7 @@ $('aiPhotoBtn').addEventListener('click', () => $('aiPhotoInput').click());
 $('aiPhotoInput').addEventListener('change', async (e) => {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
-  try { aiDraft.photo = await compressImage(file, 1024); } catch (err) { showToast('照片讀不到，請再試一次'); return; }
+  try { aiDraft.photo = await compressImage(file, 1024); } catch (err) { showError('照片讀不到，請再試一次'); return; }
   clearAiResults();
   renderAiPhoto();
 });
@@ -2061,9 +2069,21 @@ $('aiGoBtn').addEventListener('click', async () => {
     else setBox('aiStatus', 'info', '不對的可以取消打勾。' + (out.note ? out.note : ''));
   } catch (e) {
     setBox('aiStatus', 'err', aiErrorText(e));
+    // AI 不能用（次數用完、太忙、網路）：照片和描述不要白拍，直接帶到「拍照記」存成待查
+    if (['quota', 'busy', 'timeout', 'network', 'server'].includes(e && e.kind)) $('aiFallbackBtn').classList.remove('hidden');
   } finally {
     btn.disabled = false; btn.textContent = '請 AI 幫我認';
   }
+});
+$('aiFallbackBtn').addEventListener('click', () => {
+  const photo = aiDraft.photo;
+  const text = $('aiText').value.trim();
+  afterClose(() => {
+    openScreen('scr-photo');
+    if (photo) formPhotos.pq = [{ src: photo, key: null }];
+    if (text) $('photoQuickName').value = text.slice(0, 40);
+    renderPhotoQuick();
+  });
 });
 // 從目前的畫面換到另一個畫面（返回鍵直接回到首頁）
 function swapScreen(id) {
@@ -2100,7 +2120,7 @@ if (SpeechRec) {
       clearAiResults();
     };
     rec.onend = () => { rec = null; $('aiMicBtn').textContent = '🎤 按一下開始說話'; };
-    rec.onerror = () => showToast('沒聽清楚，請再說一次，或直接打字');
+    rec.onerror = () => showError('沒聽清楚，請再說一次，或直接打字');
     $('aiMicBtn').textContent = '⏹ 說完了，按這裡';
     rec.start();
   });
@@ -2267,7 +2287,7 @@ $('weeklyShareBtn').addEventListener('click', async () => {
   } catch (err) {
     if (err && err.name === 'AbortError') return;
   }
-  try { await navigator.clipboard.writeText(text); showToast('已複製週報，貼到 LINE 即可'); } catch (e) { showToast('無法複製'); }
+  try { await navigator.clipboard.writeText(text); showToast('已複製週報，貼到 LINE 即可'); } catch (e) { showError('無法複製'); }
 });
 
 // 設定裡勾了誰：小芽 meta.mascot、小貓 meta.cat、營養師 meta.doc。
@@ -2542,7 +2562,7 @@ function renderPhotoStrip(prefix) {
     + (list.length < MAX_PHOTOS ? `<button type="button" class="ph-add" data-ph-add="${prefix}">📷<br>加照片</button>` : '');
 }
 async function addFormPhoto(prefix, file, maxDim) {
-  if (formPhotos[prefix].length >= MAX_PHOTOS) { showToast('最多 3 張照片，請先移除一張'); return null; }
+  if (formPhotos[prefix].length >= MAX_PHOTOS) { showError('最多 3 張照片，請先移除一張'); return null; }
   const src = await compressImage(file, maxDim);
   formPhotos[prefix].push({ src, key: null });
   if (prefix === 'pq') renderPhotoQuick(); else renderPhotoStrip(prefix);
@@ -2562,7 +2582,7 @@ Object.entries(PHOTO_INPUT).forEach(([prefix, id]) => $(id).addEventListener('ch
   const file = e.target.files && e.target.files[0];
   e.target.value = '';
   if (!file) return;
-  try { if (await addFormPhoto(prefix, file)) showToast('已附上照片'); } catch (err) { showToast('照片讀取失敗'); }
+  try { if (await addFormPhoto(prefix, file)) showToast('已附上照片'); } catch (err) { showError('照片讀取失敗'); }
 }));
 // 修改記錄存檔時：依畫面上的照片更新這筆的第 1 張和 morePhotos，拿掉的照片從這台刪除
 async function saveEditPhotos(item) {
@@ -2633,7 +2653,7 @@ $('edit-lb-mine').addEventListener('click', () => {
   const lx = labelExtra('edit', 1);
   const name = $('editLogNameInput').value.trim();
   if (!lx) { showToast('先填好標示上的克數、熱量和「我吃了幾克」'); return; }
-  if (!name) { showToast('請先填食物名稱'); return; }
+  if (!name) { showError('請先填食物名稱'); return; }
   const note = saveAsMyFood(formFromManual({ name, nutr: { kcal: lx.label.kcal }, label: lx.label, grams: lx.grams }), 'label');
   if (note.startsWith('，')) { persist(); renderAll(); showToast('已存到我的食物：「' + name + '」，一份 ' + lx.grams + ' 克'); }
   else showToast(note.slice(1));
@@ -2696,7 +2716,7 @@ document.addEventListener('click', (e) => {
   e.target.value = '';
   if (!file) return;
   let src = null;
-  try { src = await addFormPhoto(prefix, file, 1280); } catch (err) { showToast('照片讀取失敗'); return; }   // 標示的字小，解析度高一點
+  try { src = await addFormPhoto(prefix, file, 1280); } catch (err) { showError('照片讀取失敗'); return; }   // 標示的字小，解析度高一點
   if (!src) return;
   if (aiKey()) readLabelByAi(prefix, src);
   else showToast('已附上營養標示照片，對照著填下面的數字');
@@ -2712,7 +2732,7 @@ $('addFoodForm').addEventListener('submit', async (e) => {
   const nutr = readNutrFields('add');
   const photos = formPhotos.add.map(p => p.src);
   if (!hasKcal && !photos.length && !pendingChecked) {
-    showToast('請輸入熱量，或先拍照／勾選「暫估待修」');
+    showError('請輸入熱量，或先拍照／勾選「暫估待修」');
     return;
   }
   if (!Number.isFinite(kcal) || kcal < 0) return;
@@ -3046,7 +3066,7 @@ function afterPackChange() {
 }
 function importPack(data) {
   const { pack, error } = packFromFile(data, { now: now() });
-  if (error) { showToast(error); return; }
+  if (error) { showError(error); return; }
   const list = foodPacks();
   const old = list.find(p => p.id === pack.id);
   const add = () => {
@@ -3068,7 +3088,7 @@ $('packImportInput').addEventListener('change', async (e) => {
   e.target.value = '';
   if (!file) return;
   let data;
-  try { data = JSON.parse(await file.text()); } catch (err) { showToast('檔案無法讀取，請選食物檔（.json）'); return; }
+  try { data = JSON.parse(await file.text()); } catch (err) { showError('檔案無法讀取，請選食物檔（.json）'); return; }
   if (isMyFoodsFile(data)) importMyFoods(data); else importPack(data);
 });
 $('myFoodImportBtn').addEventListener('click', () => $('packImportInput').click());
@@ -3516,8 +3536,8 @@ $('scr-profile').addEventListener('click', (e) => {
 $('profileSaveBtn').addEventListener('click', () => {
   const h = num($('pfHeight').value);
   const by = num($('pfBirthYear').value);
-  if (h && (h < 100 || h > 230)) { showToast('身高請填 100～230 公分'); return; }
-  if (by && !ageFrom(by)) { showToast('出生年好像不對，請再看一下'); return; }
+  if (h && (h < 100 || h > 230)) { showError('身高請填 100～230 公分'); return; }
+  if (by && !ageFrom(by)) { showError('出生年好像不對，請再看一下'); return; }
   const next = { ...state.profile, name: $('profileName').value.trim(), sex: pfDraft.sex, height: h || null, birthYear: by || null, activity: pfDraft.activity };
   if ($('sugarCareToggle').checked) next.sugarCare = true; else delete next.sugarCare;
   const changed = ['name', 'sex', 'height', 'birthYear', 'activity', 'sugarCare'].some(k => (next[k] ?? null) !== (state.profile[k] ?? null));
@@ -3816,7 +3836,7 @@ document.querySelectorAll('.preset-btn').forEach(btn => btn.addEventListener('cl
 $('deriveTargetBtn').addEventListener('click', () => {
   const ex = {};
   EX_KEYS.forEach(k => { ex[k] = num($('tgt-ex-' + k).value); });
-  if (!cleanEx(ex)) { showToast('請先填六大類份數'); return; }
+  if (!cleanEx(ex)) { showError('請先填六大類份數'); return; }
   const d = deriveFromEx(ex);
   $('tgt-kcal').value = d.kcal;
   MACRO_KEYS.forEach(k => { $('tgt-' + k).value = d[k]; });
@@ -3824,7 +3844,7 @@ $('deriveTargetBtn').addEventListener('click', () => {
 });
 $('saveTargetBtn').addEventListener('click', () => {
   const kcal = Number($('tgt-kcal').value);
-  if (!Number.isFinite(kcal) || kcal < 800 || kcal > 6000) { showToast('熱量目標請填 800–6000'); return; }
+  if (!Number.isFinite(kcal) || kcal < 800 || kcal > 6000) { showError('熱量目標請填 800–6000'); return; }
   const ex = {};
   EX_KEYS.forEach(k => { const v = num($('tgt-ex-' + k).value); if (v) ex[k] = v; });
   const water = num($('tgt-water').value);
@@ -3934,7 +3954,7 @@ $('extGoogleSearchBtn').addEventListener('click', () => {
 });
 $('applyEstimateBtn').addEventListener('click', async () => {
   const t = estTotals();
-  if (!t.kcal) { showToast('請先按上面的份量按鈕'); return; }
+  if (!t.kcal) { showError('請先按上面的份量按鈕'); return; }
   let name = $('estName').value.trim();
   if (!name) {
     const names = EST_PARTS.filter(p => estCounts[p.id]).map(p => p.title.replace(/^\S+\s/, '') + (estCounts[p.id] > 1 ? '×' + estCounts[p.id] : ''));
@@ -3963,7 +3983,7 @@ function reportContext() {
 $('genReportBtn').addEventListener('click', async () => {
   let from = $('rptFrom').value;
   let to = $('rptTo').value;
-  if (!from || !to) { showToast('請選擇期間'); return; }
+  if (!from || !to) { showError('請選擇期間'); return; }
   if (from > to) [from, to] = [to, from];
   if (datesBetween(from, to).length > 92) { showToast('期間最多 92 天'); return; }
   const btn = $('genReportBtn');
@@ -3979,7 +3999,7 @@ $('genReportBtn').addEventListener('click', async () => {
     $('reportPrintHint').classList.remove('hidden');
     $('reportActions').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (err) {
-    showToast('產生報告失敗：' + err.message);
+    showError('產生報告失敗：' + err.message);
   } finally {
     btn.disabled = false;
     btn.textContent = '產生報告';
@@ -4011,7 +4031,7 @@ $('shareReportTextBtn').addEventListener('click', async () => {
   } catch (err) {
     if (err && err.name === 'AbortError') return;
   }
-  try { await navigator.clipboard.writeText(text); showToast('已複製文字摘要，貼到 LINE 即可'); } catch (e) { showToast('無法複製，請改用列印／存 PDF'); }
+  try { await navigator.clipboard.writeText(text); showToast('已複製文字摘要，貼到 LINE 即可'); } catch (e) { showError('無法複製，請改用列印／存 PDF'); }
 });
 // 列印前確保報告已產生並顯示
 window.addEventListener('beforeprint', () => {
@@ -4079,9 +4099,9 @@ $('importJsonInput').addEventListener('change', async (e) => {
   e.target.value = '';
   if (!file) return;
   let data;
-  try { data = JSON.parse(await file.text()); } catch (err) { showToast('檔案無法讀取，請確認是 JSON 備份檔'); return; }
+  try { data = JSON.parse(await file.text()); } catch (err) { showError('檔案無法讀取，請確認是 JSON 備份檔'); return; }
   if (data && data.app === 'diet-tracker-foods') { if (isMyFoodsFile(data)) importMyFoods(data); else importPack(data); return; }   // 選到食物檔也可以
-  if (requiredRev(data)) { showToast('這個備份檔是較新版的 App 做的，請先更新 App（設定 → 關於）再匯入'); return; }
+  if (requiredRev(data)) { showError('這個備份檔是較新版的 App 做的，請先更新 App（設定 → 關於）再匯入'); return; }
   openConfirm('匯入備份', '會把「' + file.name + '」合併到目前資料，相同的記錄不會重複；目標設定會改成備份檔裡的設定。', async () => {
     try {
       const r = await mergeImport(data);
@@ -4089,7 +4109,7 @@ $('importJsonInput').addEventListener('change', async (e) => {
       renderAll();
       showToast('匯入完成：新增 ' + r.added + ' 筆記錄、' + r.photos + ' 張照片');
     } catch (err) {
-      showToast('匯入失敗：' + err.message);
+      showError('匯入失敗：' + err.message);
     }
   }, '匯入');
 });
@@ -4200,7 +4220,7 @@ async function cloudRun(action, { auto = false } = {}) {
   if (cloudBusy) { syncAgain = true; return; }
   const c = state.meta.cloud;
   if (cloud.isBlockedInAppBrowser()) {
-    if (!auto) { goToCloudSection(); showToast('請改用 Safari／Chrome 開啟後再登入 Google'); }
+    if (!auto) { goToCloudSection(); showError('請改用 Safari／Chrome 開啟後再登入 Google'); }
     return;
   }
   if (!cloud.getToken()) {
@@ -4229,7 +4249,7 @@ async function cloudRun(action, { auto = false } = {}) {
       else { cloudBusy = false; startSignIn(action); }
     } else {
       setCloudStatus((err && err.message) || '同步失敗', 'err');
-      if (!auto) showToast('同步失敗，請稍後再試');
+      if (!auto) showError('同步失敗，請稍後再試');
     }
   } finally {
     cloudBusy = false;

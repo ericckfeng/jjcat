@@ -51,13 +51,13 @@
 
   <main class="max-w-2xl mx-auto px-4 py-4 space-y-4">
     <!-- Banners -->
-    <div id="installBanner" class="no-print hidden bg-sky-50 border border-sky-200 rounded-2xl p-3 text-xs text-sky-900 flex gap-2 items-start">
+    <div id="installBanner" class="no-print hidden bg-sky-50 border border-sky-200 rounded-2xl p-3 text-sm text-sky-900 flex gap-2 items-start">
       <div class="flex-1 leading-relaxed">
         <b>建議加入主畫面使用</b>：iPhone 用 Safari 點「分享」→「加入主畫面」；Android 用 Chrome 選單 →「安裝應用程式」。可以離線開啟，資料也比較不會被瀏覽器自動清掉。Android 加入後，<b>長按 App 圖示</b>可以直接打開「我的食物」「拍照記」「喝水」「量體重」。
       </div>
       <button id="dismissInstallBtn" type="button" class="text-sky-500 hover:text-sky-800 font-bold px-1" aria-label="關閉">✕</button>
     </div>
-    <div id="backupBanner" class="no-print hidden bg-amber-50 border border-amber-200 rounded-2xl p-3 text-xs text-amber-900 flex gap-2 items-center">
+    <div id="backupBanner" class="no-print hidden bg-amber-50 border border-amber-200 rounded-2xl p-3 text-sm text-amber-900 flex gap-2 items-center">
       <div id="backupBannerText" class="flex-1 leading-relaxed"></div>
       <button id="goBackupBtn" type="button" class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold shrink-0">去備份</button>
     </div>
@@ -218,7 +218,7 @@
         <div class="flex items-center justify-between gap-2">
           <div>
             <h2 class="text-sm font-bold text-stone-900">熱量趨勢</h2>
-            <p class="text-xs text-stone-500"><span id="trendRangeLabel"></span>・虛線為目標</p>
+            <p class="text-sm text-stone-500"><span id="trendRangeLabel"></span>・虛線為目標</p>
           </div>
           <div id="trendRangeGroup" class="flex gap-1">
             <button type="button" data-range="7" class="range-btn">7天</button>
@@ -242,7 +242,7 @@
       <section id="sleepCard" class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
         <div class="flex items-baseline justify-between gap-2 flex-wrap">
           <h2 class="text-base font-bold text-stone-900">睡眠</h2>
-          <span class="text-xs text-stone-400">記在起床那天・虛線為 7 小時</span>
+          <span class="text-sm text-stone-500">記在起床那天・虛線為 7 小時</span>
         </div>
         <div id="sleepEmpty" class="text-sm text-stone-400">這段期間還沒有睡眠記錄，可在首頁「睡眠」填寫。</div>
         <div id="sleepChartWrap" class="relative h-52 w-full"><canvas id="sleepChart"></canvas></div>
@@ -261,11 +261,11 @@
       <section class="no-print bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
         <div>
           <h2 class="text-sm font-bold text-stone-900">給營養師的報告</h2>
-          <p class="text-xs text-stone-500">選期間 → 產生報告 → 存成 PDF 或直接分享到 LINE。</p>
+          <p class="text-sm text-stone-600">選期間 → 產生報告 → 存成 PDF 或直接分享到 LINE。</p>
         </div>
-        <div class="grid grid-cols-2 gap-2">
-          <label class="block"><span class="lbl">開始</span><input id="rptFrom" type="date" class="field" /></label>
-          <label class="block"><span class="lbl">結束</span><input id="rptTo" type="date" class="field" /></label>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <label class="block"><span class="lbl">開始</span><input id="rptFrom" type="date" class="field text-lg" /></label>
+          <label class="block"><span class="lbl">結束</span><input id="rptTo" type="date" class="field text-lg" /></label>
         </div>
         <div class="flex flex-wrap gap-1.5" id="rptQuickRange">
           <button type="button" data-days="7" class="chip-btn">近 7 天</button>
@@ -273,8 +273,8 @@
           <button type="button" data-days="30" class="chip-btn">近 30 天</button>
         </div>
         <div class="flex flex-wrap gap-x-4 gap-y-1">
-          <label class="inline-flex items-center gap-2 text-xs text-stone-700"><input id="rptDetails" type="checkbox" checked class="rounded border-stone-300 text-emerald-600 w-4 h-4" />每日餐點明細</label>
-          <label class="inline-flex items-center gap-2 text-xs text-stone-700"><input id="rptPhotos" type="checkbox" checked class="rounded border-stone-300 text-emerald-600 w-4 h-4" />附上餐點照片</label>
+          <label class="inline-flex items-center gap-2 text-base text-stone-700 py-1"><input id="rptDetails" type="checkbox" checked class="big-check" />每日餐點明細</label>
+          <label class="inline-flex items-center gap-2 text-base text-stone-700 py-1"><input id="rptPhotos" type="checkbox" checked class="big-check" />附上餐點照片</label>
         </div>
         <button id="genReportBtn" type="button" class="btn-primary w-full">產生報告</button>
       </section>
@@ -284,7 +284,7 @@
         <button id="shareReportFileBtn" type="button" class="btn-secondary">📎 分享報告檔</button>
         <button id="shareReportTextBtn" type="button" class="btn-secondary">💬 分享文字摘要</button>
       </section>
-      <p id="reportPrintHint" class="no-print hidden text-[0.6875rem] text-stone-500 px-1 leading-relaxed">
+      <p id="reportPrintHint" class="no-print hidden text-sm text-stone-600 px-1 leading-relaxed">
         存 PDF：iPhone 在列印畫面用兩指放大預覽，再按分享 → 存到檔案或傳 LINE；Android 選「另存為 PDF」。「分享報告檔」會產生一個網頁檔，營養師用任何瀏覽器都能打開。
       </p>
 
@@ -296,19 +296,19 @@
   <nav class="no-print sm:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-stone-200 grid grid-cols-4 shadow-lg" style="padding-bottom: env(safe-area-inset-bottom)">
     <button type="button" data-tab="log" class="mobile-nav-tab">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
-      <span class="text-[0.6875rem]">記錄</span>
+      <span class="text-xs">記錄</span>
     </button>
     <button type="button" data-tab="library" class="mobile-nav-tab">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
-      <span class="text-[0.6875rem]">我的食物</span>
+      <span class="text-xs">我的食物</span>
     </button>
     <button type="button" data-tab="trends" class="mobile-nav-tab">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M14 7h7v7"></path></svg>
-      <span class="text-[0.6875rem]">趨勢</span>
+      <span class="text-xs">趨勢</span>
     </button>
     <button type="button" data-tab="report" class="mobile-nav-tab">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z"></path></svg>
-      <span class="text-[0.6875rem]">報告</span>
+      <span class="text-xs">報告</span>
     </button>
   </nav>
 
@@ -331,7 +331,7 @@
       </button>
       <button type="button" id="welcomeStartBtn" class="tile tile-wide text-left w-full">
         <span class="tile-ic">🌱</span>
-        <span><span class="tile-t block">第一次使用，直接開始</span><span class="tile-s block">之後隨時可以在「報告」頁連結 Google 雲端</span></span>
+        <span><span class="tile-t block">第一次使用，直接開始</span><span class="tile-s block">之後隨時可以在右上「⚙️ 設定 → 資料與備份」連結 Google 雲端</span></span>
       </button>
     </div>
   </div>
@@ -627,6 +627,7 @@
       </label>
       <button type="button" id="aiMicBtn" class="hidden btn-secondary w-full">🎤 按一下開始說話</button>
       <div id="aiStatus" class="hidden rounded-2xl whitespace-pre-line break-words p-3 text-base leading-relaxed"></div>
+      <button type="button" id="aiFallbackBtn" class="hidden btn-primary w-full">📷 先用「拍照記」存起來，之後再查</button>
       <div id="aiResults" class="space-y-2"></div>
       <p class="text-sm text-stone-500 leading-relaxed">照片和文字會傳到 Google 的 Gemini 辨識。AI 估的份量和熱量可能有誤差，加入後還可以改克數。</p>
     </div>
@@ -782,13 +783,13 @@
           </div>
         </div>
         <p id="cloudStatus" class="hidden text-sm font-medium rounded-xl px-3 py-2"></p>
-        <p class="text-xs text-stone-400"><a href="privacy.html" class="underline hover:text-stone-600">隱私權政策</a></p>
+        <p class="text-sm text-stone-500"><a href="privacy.html" class="underline hover:text-stone-600">隱私權政策</a></p>
       </section>
       <section id="backupSection" class="no-print bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
         <div>
           <h2 class="text-sm font-bold text-stone-900">備份檔與匯出</h2>
-          <p class="text-xs text-stone-500">記錄存在這支手機的瀏覽器裡。不想用 Google 雲端的話，也可以下載備份檔自己保存。</p>
-          <p id="lastBackupText" class="text-xs text-stone-500 mt-1"></p>
+          <p class="text-sm text-stone-600">記錄存在這支手機的瀏覽器裡。不想用 Google 雲端的話，也可以下載備份檔自己保存。</p>
+          <p id="lastBackupText" class="text-sm text-stone-600 mt-1"></p>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <button id="exportJsonBtn" type="button" class="btn-primary">下載完整備份（含照片）</button>
@@ -797,7 +798,7 @@
           <button id="exportDaysCsvBtn" type="button" class="btn-secondary">匯出每日身體／備註 CSV</button>
         </div>
         <input id="importJsonInput" type="file" accept="application/json,.json" class="hidden" />
-        <p class="text-[0.6875rem] text-stone-400">匯入會合併到現有資料（相同的記錄不會重複），舊版「每日飲食熱量隨身記」的 JSON 備份也可以匯入。</p>
+        <p class="text-sm text-stone-500">匯入會合併到現有資料（相同的記錄不會重複），舊版「每日飲食熱量隨身記」的 JSON 備份也可以匯入。</p>
       </section>
     </div>
     <div class="scr-foot"><button type="button" data-back class="btn-primary btn-xl w-full">完成</button></div>
@@ -1112,10 +1113,10 @@
         </div>
         <div id="editLabelCalc" data-label-calc="edit"></div>
         <div class="rounded-xl border border-stone-200 bg-stone-50/60 p-3">
-          <div class="text-[0.6875rem] text-stone-500 mb-2">以下為這筆的「總量」</div>
+          <div class="text-sm text-stone-600 mb-2">以下為這筆的「總量」</div>
           <div id="editNutrFields"></div>
         </div>
-        <label class="inline-flex items-center gap-2 text-xs text-amber-800 cursor-pointer select-none">
+        <label class="inline-flex items-center gap-2 text-base text-amber-800 cursor-pointer select-none py-1">
           <input id="editLogPendingCheck" type="checkbox" class="rounded border-amber-300 text-amber-600 w-4 h-4" />
           <span>仍標記為「暫估待修」</span>
         </label>
@@ -1150,11 +1151,11 @@
   <!-- Confirm Modal -->
   <div id="confirmModal" class="modal hidden">
     <div class="modal-card max-w-sm">
-      <h3 id="confirmTitle" class="text-base font-bold text-stone-900">確認操作</h3>
-      <p id="confirmMessage" class="text-sm text-stone-600"></p>
-      <div class="flex justify-end gap-2">
-        <button type="button" id="confirmCancelBtn" class="btn-small-secondary">取消</button>
-        <button type="button" id="confirmOkBtn" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-xs font-semibold text-white">確定</button>
+      <h3 id="confirmTitle" class="text-lg font-bold text-stone-900">確認操作</h3>
+      <p id="confirmMessage" class="text-base text-stone-700 leading-relaxed"></p>
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" id="confirmCancelBtn" class="btn-secondary">取消</button>
+        <button type="button" id="confirmOkBtn" class="btn-primary">確定</button>
       </div>
     </div>
   </div>
@@ -1166,8 +1167,8 @@
         <h3 class="text-base font-bold text-stone-900">熱量與份數參考來源</h3>
         <button type="button" data-close="sourceModal" class="modal-x">✕</button>
       </div>
-      <p class="text-xs text-stone-600 leading-relaxed">「我的食物」是你自己照包裝標示或營養師的表填的。份量估算與「依份數推算」使用國民健康署食物代換表的每份營養素（豆魚蛋肉以中脂、乳品以低脂計）。</p>
-      <ul class="text-xs text-stone-700 space-y-1.5 list-disc pl-4">
+      <p class="text-sm text-stone-700 leading-relaxed">「我的食物」是你自己照包裝標示或營養師的表填的。份量估算與「依份數推算」使用國民健康署食物代換表的每份營養素（豆魚蛋肉以中脂、乳品以低脂計）。</p>
+      <ul class="text-sm text-stone-700 space-y-1.5 list-disc pl-4">
         <li><a href="https://www.hpa.gov.tw/Pages/Detail.aspx?nodeid=544&pid=9605" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">衛生福利部國民健康署 — 健康食譜舉例</a>（炸雞腿便當、豬肉漢堡、奶茶）</li>
         <li><a href="https://health.ettoday.net/news/1960565" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">ETtoday 健康雲 / 營養師程涵宇</a>（滷肉飯、水餃、蚵仔麵線、蔥油餅）</li>
         <li><a href="https://health.businessweekly.com.tw/article/ARTL003004758" target="_blank" rel="noopener noreferrer" class="text-emerald-700 underline">良醫健康網 / 營養師程涵宇</a>（蚵仔煎等國民小吃）</li>
@@ -1184,22 +1185,22 @@
       <div class="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
         <div class="min-w-0">
           <h3 id="lightboxFoodTitle" class="text-sm font-bold text-stone-900 truncate">餐點照片</h3>
-          <p id="lightboxFoodSub" class="text-xs text-stone-500"></p>
+          <p id="lightboxFoodSub" class="text-sm text-stone-600"></p>
         </div>
         <button type="button" data-close="photoLightboxModal" class="modal-x">✕</button>
       </div>
       <div id="lightboxImgs" class="bg-stone-900 max-h-[65vh] overflow-y-auto flex flex-col items-center gap-1"></div>
       <div class="p-3.5 bg-stone-50 flex items-center justify-between gap-2">
-        <span class="text-xs text-stone-500">對照照片修正份量或數值</span>
+        <span class="text-sm text-stone-600">對照照片修正份量或數值</span>
         <button type="button" id="lightboxEditEntryBtn" class="btn-small-primary">✏️ 修正這筆</button>
       </div>
     </div>
   </div>
 
   <!-- Toast -->
-  <div id="toast" class="no-print fixed bottom-24 sm:bottom-6 left-1/2 -translate-x-1/2 z-[80] hidden items-center gap-3 px-4 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-medium shadow-lg max-w-[90vw]">
+  <div id="toast" role="status" aria-live="polite" class="no-print fixed bottom-24 sm:bottom-6 left-1/2 -translate-x-1/2 z-[80] hidden items-center gap-3 px-4 py-3 rounded-xl bg-stone-900 text-white text-base font-medium leading-snug shadow-lg w-max max-w-[92vw]">
     <span id="toastMsg"></span>
-    <button id="toastAction" type="button" class="hidden font-bold text-emerald-300 hover:text-emerald-200 shrink-0"></button>
+    <button id="toastAction" type="button" class="hidden font-bold text-emerald-300 hover:text-emerald-200 shrink-0 whitespace-nowrap"></button>
   </div>
 
   <script type="module" src="js/app.js?v=49"></script>

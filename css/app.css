@@ -124,7 +124,17 @@ textarea.field { min-height: 0; resize: vertical; }
 .modal-x { color: var(--stone-400); font-size: 1.25rem; font-weight: 700; padding: .25rem .6rem; min-height: 2.5rem; }
 .modal-x:hover { color: var(--stone-700); }
 
-#toast:not(.hidden) { display: flex; }
+/* 在所有全螢幕頁和視窗之上；位置也寫在這裡，不靠 Tailwind */
+#toast { position: fixed; z-index: 90; left: 50%; bottom: 6rem; transform: translateX(-50%); }
+@media (min-width: 640px) { #toast { bottom: 1.5rem; } }
+#toast:not(.hidden) { display: flex; cursor: pointer; }
+/* 錯誤：紅底，要按「知道了」才關 */
+#toast.toast-err { background: #9f1239; }
+#toast.toast-err #toastAction { color: #fff; background: rgba(255,255,255,.2); padding: .35rem .75rem; border-radius: .6rem; }
+#toastAction { min-height: 2.5rem; padding: 0 .25rem; }
+/* 確認視窗：刪除、清空這類用紅色 */
+.btn-danger { background: #e11d48; color: #fff; }
+.btn-danger:hover { background: #be123c; }
 
 /* 首頁大按鈕 */
 .sec-title { font-size: 1.0625rem; font-weight: 700; color: #1c1917; padding: 0 .25rem; }

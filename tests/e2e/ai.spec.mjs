@@ -136,7 +136,12 @@ test('用打字：沒有照片也可以；額度用完時說明', async ({ page 
   await page.fill('#aiText', '一碗白飯和一顆蛋');
   await expect(page.locator('#aiResults .pick-row')).toHaveCount(0); // 改了描述，舊結果清掉
   await page.click('#aiGoBtn');
-  await expect(page.locator('#aiStatus')).toContainText('免費額度暫時用完了');
+  await expect(page.locator('#aiStatus')).toContainText('今天的免費次數可能用完了');
+  // 不要白打：一鍵帶到「拍照記」存成待查
+  await page.click('#aiFallbackBtn');
+  await expect(page.locator('#scr-photo')).toBeVisible();
+  await expect(page.locator('#scr-ai')).toBeHidden();
+  await expect(page.locator('#photoQuickName')).toHaveValue('一碗白飯和一顆蛋');
 });
 
 test('拍營養標示：填進自己輸入的名稱、熱量、營養素', async ({ page }) => {
@@ -202,4 +207,27 @@ test('設定：檢查 AI 能不能用（文字＋照片），失敗時列出代�
   await expect(page.locator('#aiCheckResult')).toContainText('AI 目前不能正常使用');
   await expect(page.locator('#aiCheckResult')).toContainText('太多人用');
   await expect(page.locator('#aiCheckResult')).toContainText('代碼：busy gemini-3.5-flash-lite 503 UNAVAILABLE');
+});
+
+test('AI 太忙或次數用完：拍的照片一起帶到「拍照記」，存成待查', async ({ page }) => {
+  await mockGemini(page, (body) => {
+    if (body.contents[0].parts[0].text.includes('{"ok": true}')) return reply({ ok: true });
+    return { status: 429, contentType: 'application/json', body: JSON.stringify({ error: { code: 429, status: 'RESOURCE_EXHAUSTED' } }) };
+  });
+  await openApp(page);
+  await enableAi(page);
+  await page.click('#aiTile');
+  await expect(page.locator('#aiFallbackBtn')).toBeHidden();
+  await page.setInputFiles('#aiPhotoInput', photo);
+  await page.click('#aiGoBtn');
+  await page.click('#aiFallbackBtn');
+  await expect(page.locator('#scr-photo')).toBeVisible();
+  await expect(page.locator('#pq-photos img')).toHaveCount(1);
+  await page.click('#photoQuickSave');
+  const date = await page.evaluate(() => window.__dietApp.ui.date);
+  await expect.poll(async () => ((await appState(page)).logs[date] || []).length).toBe(1);
+  expect((await appState(page)).logs[date][0]).toMatchObject({ pending: true, hasPhoto: true });
+  // 下次打開 AI 頁，按鈕收起來
+  await page.click('#aiTile');
+  await expect(page.locator('#aiFallbackBtn')).toBeHidden();
 });

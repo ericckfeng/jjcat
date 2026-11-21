@@ -243,14 +243,6 @@ textarea.field { min-height: 0; resize: vertical; }
 .tile.tile-wide .tile-ic { font-size: 2rem; }
 
 /* 吃到飽速記：每一列＝名稱＋大的 − 數量 ＋ */
-.party-total { position: sticky; top: -1rem; z-index: 1; }
-.party-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; background: #fff; border: 1px solid var(--stone-200, #e7e5e4); border-radius: 1rem; padding: .6rem .75rem; }
-.party-row.party-on { border-color: #34d399; background: #ecfdf5; }
-.party-step { width: 3rem; height: 3rem; border-radius: .9rem; font-size: 1.75rem; font-weight: 700; line-height: 1; flex-shrink: 0; }
-.party-minus { background: var(--stone-100); color: var(--stone-700, #44403c); }
-.party-plus { background: var(--emerald); color: #fff; }
-.party-step:disabled { opacity: .35; }
-.party-count { min-width: 2.25rem; text-align: center; font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* 一筆記錄的照片（最多 3 張）：縮圖＋右上角移除，最後一格是「加照片」 */
 .photo-strip { display: flex; flex-wrap: wrap; gap: .5rem; }
@@ -275,3 +267,11 @@ textarea.field { min-height: 0; resize: vertical; }
 .ref-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .1rem; padding: .5rem .25rem; line-height: 1.2; }
 .ref-btn .ref-ic { font-size: 1.6rem; }
 .ref-btn .ref-hint { font-size: .8125rem; font-weight: 400; opacity: .8; }
+
+/* 和昨天一樣：一餐一張卡片，左右滑 */
+.copy-strip { display: flex; gap: .75rem; overflow-x: auto; scroll-snap-type: x mandatory; padding: .1rem .1rem .4rem; -webkit-overflow-scrolling: touch; }
+.copy-card { flex: 0 0 82%; max-width: 20rem; min-width: 0; scroll-snap-align: start; display: flex; flex-direction: column; gap: .35rem; text-align: left; background: #fff; border: 1px solid var(--stone-200, #e7e5e4); border-radius: 1.25rem; padding: .9rem 1rem; }
+.copy-card:only-child { flex-basis: 100%; max-width: none; }
+.copy-card:active { background: #ecfdf5; }
+.copy-items { list-style: none; margin: 0; padding: 0; font-size: 1rem; line-height: 1.5; color: var(--stone-700, #44403c); flex: 1; }
+.copy-go { display: block; margin-top: .25rem; text-align: center; background: var(--emerald, #10b981); color: #fff; font-weight: 700; font-size: 1.1rem; border-radius: .9rem; padding: .6rem; }

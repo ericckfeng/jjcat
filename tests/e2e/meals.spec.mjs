@@ -47,3 +47,34 @@ test('記一樣的早餐：複製昨天的早餐（同組仍同組、不帶照�
   await expect(page.locator('#copyMealBox')).toContainText('和昨天一樣的早餐');
   expect(errors).toEqual([]);
 });
+
+test('和昨天一樣是左右滑的卡片：一餐一張，品項多的只列 4 樣，手機特大字也不會讓整頁橫移', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  const yesterday = ymd(y);
+  await page.addInitScript(({ yesterday }) => {
+    if (localStorage.getItem('diet_tracker_v2')) return;
+    const e = (id, name, meal) => ({ id, name, kcal: 100, meal, updatedAt: 1 });
+    localStorage.setItem('diet_tracker_v2', JSON.stringify({
+      logs: { [yesterday]: [
+        e('b1', '吐司', 'breakfast'), e('b2', '豆漿', 'breakfast'), e('b3', '茶葉蛋', 'breakfast'), e('b4', '香蕉', 'breakfast'), e('b5', '一個名字非常非常長的早餐飲料加珍珠加椰果', 'breakfast'), e('b6', '堅果', 'breakfast'),
+        e('l1', '便當', 'lunch'), e('d1', '燙青菜', 'dinner')
+      ] },
+      days: {}, quickItems: [], tomb: {}, meta: { welcomed: true, fontSize: 'xl' }
+    }));
+  }, { yesterday });
+  await openApp(page);
+  const cards = page.locator('#copyMealBox .copy-card');
+  await expect(cards).toHaveCount(3);
+  await expect(page.locator('#copyMealBox')).toContainText('左右滑看其他餐');
+  await expect(cards.first()).toContainText('…還有 2 樣');
+  await expect(cards.first()).toContainText('6 樣・600 kcal');
+  // 卡片列自己可以橫移，整頁不行
+  const strip = await page.locator('.copy-strip').evaluate(el => el.scrollWidth > el.clientWidth);
+  expect(strip).toBe(true);
+  const pageScroll = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(pageScroll).toBeLessThanOrEqual(0);
+  await page.locator('[data-copy-meal=dinner]').scrollIntoViewIfNeeded();
+  await page.locator('[data-copy-meal=dinner]').click();
+  await expect(cards).toHaveCount(2);
+});

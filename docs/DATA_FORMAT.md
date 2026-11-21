@@ -96,7 +96,7 @@
 | `ai` | （選填，v27 起）這筆是 AI 估算的：`'photo'` 拍照、`'text'` 用說的／打字。沒有 `foodId` |
 | `weighed` | （選填，v11 起）`'cooked'`＝輸入的是熟重，已換算回生重計算 |
 | `groupId` | （選填，v12 起）同一次一起記的一餐（`grp_xxxx`）：查食物的購物車一次記 2 樣以上時加上。複製時換成新的 groupId，同組仍同組 |
-| `party` | （選填，v37 起）吃到飽速記記的：`{ tpl, code, n, unit, kcal1, g? }`＝範本、類別代碼、吃了幾個、單位、記錄當時每個的熱量、秤重模式量到的一個幾公克。之後校正時用 `n` 重算。有秤重照時照片就是這筆的 `hasPhoto` 照片 |
+| `party` | （選填，v37 起；Rev. 43 起不再新增，舊記錄照樣保留）吃到飽速記記的：`{ tpl, code, n, unit, kcal1, g? }`＝範本、類別代碼、吃了幾個、單位、記錄當時每個的熱量、秤重模式量到的一個幾公克。之後校正時用 `n` 重算。有秤重照時照片就是這筆的 `hasPhoto` 照片 |
 
 匯入備份檔時（`normalizeEntry`／`normalizeQuick`），記錄和常吃清單裡看不懂的欄位會保留；只去掉 v1 的 `photo`（照片改存 IndexedDB）和 `baseKcal`。
 
@@ -147,7 +147,7 @@
 
 ### meta（只存在這台裝置）
 
-`deviceId`、`welcomed`（true＝這台裝置已經選過歡迎畫面的開始方式）、`ai: { key, at }`（使用者自己的 Gemini API Key；**只存在這台裝置，絕不能放進同步檔或備份檔**，有 e2e 測試檢查）、`weeklySeen`（已看過的小芽週報，值是那週週一的日期）、`fontSize`（`m`/`l`/`xl`）、`mascot`（false＝關閉小芽）、`lastCheer`、`installHintDismissed`、`lastBackup`、`photoVer`（`{ entryId: 本機照片的 photoKey }`）、`cloud: { linked, email, auto, lastSync, lastBackup, knownModified, dirty, needAuth, blockedRev }`（`blockedRev`：Rev. 39 起，雲端資料要求的最低版本比這台新，暫停同步中）。`deviceName`（Rev. 39 起，使用者幫這台取的名字，空的就用「iPhone」「Mac 電腦」等）。`party: { tpl, counts: { 代碼: 數量 }, at, weigh, photos: { 代碼: true }, grams: { 代碼: 公克 } }`（v37 起，吃到飽速記還沒記下來的數量、秤重模式開關、秤重照（暫存在 IndexedDB `party_<代碼>`）與一顆的重量；按「記下來」後全部刪除）。
+`deviceId`、`welcomed`（true＝這台裝置已經選過歡迎畫面的開始方式）、`ai: { key, at }`（使用者自己的 Gemini API Key；**只存在這台裝置，絕不能放進同步檔或備份檔**，有 e2e 測試檢查）、`weeklySeen`（已看過的小芽週報，值是那週週一的日期）、`fontSize`（`m`/`l`/`xl`）、`mascot`（false＝關閉小芽）、`lastCheer`、`installHintDismissed`、`lastBackup`、`photoVer`（`{ entryId: 本機照片的 photoKey }`）、`cloud: { linked, email, auto, lastSync, lastBackup, knownModified, dirty, needAuth, blockedRev }`（`blockedRev`：Rev. 39 起，雲端資料要求的最低版本比這台新，暫停同步中）。`deviceName`（Rev. 39 起，使用者幫這台取的名字，空的就用「iPhone」「Mac 電腦」等）。`party: { tpl, counts: { 代碼: 數量 }, at, weigh, photos: { 代碼: true }, grams: { 代碼: 公克 } }`（v37 起；Rev. 43 拿掉吃到飽畫面後，開 App 時若還有就問一次：記到開始那天的那一餐，或確認兩次後刪掉。吃到飽速記還沒記下來的數量、秤重模式開關、秤重照（暫存在 IndexedDB `party_<代碼>`）與一顆的重量；按「記下來」後全部刪除）。
 
 ## 匯出／同步檔案格式
 
@@ -177,6 +177,7 @@
 | v3（Rev. 39） | 2026-11-19 | 版本改成「日期-序號（Rev.）」。最上層新增 `devices`、`minRev`（見上方）；`meta.deviceName`、`meta.cloud.blockedRev`。 |
 | v3（Rev. 41） | 2026-11-21 | 記錄新增 `label`（照營養標示算）、`morePhotos`（一筆最多 3 張照片）。**沒有調 `DATA_MIN_REV`**：兩個都是記錄裡的欄位，舊版會原樣保留；舊版看不到第 2、3 張、不會同步它們，但也不會刪（見 `morePhotos` 的 key 格式）。舊版「複製前一天」會連 `morePhotos` 一起複製，兩筆共用同一張照片，不會壞。 |
 | v3（Rev. 42） | 2026-11-21 | 記錄新增 `lookup`（拍照記・待查）。只是記錄裡的新欄位，舊版原樣保留，沒有調 `DATA_MIN_REV`。待查表（CSV）只是匯出／匯入用的檔案，不是同步格式：欄位見 `js/lookup.js` 的 `CSV_HEAD`，回填只看「編號」和要填的欄。 |
+| v3（Rev. 43） | 2026-11-21 | 拿掉吃到飽速記畫面（使用者覺得用不到）。格式沒變：舊記錄的 `party` 欄位保留；裝置上還沒記下來的 `meta.party` 開 App 時問一次要不要記下來。 |
 | v3（第 1 步，11/26 之後發佈） | — | 最上層新增 `customFoods`（我的食物），「常吃的」`quickItems` 停用（不顯示、不新增，資料保留）。記錄新增 `customFoodId`、`servings`、`fiber`。`tfda_foods.json` 加回 `fiber`。**發佈時用 `python3 scripts/bump.py --min-rev`**，把 `DATA_MIN_REV` 調成這一版：還沒更新的 App 會暫停同步、提示更新。 |
 | v3（App v23） | 2026-11-19 | 每日欄位新增 `smm`（骨骼肌）；`targets.bodyFat`（目標體脂率）；`targets.calc.bmrSource` 可為 `ffm`。每日 CSV 最後再加一欄骨骼肌。 |
 | v3（App v24） | 2026-11-19 | 每日欄位新增 `vfl`、`pa`、`ecw`。每日 CSV 最後加三欄。 |

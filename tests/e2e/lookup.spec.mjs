@@ -57,13 +57,6 @@ test('拍照記：只拍照＝待查 0 大卡（跟以前一樣）；填了熱�
   expect(list[1]).toMatchObject({ name: '雞腿便當', kcal: 750, pending: false, lookup: { ref: 'palm', amt: 1 } });
 });
 
-test('吃到飽找不到對應的：直接開拍照記', async ({ page }) => {
-  await openApp(page);
-  await page.click('[data-screen=scr-party]');
-  await page.click('#scr-party [data-screen=scr-photo]');
-  await expect(page.locator('#scr-photo')).toBeVisible();
-});
-
 // 兩天各一筆待查＋一筆已經查好的
 async function seed(page) {
   await page.addInitScript(() => {

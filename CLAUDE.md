@@ -71,6 +71,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/nutrition.js` | 餐別、營養素、六大類代換表、預設快選 |
 | `js/config.js` | Google OAuth 用戶端 ID（公開值，可以放程式碼裡） |
 | `sw.js` | Service worker：自己的檔案一律向伺服器確認最新版（`cache: 'no-cache'`），離線才用快取 |
+| `guide.html`、`guide/` | 使用說明（安裝、每個功能的畫面和情境例子），App「關於」和歡迎畫面有連過來。截圖由 `npm run guide:shots`（`scripts/guide-shots.mjs`，示範資料、手機尺寸、需要網路）產生；**畫面改了要重拍，說明文字也要跟著改** |
 | `privacy.html` | 隱私權政策（Google 同意畫面有連到，不要刪） |
 | `tfda_foods.json` | 衛福部 TFDA 食品營養成分資料（每 100g），由 `scripts/build_foods.py` 產生，**不要手改** |
 | `scripts/bump.py` | 發佈前跑：版本號加 1（見「發佈」） |

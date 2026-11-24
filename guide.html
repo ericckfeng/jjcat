@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>飲控隨身記 使用說明</title>
+  <meta name="description" content="飲控隨身記的安裝和使用說明：每個功能都有畫面和生活情境的例子。" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <style>
+    :root {
+      --bg: #fafaf9; --card: #fff; --ink: #1c1917; --muted: #57534e; --line: #e7e5e4;
+      --green: #047857; --green-bg: #ecfdf5; --green-line: #a7f3d0;
+      --sky-bg: #f0f9ff; --sky-line: #bae6fd; --sky-ink: #0c4a6e;
+      --amber-bg: #fffbeb; --amber-line: #fcd34d; --amber-ink: #78350f;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 4.5rem; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 1.125rem/1.75 -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+    a { color: var(--green); }
+    header.top { position: sticky; top: 0; z-index: 5; background: rgba(255,255,255,.95); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+    header.top .in { max-width: 60rem; margin: 0 auto; padding: .6rem 1rem; display: flex; align-items: center; gap: .75rem; }
+    header.top b { font-size: 1.2rem; flex: 1; }
+    .btn { display: inline-block; padding: .55rem 1rem; border-radius: .9rem; background: var(--green); color: #fff; font-weight: 700; text-decoration: none; }
+    main { max-width: 60rem; margin: 0 auto; padding: 1rem 1rem 4rem; }
+    h1 { font-size: 1.9rem; line-height: 1.35; margin: 1.2rem 0 .4rem; }
+    h2 { font-size: 1.55rem; line-height: 1.4; margin: 3rem 0 .8rem; padding-top: .4rem; border-top: 3px solid var(--green-line); }
+    h3 { font-size: 1.3rem; margin: 0 0 .4rem; }
+    p { margin: .5rem 0; }
+    .lead { color: var(--muted); font-size: 1.2rem; }
+    .toc { background: var(--card); border: 1px solid var(--line); border-radius: 1.25rem; padding: 1rem 1.25rem; }
+    .toc ol { margin: .3rem 0 0; padding-left: 1.4rem; columns: 2 14rem; }
+    .toc li { margin: .2rem 0; break-inside: avoid; }
+    .feature { display: grid; grid-template-columns: 1fr; gap: 1rem; background: var(--card); border: 1px solid var(--line); border-radius: 1.5rem; padding: 1.1rem; margin: 1rem 0; }
+    @media (min-width: 46rem) { .feature { grid-template-columns: 15.5rem 1fr; align-items: start; } .feature.wide { grid-template-columns: 1fr; } }
+    .shots { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; }
+    .feature:not(.wide) .shots { flex-direction: column; align-items: center; }
+    figure { margin: 0; text-align: center; }
+    figure img { width: 100%; max-width: 15rem; height: auto; border-radius: 1.4rem; border: 6px solid #1c1917; box-shadow: 0 6px 18px rgba(0,0,0,.12); background: #fff; display: block; margin: 0 auto; }
+    figure.plain img { border: 1px solid var(--line); border-radius: 1rem; max-width: 100%; box-shadow: none; }
+    figcaption { font-size: .95rem; color: var(--muted); margin-top: .35rem; }
+    ol.steps, ul.steps { padding-left: 1.4rem; margin: .4rem 0; }
+    ol.steps li, ul.steps li { margin: .25rem 0; }
+    .scene { background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-ink); border-radius: 1rem; padding: .8rem 1rem; margin: .7rem 0 .2rem; }
+    .scene b.tag { display: inline-block; background: #f59e0b; color: #fff; border-radius: .5rem; padding: 0 .45rem; font-size: .95rem; margin-right: .3rem; }
+    .tip { background: var(--sky-bg); border: 1px solid var(--sky-line); color: var(--sky-ink); border-radius: 1rem; padding: .8rem 1rem; margin: .7rem 0; }
+    .ok { background: var(--green-bg); border: 1px solid var(--green-line); border-radius: 1rem; padding: .8rem 1rem; margin: .7rem 0; }
+    .key { display: inline-block; border: 1px solid #d6d3d1; background: #f5f5f4; border-radius: .45rem; padding: 0 .4rem; font-weight: 700; white-space: nowrap; }
+    .three { display: grid; grid-template-columns: 1fr; gap: .8rem; }
+    @media (min-width: 46rem) { .three { grid-template-columns: repeat(3, 1fr); } }
+    .three > div { background: var(--card); border: 1px solid var(--line); border-radius: 1.25rem; padding: 1rem; }
+    .three h3 { font-size: 1.15rem; }
+    details.faq { background: var(--card); border: 1px solid var(--line); border-radius: 1rem; padding: .7rem 1rem; margin: .6rem 0; }
+    details.faq summary { font-weight: 700; cursor: pointer; }
+    footer { color: var(--muted); font-size: 1rem; text-align: center; padding: 2rem 1rem 3rem; }
+    @media print { header.top { position: static; } .feature, .three > div { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <header class="top"><div class="in"><b>📖 飲控隨身記 使用說明</b><a class="btn" href="./">打開 App</a></div></header>
+  <main>
+    <h1>飲控隨身記 使用說明</h1>
+    <p class="lead">手機上的飲食記錄，給你自己和營養師一起看。免費、不用註冊帳號；記的東西存在你自己的手機和你自己的 Google 雲端硬碟。</p>
+    <p>每個功能都有畫面和一個生活中的例子（<b>📖 情境</b>），照著做一次就會了。畫面裡的人和數字都是示範用的。</p>
+
+    <nav class="toc" aria-label="目錄">
+      <b>目錄</b>
+      <ol>
+        <li><a href="#install">安裝到手機</a></li>
+        <li><a href="#first">第一次打開</a></li>
+        <li><a href="#home">首頁看什麼</a></li>
+        <li><a href="#food">記錄吃的（六種方法）</a></li>
+        <li><a href="#eatout">外食怎麼點</a></li>
+        <li><a href="#library">我的食物、食物資料庫</a></li>
+        <li><a href="#body">記錄身體、功能開關</a></li>
+        <li><a href="#dietitian">和營養師一起：叮嚀、報告</a></li>
+        <li><a href="#review">回頭看：趨勢、照片牆、週報、小成就</a></li>
+        <li><a href="#safe">資料安全、備份</a></li>
+        <li><a href="#faq">常見問題</a></li>
+      </ol>
+    </nav>
+
+    <!-- 1 安裝 -->
+    <h2 id="install">1. 安裝到手機</h2>
+    <p>飲控隨身記是「網頁 App」，不用到 App Store 或 Play 商店下載。用手機的瀏覽器打開網址，再「加到主畫面」，之後就和一般 App 一樣，從桌面的圖示打開。</p>
+    <p class="ok">網址：<a href="https://ericckfeng.github.io/jjcat/">https://ericckfeng.github.io/jjcat/</a></p>
+    <div class="three">
+      <div>
+        <h3>🍎 iPhone、iPad</h3>
+        <ol class="steps">
+          <li>用 <b>Safari</b> 打開上面的網址。</li>
+          <li>按下方的 <span class="key">分享</span>（方框加向上箭頭）。</li>
+          <li>往下滑，按 <span class="key">加入主畫面</span> → <span class="key">新增</span>。</li>
+        </ol>
+      </div>
+      <div>
+        <h3>🤖 Android</h3>
+        <ol class="steps">
+          <li>用 <b>Chrome</b> 打開上面的網址。</li>
+          <li>按右上角 <span class="key">⋮</span>。</li>
+          <li>按 <span class="key">安裝應用程式</span>（或「加到主畫面」）。</li>
+        </ol>
+        <p>加好之後，<b>長按 App 圖示</b>可以直接打開「我的食物」「拍照記」「喝水」「量體重」。</p>
+      </div>
+      <div>
+        <h3>💬 從 LINE 點連結的話</h3>
+        <p>LINE 會用它自己的瀏覽器打開，<b>不能登入 Google、也不能加到主畫面</b>。</p>
+        <p>請按右上角選單，選 <span class="key">用預設瀏覽器開啟</span>（或「在 Safari／Chrome 開啟」），再照前面的步驟做。</p>
+      </div>
+    </div>
+    <figure class="plain" style="margin-top:1rem"><img src="guide/06-install-banner.jpg" alt="首頁上方的「建議加入主畫面使用」提示" loading="lazy" style="max-width:26rem" /><figcaption>還沒加到主畫面時，首頁上方會提醒你怎麼加；加好了可以按 ✕ 關掉。</figcaption></figure>
+
+    <!-- 2 第一次 -->
+    <h2 id="first">2. 第一次打開</h2>
+    <section class="feature">
+      <div class="shots"><figure><img src="guide/01-welcome.jpg" width="390" height="844" alt="歡迎畫面：三個開始方式" loading="lazy" /></figure></div>
+      <div>
+        <h3>選一個開始的方式</h3>
+        <ul class="steps">
+          <li><b>第一次使用，直接開始</b>：大部分的人選這個。之後隨時可以在 ⚙️ 設定 → 資料與備份，連結 Google 雲端。</li>
+          <li><b>以前用過，要取回資料</b>：換手機、在電腦上也想看，選這個，用同一個 Google 帳號登入，資料就回來了。</li>
+          <li><b>我有備份檔</b>：手上有以前下載的備份檔（.json）時用。</li>
+        </ul>
+        <div class="tip"><b>建議連結 Google 雲端：</b>手機、平板、電腦會自動同步；手機掉了、換新手機，資料都還在。App 只能看到「飲控隨身記」自己建立的檔案，看不到你雲端硬碟裡的其他東西。</div>
+        <div class="scene"><b class="tag">📖 情境</b>媽媽用手機記，女兒想在 iPad 上幫忙看：兩台都連結媽媽的 Google 帳號，媽媽記的，iPad 上幾秒後就看得到。</div>
+        <p>接著到右上角 <span class="key">⚙️</span> →「我的基本資料」填身高、出生年；「每日目標」填營養師給的熱量和份數（沒有的話，可以按「依體重試算」）。</p>
+      </div>
+    </section>
+
+    <!-- 3 首頁 -->
+    <h2 id="home">3. 首頁看什麼</h2>
+    <section class="feature wide">
+      <div class="shots">
+        <figure><img src="guide/02-home.jpg" width="390" height="844" alt="首頁上方：日期、小芽、營養師的叮嚀" loading="lazy" /><figcaption>日期、陪伴角色、營養師的叮嚀</figcaption></figure>
+        <figure><img src="guide/03-home-advice.jpg" width="390" height="844" alt="今天吃了多少" loading="lazy" /><figcaption>今天吃了多少、還可以吃多少</figcaption></figure>
+        <figure><img src="guide/04-home-tiles.jpg" width="390" height="844" alt="記錄吃的大按鈕" loading="lazy" /><figcaption>記錄吃的大按鈕</figcaption></figure>
+      </div>
+      <div>
+        <ul class="steps">
+          <li><b>日期</b>：按 ‹ › 看前一天、後一天；忘了記昨天的，切到昨天再記。按「今天」回來。</li>
+          <li><b>小芽、小貓、營養師</b>：會稱讚你、提醒你（例如喝水、蛋白質）。點一下換下一句。不喜歡可以在設定關掉。</li>
+          <li><b>今天吃了</b>：熱量圈圈、三餐各吃多少、蛋白質碳水脂肪。</li>
+          <li>右上角 <span class="key">AA</span> 換字體大小（標準／大／特大），<span class="key">⚙️</span> 是設定。</li>
+          <li>最下面四個分頁：<b>記錄</b>（首頁）、<b>我的食物</b>、<b>趨勢</b>、<b>報告</b>。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 4 記錄吃的 -->
+    <h2 id="food">4. 記錄吃的（六種方法，挑順手的用）</h2>
+    <p>不用每一種都學。<b>不知道熱量就「拍照記」，常吃的存成「我的食物」</b>，這兩個就夠用了。</p>
+
+    <section class="feature">
+      <div class="shots"><figure><img src="guide/10-myfood.jpg" width="390" height="844" alt="我的食物" loading="lazy" /></figure></div>
+      <div>
+        <h3>⭐ 我的食物：常吃的，點一下就記好</h3>
+        <ol class="steps">
+          <li>首頁按 <span class="key">⭐ 我的食物</span>，上面先選「哪一餐」。</li>
+          <li>點一樣食物 → 填吃了多少（預先填好平常的份量）→ <span class="key">加入這一餐</span>。</li>
+          <li>可以連續選好幾樣，最後按 <span class="key">記到早餐</span>。</li>
+        </ol>
+        <p>新增：按「＋ 新增我的食物」，照包裝上的營養標示填一次就好。旁邊的 ✏️ 可以改名字、改數字。</p>
+        <p><b>套餐</b>：常一起吃的幾樣（例如每天的早餐），選好後按「存成套餐」，下次一按整組放進來。</p>
+        <p><b>掃條碼</b>：按「掃商品條碼」拍包裝上的條碼，存過的會直接找到。</p>
+        <div class="scene"><b class="tag">📖 情境</b>每天早上一杯無糖豆漿＋一條全家烤地瓜：第一次各存一次、再存成「每天的早餐」套餐。之後每天早上：我的食物 → 每天的早餐 → 記到早餐，三下就好。</div>
+      </div>
+    </section>
+
+    <section class="feature">
+      <div class="shots">
+        <figure><img src="guide/11-search.jpg" width="390" height="844" alt="查食物" loading="lazy" /></figure>
+        <figure><img src="guide/12-grams.jpg" width="390" height="844" alt="填克數" loading="lazy" /></figure>
+      </div>
+      <div>
+        <h3>🔍 查食物・秤克數：自己煮的、生鮮食材</h3>
+        <ol class="steps">
+          <li>首頁按 <span class="key">🔍 查食物・秤克數</span>，打食物名稱（例如「白飯」「雞胸」「地瓜」）。</li>
+          <li>點選結果，填克數（有「半碗」「一碗」等快速按鈕）。</li>
+          <li>熱量、蛋白質、六大類份數自動算好 → <span class="key">加入這一餐</span>。</li>
+        </ol>
+        <p>資料來自衛福部的食品營養成分資料庫；生的、熟的重量可以切換。你匯入的外食資料庫也會一起查到。</p>
+        <div class="scene"><b class="tag">📖 情境</b>晚餐白飯想控制份量：用廚房秤秤了 120 克，查「白飯」填 120，馬上知道是 218 大卡、3.3 份全穀。</div>
+      </div>
+    </section>
+
+    <section class="feature">
+      <div class="shots">
+        <figure><img src="guide/13-photo.jpg" width="390" height="844" alt="拍照記" loading="lazy" /></figure>
+        <figure><img src="guide/14-lookup.jpg" width="390" height="844" alt="待查清單" loading="lazy" /></figure>
+      </div>
+      <div>
+        <h3>📷 拍照記・待查：不知道熱量，先拍起來</h3>
+        <ol class="steps">
+          <li>首頁按 <span class="key">📷 拍照記</span>，拍一張（最多 3 張）。</li>
+          <li>可以用手比大小（拳頭、手掌、大拇指 × 幾個）、選類別，App 先給一個粗估。</li>
+          <li>按 <span class="key">儲存</span>，這筆會標「待查」。</li>
+        </ol>
+        <p>之後首頁會出現「🔎 還有 N 筆待查」：</p>
+        <ul class="steps">
+          <li>一筆一筆點進去改；或</li>
+          <li>按 <b>匯出待查表＋照片</b>，連同「給 AI 的說明」一起丟給 ChatGPT／Gemini，或傳給營養師填 → 把填好的表格貼回來、按 <span class="key">回填</span>。</li>
+          <li>回填時，查到的食物可以順便存成「我的食物」，下次吃一樣的直接選。</li>
+        </ul>
+        <div class="scene"><b class="tag">📖 情境</b>週末喝喜酒，十道菜不知道熱量：每道上桌拍一張、用手比一下吃了多少。回家把待查表和照片丟給 AI，AI 填好熱量貼回來，一次補完。</div>
+      </div>
+    </section>
+
+    <section class="feature">
+      <div class="shots"><figure><img src="guide/15-est.jpg" width="390" height="844" alt="估份量" loading="lazy" /></figure></div>
+      <div>
+        <h3>✋ 估份量：自助餐、家常菜</h3>
+        <p>用營養師教的「份」來估：吃了幾份就按幾下，每個按鈕下面寫一份是多少（例如全穀主食一份＝飯 1/4 碗，所以半碗按 2 下）。熱量和六大類份數自動加總。</p>
+        <div class="scene"><b class="tag">📖 情境</b>中午自助餐：飯一碗、一隻滷雞腿、兩樣青菜各半碗。按「全穀主食」4 下、「中脂肉蛋」2～3 下（看雞腿大小）、「蔬菜」2 下 → 儲存這一餐。</div>
+      </div>
+    </section>
+
+    <section class="feature">
+      <div class="shots"><figure><img src="guide/16-manual.jpg" width="390" height="844" alt="自己輸入、照營養標示算" loading="lazy" /></figure></div>
+      <div>
+        <h3>✏️ 自己輸入：知道熱量時、照營養標示算</h3>
+        <p>直接填名稱和熱量。包裝食物展開 <b>🧮 照營養標示算</b>：填標示上「每 30 克 160 大卡」，再填「我吃了 45 克」，自動換算，不用拿計算機。</p>
+        <p>勾「也存到我的食物」，下次就不用再填（要先填名稱）。</p>
+        <div class="scene"><b class="tag">📖 情境</b>一包 90 克的洋芋片吃了一半：標示寫每 30 克 160 大卡，填 30、160、吃了 45 → 240 大卡。</div>
+      </div>
+    </section>
+
+    <section class="feature">
+      <div class="shots"><figure><img src="guide/17-ai.jpg" width="390" height="844" alt="AI 幫我認" loading="lazy" /></figure></div>
+      <div>
+        <h3>🤖 AI 幫我認：拍一張，AI 拆成一樣一樣</h3>
+        <p>要先在 ⚙️ 設定 →「AI 辨識」打開。兩種方式擇一：</p>
+        <ul class="steps">
+          <li><b>用自己的 AI App（不用 Key）</b>：拍照 → 按「傳給我的 AI App」→ 在 ChatGPT／Gemini 長按輸入框「貼上」、送出 → 把 AI 的回答複製貼回來。</li>
+          <li><b>Gemini API Key</b>：貼上自己的免費 Key，拍完 App 直接辨識。</li>
+        </ul>
+        <p>AI 估的份量可能有誤差，加入前可以改克數。照片和文字只會傳到你自己選的 AI。</p>
+        <div class="scene"><b class="tag">📖 情境</b>同事訂的便當：拍一張傳給 ChatGPT，AI 拆成「白飯、炸排骨、滷蛋、高麗菜、豆干」各多少克、多少大卡，貼回來就記好五樣。</div>
+      </div>
+    </section>
+
+    <!-- 5 外食 -->
+    <h2 id="eatout">5. 外食怎麼點</h2>
+    <section class="feature wide">
+      <div class="shots">
+        <figure><img src="guide/20-eatout-brands.jpg" width="390" height="844" alt="選店家" loading="lazy" /><figcaption>選店家</figcaption></figure>
+        <figure><img src="guide/21-eatout-plan.jpg" width="390" height="844" alt="三組點法" loading="lazy" /><figcaption>這一餐建議幾大卡、三組點法</figcaption></figure>
+      </div>
+      <div>
+        <ol class="steps">
+          <li>首頁 <span class="key">🔍 查食物</span>，選好哪一餐，按 <span class="key">🍔 在外面吃，幫我配</span>。</li>
+          <li>選店家（可以打字找）。</li>
+          <li>App 算出「這一餐建議幾大卡以內」（依你今天的目標和已經吃的），排出 3 組點法：蛋白質多、糖少的在前面。可以按「多／少 50 大卡」調整。</li>
+          <li>按 <span class="key">就點這個</span>，整組放進這一餐，可以再改、再記。</li>
+        </ol>
+        <p>要先有店家的資料（見下一節「食物資料庫」）。店家出新菜，按「＋ 這家有新菜」存進去。</p>
+        <div class="scene"><b class="tag">📖 情境</b>中午走進麥當勞，今天早餐已經吃了不少：App 說午餐建議 600 大卡內，第一組是「麥香雞＋烤雞沙拉＋無糖綠茶」530 大卡、蛋白質 34 克。照點，按「就點這個」，吃完一按就記好。</div>
+      </div>
+    </section>
+
+    <!-- 6 資料庫 -->
+    <h2 id="library">6. 我的食物、食物資料庫</h2>
+    <section class="feature wide">
+      <div class="shots">
+        <figure><img src="guide/22-library.jpg" width="390" height="844" alt="我的食物分頁" loading="lazy" /><figcaption>下方「我的食物」分頁</figcaption></figure>
+        <figure><img src="guide/23-packs.jpg" width="390" height="844" alt="食物資料庫" loading="lazy" /><figcaption>食物資料庫</figcaption></figure>
+        <figure><img src="guide/24-pack-open.jpg" width="390" height="844" alt="打開資料庫" loading="lazy" /><figcaption>打開：找、新增、修改</figcaption></figure>
+      </div>
+      <div>
+        <ul class="steps">
+          <li><b>我的套餐、我的食物</b>：在這裡新增、修改、刪除；可以「分享」給家人或營養師（傳 LINE），對方「匯入」就有一樣的。</li>
+          <li><b>食物資料庫</b>：一大份整理好的表（例如連鎖店外食營養表、醫院的份量表）。用「整理工具」把 Excel 表做成資料庫檔，再「匯入」。查食物、外食怎麼點都會用到。</li>
+          <li><b>打開</b>資料庫可以搜尋、新增、修改。原本的數字不對，改了之後查到的就是你改的；不要了按「恢復原本的」。</li>
+          <li><b>我的食物太長</b>：按「☑️ 選幾樣」勾外食的 →「移到資料庫…」選一家店，我的食物清單就變短了。</li>
+        </ul>
+        <div class="scene"><b class="tag">📖 情境</b>常去八方雲集，出了新口味鍋貼：外食怎麼點 → 八方雲集 →「＋ 這家有新菜」，照店裡的營養標示填，存進資料庫。下次查「鍋貼」或到八方雲集都找得到。</div>
+      </div>
+    </section>
+
+    <!-- 7 身體 -->
+    <h2 id="body">7. 記錄身體、功能開關</h2>
+    <section class="feature wide">
+      <div class="shots">
+        <figure><img src="guide/05-home-body.jpg" width="390" height="844" alt="記錄身體" loading="lazy" /><figcaption>首頁「記錄身體」</figcaption></figure>
+        <figure><img src="guide/30-water.jpg" width="390" height="844" alt="喝水" loading="lazy" /><figcaption>喝水：按一下 +一杯</figcaption></figure>
+        <figure><img src="guide/31-bp.jpg" width="390" height="844" alt="血壓" loading="lazy" /><figcaption>血壓：一天可以記好幾次</figcaption></figure>
+      </div>
+      <div>
+        <ul class="steps">
+          <li><b>體重・尺寸</b>：每天早上量一次最準；BMI 自動算。趨勢看 7 天平均，不用被一天的上下嚇到。</li>
+          <li><b>喝水</b>：喝一杯按一下「+ 一杯」。</li>
+          <li><b>運動・步數</b>：寫做了什麼、幾分鐘；步數看手機健康 App 或手環，自己填。</li>
+          <li><b>睡眠</b>：幾點睡、幾點起床；午睡算補眠。</li>
+          <li><b>心情・備註</b>：今天的心情、飢餓感、排便；想問營養師的話也寫這裡，報告會列出來。</li>
+          <li><b>體脂機報告</b>：InBody 等的體脂率、骨骼肌、基礎代謝。</li>
+          <li><b>血壓、血糖</b>：預設關閉，要用請到功能開關打開。只提醒明顯危險的數字（很高的血壓、低血糖），其他只記錄，目標照醫生說的。</li>
+        </ul>
+      </div>
+    </section>
+    <section class="feature">
+      <div class="shots"><figure><img src="guide/34-features.jpg" width="390" height="844" alt="功能開關" loading="lazy" /></figure></div>
+      <div>
+        <h3>🔧 功能開關：只想記吃的，把其他關掉</h3>
+        <p>⚙️ 設定 →「功能開關與字體」→「首頁要記哪些」。不用的取消勾選，首頁就不顯示、小芽也不會提醒；以前記的資料都還在。</p>
+        <p>同一頁還有：字體大小、陪伴角色（小芽、小貓、營養師，可以複選或都不要）、熱量銀行（一週總量控管）。</p>
+        <div class="scene"><b class="tag">📖 情境</b>爸爸只想記吃的，看到一堆按鈕會亂：關掉睡眠、運動、體脂機報告，首頁只剩吃的和體重。<br>有糖尿病的阿姨：在「我的基本資料」勾「我在控制血糖」，血糖就會打開，空腹、飯後兩小時分開記。</div>
+      </div>
+    </section>
+
+    <!-- 8 營養師 -->
+    <h2 id="dietitian">8. 和營養師一起：叮嚀、報告</h2>
+    <section class="feature">
+      <div class="shots"><figure><img src="guide/44-advice.jpg" width="390" height="844" alt="營養師的叮嚀" loading="lazy" /></figure></div>
+      <div>
+        <h3>👩‍⚕️ 營養師的叮嚀：每天提醒、做到就按</h3>
+        <ol class="steps">
+          <li>下方 <b>報告</b> 分頁 →「營養師的叮嚀」。</li>
+          <li>在 LINE <b>長按</b>營養師的訊息 →「複製」，貼進來，按「整理成一條一條」。門診說的自己打，一行一條。</li>
+          <li>看一下、改一改 → 存起來。</li>
+        </ol>
+        <p>首頁每天輪流提醒 2 條，做到了按 <span class="key">今天做到了</span>。給營養師的報告會列出每一條「做到幾天」。</p>
+        <div class="scene"><b class="tag">📖 情境</b>營養師在 LINE 說：「1. 午餐便當多一份青菜 2. 晚餐飯吃半碗 3. 含糖飲料改無糖茶」。整段貼上，自動變成三條。兩週後回診，報告寫「午餐便當多一份青菜 11 / 14 天」，營養師一看就知道哪條比較難，再一起想辦法。</div>
+      </div>
+    </section>
+    <section class="feature wide">
+      <div class="shots">
+        <figure><img src="guide/42-report-tab.jpg" width="390" height="844" alt="報告分頁" loading="lazy" /><figcaption>報告分頁</figcaption></figure>
+        <figure><img src="guide/43-report.jpg" width="390" height="844" alt="給營養師的報告" loading="lazy" /><figcaption>給營養師的報告</figcaption></figure>
+      </div>
+      <div>
+        <h3>📄 給營養師的報告</h3>
+        <ol class="steps">
+          <li>報告分頁 → 選期間（近 7、14、30 天）→ <span class="key">產生報告</span>。</li>
+          <li>可以 <b>列印／存成 PDF</b>、<b>分享報告檔</b>（營養師用任何瀏覽器都能打開），或 <b>分享文字摘要</b>（直接貼 LINE）。</li>
+        </ol>
+        <p>報告最上面是「本週重點」，接著是平均熱量、三大營養素、六大類份數、體重、喝水、步數、睡眠、血壓血糖、叮嚀做到幾天、你想問的問題，最後是每天吃了什麼（可以附照片）。</p>
+        <div class="scene"><b class="tag">📖 情境</b>下週二回診：前一天晚上產生「近 14 天」的報告，按「分享報告檔」傳給營養師的 LINE。門診時營養師已經看過，直接討論問題，不用翻手機一天一天看。</div>
+      </div>
+    </section>
+
+    <!-- 9 回顧 -->
+    <h2 id="review">9. 回頭看：趨勢、照片牆、週報、小成就</h2>
+    <section class="feature wide">
+      <div class="shots">
+        <figure><img src="guide/40-trends.jpg" width="390" height="844" alt="趨勢" loading="lazy" /><figcaption>趨勢：熱量、體重、睡眠</figcaption></figure>
+        <figure><img src="guide/41-trends-vitals.jpg" width="390" height="844" alt="血壓血糖趨勢" loading="lazy" /><figcaption>血壓、血糖的變化</figcaption></figure>
+        <figure><img src="guide/45-photowall.jpg" width="390" height="844" alt="照片牆" loading="lazy" /><figcaption>餐點照片牆</figcaption></figure>
+      </div>
+      <div>
+        <ul class="steps">
+          <li><b>趨勢</b>（下方分頁）：7／14／30 天的熱量、體重（粗線是 7 天平均）、睡眠，有記的話還有血壓、血糖。還會告訴你「睡飽的日子平均吃多少、沒睡飽的日子吃多少」。</li>
+          <li><b>餐點照片牆</b>（報告分頁）：一週吃了什麼，用照片看；點照片看大圖、修正。</li>
+        </ul>
+        <div class="scene"><b class="tag">📖 情境</b>覺得這週沒瘦很沮喪：打開趨勢，粗線（7 天平均）其實往下了 0.5 公斤，只是昨天吃鹹、水腫而已。</div>
+      </div>
+    </section>
+    <section class="feature wide">
+      <div class="shots">
+        <figure><img src="guide/46-weekly.jpg" width="390" height="844" alt="小芽週報" loading="lazy" /><figcaption>小芽週報</figcaption></figure>
+        <figure><img src="guide/47-badges.jpg" width="390" height="844" alt="小成就" loading="lazy" /><figcaption>我的小成就</figcaption></figure>
+      </div>
+      <div>
+        <ul class="steps">
+          <li><b>小芽週報</b>：每週一出來，列上週做得好的事和下週可以試的一件事，可以傳 LINE 分享。</li>
+          <li><b>🤖 請我的 AI 看看這週</b>（有開 AI 才有）：把上週的摘要和每天吃了什麼傳給你的 AI App，AI 會回你做得好的地方、下週可以試的小事、外食怎麼點比較好。</li>
+          <li><b>我的小成就</b>：連續記錄、喝水達標、走路達標、體重前進…得到新的會放彩帶 🎉</li>
+        </ul>
+        <div class="scene"><b class="tag">📖 情境</b>週一早上打開 App，首頁出現「上週的小芽週報」：「這週記錄了 7 天，很用心」「下週試試每餐加一份蛋白質」。再按「請我的 AI 看看這週」，AI 建議「常吃的牛肉麵可以改點清燉、湯少喝」。</div>
+      </div>
+    </section>
+
+    <!-- 10 安全 -->
+    <h2 id="safe">10. 資料安全、備份</h2>
+    <div class="three">
+      <div><h3>☁️ 雲端同步（建議）</h3><p>⚙️ 設定 → 資料與備份 →「用 Google 帳號連結」。之後自動同步，資料存在<b>你自己的</b> Google 雲端硬碟「飲控隨身記」資料夾，開發者看不到。</p></div>
+      <div><h3>💾 下載備份</h3><p>不想連 Google 的話，同一頁可以按「下載完整備份（含照片）」，存到檔案或傳給自己。換手機時在歡迎畫面選「我有備份檔」。</p></div>
+      <div><h3>🔔 備份提醒</h3><p>超過 7 天沒備份、或雲端 7 天沒同步成功，首頁會提醒。按「晚點」3 天內不再出現。</p></div>
+    </div>
+    <p class="tip">隱私：記錄只在你的裝置和你自己的雲端硬碟。只有你自己開 AI、按下辨識時，那張照片才會傳到你選的 AI；掃條碼查不到時只送出條碼號碼。詳見<a href="privacy.html">隱私權政策</a>。</p>
+
+    <!-- 11 FAQ -->
+    <h2 id="faq">11. 常見問題</h2>
+    <details class="faq"><summary>要錢嗎？</summary><p>不用。App 免費，不用註冊。AI 功能用你自己的 ChatGPT／Gemini（免費版就可以）。</p></details>
+    <details class="faq"><summary>家人可以一起用嗎？</summary><p>可以，<b>每個人用自己的手機、自己的 Google 帳號</b>。同一個人在手機、平板、電腦都想看，就都連結同一個 Google 帳號。</p></details>
+    <details class="faq"><summary>首頁出現「有新版本，按更新」？</summary><p>按「更新」就好，記的資料不會不見。有時候還會請你在每一台用過的裝置都更新一次，才能繼續同步。</p></details>
+    <details class="faq"><summary>畫面空白、按了沒反應？</summary><p>先確認有網路，把 App 完全關掉再打開。還是不行，到 ⚙️ 設定 → 關於，看版本是不是最新的，按「更新到最新版」。</p></details>
+    <details class="faq"><summary>字太小、按鈕太小？</summary><p>右上角 <span class="key">AA</span> 可以換成「大」或「特大」。</p></details>
+    <details class="faq"><summary>記錯了怎麼辦？</summary><p>首頁下面「吃了什麼」，每一筆旁邊有修改和刪除。刪錯了，畫面下方的提示可以按「復原」。</p></details>
+    <details class="faq"><summary>在 LINE 裡打不開、不能登入 Google？</summary><p>LINE 的瀏覽器不能登入 Google。按右上角選單 →「用預設瀏覽器開啟」，改用 Safari 或 Chrome。</p></details>
+    <details class="faq"><summary>熱量一定準嗎？</summary><p>都是估計值：衛福部資料庫、店家公布的數字比較準；手掌法、AI 是粗估。重點是持續記、看趨勢，和營養師一起調整。有疾病或吃藥的人，飲食和目標請聽醫生、營養師的。</p></details>
+    <details class="faq"><summary>發現問題、有建議？</summary><p>請告訴邀請你參加公測的人，附上截圖和「⚙️ 設定 → 關於」裡的版本號，會比較快找到原因。</p></details>
+  </main>
+  <footer>飲控隨身記・使用說明（公測版）・<a href="./">打開 App</a>・<a href="privacy.html">隱私權政策</a></footer>
+</body>
+</html>

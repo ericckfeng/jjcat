@@ -6,7 +6,8 @@
   "scripts": {
     "serve": "python3 -m http.server 8000",
     "test": "node --test \"tests/unit/*.test.mjs\"",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "guide:shots": "node scripts/guide-shots.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

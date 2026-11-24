@@ -4,10 +4,10 @@ const CDN_FILES = {
   '/npm/@zxing/library@0.21.3/umd/index.min.js': 'node_modules/@zxing/library/umd/index.min.js'
 };
 export async function stubCdn(page) {
-  // Tailwind 替身只提供 .hidden，足夠讓畫面切換正常運作
+  // Tailwind 替身只提供 .hidden（畫面切換）和 Tailwind 預設的 border-box（寬度含內距，檢查畫面有沒有比手機寬才準）
   await page.route('https://cdn.tailwindcss.com/**', r => r.fulfill({
     contentType: 'application/javascript',
-    body: "(()=>{const s=document.createElement('style');s.textContent='.hidden{display:none!important}';document.head.appendChild(s)})()"
+    body: "(()=>{const s=document.createElement('style');s.textContent='.hidden{display:none!important}*,::before,::after{box-sizing:border-box}';document.head.appendChild(s)})()"
   }));
   // Chart.js、ZXing 有加檢查碼（integrity）：給 npm 裝的同一版真實檔案，檢查碼算錯時測試會失敗
   await page.route('https://cdn.jsdelivr.net/**', r => {

@@ -15,7 +15,7 @@ import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, sho
 import { buildInsights } from './insights.js';
 import { APP_REV, APP_LABEL, parseLatest, requiredRev, minRevToWrite, deviceName, deviceRecord, upsertDevice, deviceRows } from './version.js';
 import { customFoodFromForm, formFromCustomFood, servingNutrients, servingKcal, servingText, searchMine, sortByUse, isPerServing, formFromManual } from './myfoods.js';
-import { packFromFile, searchPacks, groupHits, packRows, myFoodsFile, packToFile, isMyFoodsFile, planMyFoodsImport } from './packs.js';
+import { packFromFile, searchPacks, groupHits, packRows, myFoodsFile, isMyFoodsFile, planMyFoodsImport, packsWithMine, looseMine, packFields, packFileWithMine } from './packs.js';
 import { toCsv } from './lookup.js';
 import { normalizeBarcode, checkDigitOk, findByBarcode, offUrl, offToForm } from './barcode.js';
 import { computeBadges, badgesToShow, newBadges, remainText } from './achievements.js';
@@ -673,7 +673,7 @@ async function renderFoodResults() {
   }
   const results = searchFoods(foodDB.foods, q, { limit: 30, now: new Date() });
   if (results.length) box.innerHTML = '<div class="sec-title px-1 pt-2">衛福部食品資料庫</div>' + results.map(r => foodRowHTML(r.food)).join('');
-  else if (searchMine(customFoods(), q).length || $('foodPacks').innerHTML) box.innerHTML = '';
+  else if (searchMine(myLoose(), q).length || $('foodPacks').innerHTML) box.innerHTML = '';
   else {
     box.innerHTML = `<div class="rounded-2xl border border-dashed border-stone-300 p-6 text-center text-base text-stone-500 space-y-3">
       <div>資料庫裡找不到「${esc(q)}」</div>
@@ -780,13 +780,20 @@ let cartCombo = null; // 最後放進購物車的套餐（存成套餐時預填�
 function packLink(food, pk) {
   return { src: pk.id, srcName: pk.name + (food.source && food.source !== pk.name ? '・' + food.source : ''), packFoodId: food.id };
 }
+// 我的食物：記 customFoodId；自己加到資料庫的，也記是哪個資料庫（報告的「資料來源」）
+function mineLink(food, entry) {
+  entry.customFoodId = food.id;
+  const pk = food.packId && foodPacks().find(p => p.id === food.packId);
+  if (pk) Object.assign(entry, { src: pk.id, srcName: pk.name });
+}
 function cartEntryFor(food, g, weighed) {
   const pk = foodPack.get(food);
   const label = food.brand ? food.brand + ' ' + food.name : food.name;
   if (isPerServing(food)) {
     const n = servingNutrients(food, g);
     const entry = { name: label + ' ' + fmt(g, 1) + ' 份', kcal: n.kcal, p: n.p, c: n.c, f: n.f, ex: n.ex, servings: g };
-    if (pk) Object.assign(entry, packLink(food, pk));
+    if (isMine(food)) mineLink(food, entry);
+    else if (pk) Object.assign(entry, packLink(food, pk));
     else if (food.id) entry.customFoodId = food.id;
     if (n.fiber != null) entry.fiber = n.fiber;
     return { weighed: 'asis', entry };
@@ -797,7 +804,7 @@ function cartEntryFor(food, g, weighed) {
     name: label + ' ' + g + 'g' + (cooked ? '（熟重）' : ''),
     kcal: n.kcal, p: n.p, c: n.c, f: n.f, ex: n.ex, grams: g
   };
-  if (isMine(food)) entry.customFoodId = food.id;
+  if (isMine(food)) mineLink(food, entry);
   else if (pk) Object.assign(entry, packLink(food, pk));
   else if (food.id) entry.foodId = food.id;
   if (n.fiber != null) entry.fiber = n.fiber;
@@ -918,8 +925,9 @@ function openScreen(id) {
   el.querySelector('.scr-body').scrollTop = 0;
   renderMealSelector();
   renderDayPanel();
-  if (id === 'scr-food') { foodFilter = ''; $('foodSearch').value = ''; $('foodTitle').textContent = foodMode === 'mine' ? '⭐ 我的食物' : '🔍 查食物'; $('eatoutOpenBtn').classList.toggle('hidden', !brandsOf(foodPacks()).length); renderFoodResults(); renderFoodCart(); }
+  if (id === 'scr-food') { foodFilter = ''; $('foodSearch').value = ''; $('foodTitle').textContent = foodMode === 'mine' ? '⭐ 我的食物' : '🔍 查食物'; $('eatoutOpenBtn').classList.toggle('hidden', !brandsOf(packsView()).length); renderFoodResults(); renderFoodCart(); }
   if (id === 'scr-eatout') openEatout();
+  if (id === 'scr-move') { moveTarget = null; $('moveNewName').value = ''; $('moveBrand').value = ''; renderMove(); }
   if (id === 'scr-grams') renderGrams();
   if (id === 'scr-est') renderEst();
   if (id === 'scr-weight') renderWeightHint();
@@ -1566,11 +1574,22 @@ document.querySelectorAll('.water-btn').forEach(btn => {
 });
 
 /* ---------------- Render：我的食物（下方分頁，管理用） ---------------- */
+// 選取模式（mfSelected 不是 null）：點一下勾選，可以移到資料庫、分享選的
+let mfSelected = null;
 function renderMyFoods() {
   const q = $('myFoodSearch').value.trim();
-  const all = customFoods();
+  const all = myLoose();
   const list = q ? searchMine(all, q) : sortByUse(all, state.logs);
-  $('myFoodList').innerHTML = list.length ? list.map(f => myFoodRowHTML(f, 'edit')).join('')
+  const sel = mfSelected;
+  $('myFoodSelectBtn').classList.toggle('hidden', Boolean(sel) || !all.length);
+  $('myFoodSelectBar').classList.toggle('hidden', !sel);
+  if (sel) $('myFoodSelectText').textContent = sel.size ? '已選 ' + sel.size + ' 樣' : '點食物勾選';
+  const row = (f) => sel ? `<button type="button" data-mf-sel="${esc(f.id)}" class="pick-row${sel.has(f.id) ? ' pick-done' : ''}" aria-pressed="${sel.has(f.id)}">
+      <span class="text-2xl shrink-0">${sel.has(f.id) ? '☑️' : '⬜'}</span>
+      <span class="min-w-0 flex-1 text-left"><span class="block text-lg font-semibold text-stone-900 leading-snug break-words">${esc(f.name)}</span>
+      <span class="block text-base text-emerald-700 font-bold tabular-nums">一份 ${esc(servingText(f))}　${servingKcal(f)} kcal</span></span></button>`
+    : myFoodRowHTML(f, 'edit');
+  $('myFoodList').innerHTML = list.length ? list.map(row).join('')
     : all.length ? `<p class="text-base text-stone-500 py-2">找不到「${esc(q)}」</p>`
       : '<p class="rounded-2xl bg-stone-50 text-stone-600 p-4 text-base leading-relaxed">還沒有我的食物。按上面的「＋ 新增我的食物」，照包裝上的營養標示填一次就好；「自己輸入」時也可以勾「也存到我的食物」。</p>';
 }
@@ -3146,6 +3165,10 @@ function customFoods() {
   return state.customFoods;
 }
 function isMine(food) { return Boolean(food && customFoods().includes(food)); }
+// 我的食物清單要列的：歸到資料庫的（packId）在資料庫裡找，不放這裡，清單才不會越來越長
+function myLoose() { return looseMine(customFoods(), foodPacks()); }
+// 畫面用的資料庫：原本匯入的＋自己加、改過的（js/packs.js 的 packsWithMine）
+function packsView() { return packsWithMine(foodPacks(), customFoods()); }
 function myFoodRowHTML(f, action) {
   const attr = action === 'edit' ? `data-mf-edit="${esc(f.id)}"` : `data-cf-id="${esc(f.id)}"`;
   const row = `<button type="button" ${attr} class="pick-row${action === 'edit' ? '' : ' min-w-0 flex-1'}">
@@ -3159,7 +3182,7 @@ function myFoodRowHTML(f, action) {
 // 查食物頁上方：我的食物（「⭐ 我的食物」打開時沒打字就列全部，最常記的在前）
 let foodMode = 'all';
 function renderFoodMine(q) {
-  const all = customFoods();
+  const all = myLoose();
   const list = q ? searchMine(all, q) : foodMode === 'mine' ? sortByUse(all, state.logs) : [];
   const add = '<button type="button" data-mf-new class="btn-secondary w-full">＋ 新增我的食物</button>';
   let html = '';
@@ -3183,32 +3206,67 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('[data-mf-new]')) openMyFood(null, $('foodSearch').value.trim() && screenStack.includes('scr-food') ? $('foodSearch').value.trim() : '');
 });
 $('myFoodAddBtn').addEventListener('click', () => openMyFood(null));
+$('myFoodSelectBtn').addEventListener('click', () => { mfSelected = new Set(); renderMyFoods(); });
+$('myFoodSelectDone').addEventListener('click', () => { mfSelected = null; renderMyFoods(); });
+$('myFoodList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-mf-sel]');
+  if (!b || !mfSelected) return;
+  const id = b.getAttribute('data-mf-sel');
+  if (mfSelected.has(id)) mfSelected.delete(id); else mfSelected.add(id);
+  renderMyFoods();
+});
+const selectedFoods = () => customFoods().filter(f => mfSelected && mfSelected.has(f.id));
+$('myFoodShareSelBtn').addEventListener('click', () => {
+  const foods = selectedFoods();
+  if (!foods.length) { showToast('先點食物勾選'); return; }
+  shareFile('我的食物_' + todayStr() + '.json', JSON.stringify(myFoodsFile(foods)), 'application/json',
+    '已下載。對方在「我的食物 → 匯入別人分享的食物」選這個檔案');
+});
+$('myFoodMoveBtn').addEventListener('click', () => {
+  if (!selectedFoods().length) { showToast('先點食物勾選'); return; }
+  openScreen('scr-move');
+});
 $('myFoodSearch').addEventListener('input', renderMyFoods);
 $('mf-ex').innerHTML = EX_KEYS.map(k => `<label class="block"><span class="block text-sm text-stone-600 mb-1">${EX_META[k].emoji} ${EX_META[k].short}（份）</span><input id="mf-ex-${k}" type="number" inputmode="decimal" min="0" step="any" class="field tabular-nums text-center" /></label>`).join('');
 const MF_FIELDS = ['name', 'servingG', 'servingLabel', 'kcal', 'p', 'f', 'c', 'sugar', 'na', 'fiber'];
 let mfEditing = null;
 let mfThenRecord = false;   // 從掃條碼來的：存好直接進「吃了多少」
 let mfSource = null;        // 新增時記的來源（'off'＝Open Food Facts）
+let mfPack = null;          // 存到資料庫：{ packId, brand, replaces }（replaces＝改資料庫原本的哪一樣）
 // prefill：掃條碼查到的表單（Open Food Facts 的數字，或只有條碼）
-function openMyFood(food, name = '', prefill = null) {
+// pack：新增到資料庫、或改資料庫原本的一樣（{ packId, brand, replaces, from＝原本那一樣 }）
+function openMyFood(food, name = '', prefill = null, pack = null) {
   mfEditing = food ? food.id : null;
   mfThenRecord = Boolean(prefill);
   mfSource = (prefill && prefill.source) || null;
-  const form = food ? formFromCustomFood(food) : prefill ? { ...prefill } : { name, ex: {} };
+  const inPack = food && food.packId && foodPacks().find(p => p.id === food.packId);
+  mfPack = inPack ? { packId: food.packId, brand: food.brand || '', replaces: food.replaces || null } : pack;
+  const form = food ? formFromCustomFood(food) : pack && pack.from ? formFromCustomFood(pack.from) : prefill ? { ...prefill } : { name, ex: {} };
   MF_FIELDS.forEach(k => { $('mf-' + k).value = form[k] == null ? '' : form[k]; });
   EX_KEYS.forEach(k => { $('mf-ex-' + k).value = form.ex && form.ex[k] ? form.ex[k] : ''; });
   const barcode = (food && food.barcode) || (prefill && prefill.barcode) || '';
   $('mf-barcode').value = barcode;
   $('mf-more').open = Boolean((food || prefill) && (form.sugar !== '' || form.na !== '' || form.fiber !== '' || Object.keys(form.ex || {}).length || barcode));
-  $('myFoodTitle').textContent = food ? '⭐ 修改我的食物' : '⭐ 新增我的食物';
+  const pk = mfPack && foodPacks().find(p => p.id === mfPack.packId);
+  $('mf-packBox').classList.toggle('hidden', !pk);
+  $('mf-unpack').classList.toggle('hidden', !(food && pk));
+  if (pk) {
+    $('mf-brand').value = mfPack.brand || '';
+    $('mf-brandList').innerHTML = brandsOf(packsView().filter(p => p.id === pk.id)).map(b => `<option value="${esc(b.brand)}"></option>`).join('');
+    $('mf-packText').textContent = mfPack.replaces ? '這是「' + pk.name + '」原本的一樣。存了之後，查到的會是你改過的數字（原本的藏起來；刪掉你改的就恢復）。' : '存在「' + pk.name + '」資料庫裡：查食物、外食怎麼點都找得到，不會讓我的食物清單變長。';
+  }
+  $('myFoodTitle').textContent = pk ? (food || mfPack.replaces ? '🏪 修改資料庫的食物' : '🏪 新增到「' + pk.name + '」') : food ? '⭐ 修改我的食物' : '⭐ 新增我的食物';
   $('mf-delete').classList.toggle('hidden', !food);
+  $('mf-delete').textContent = food && food.replaces && pk ? '不要我改的，恢復原本的' : '刪除這樣食物';
   setBox('mf-note', prefill ? 'info' : null, prefill ? (prefill.source === 'off' ? '數字來自 Open Food Facts（大家一起建的國際資料庫），請對照包裝上的營養標示，不對就改掉再存。' : '照包裝上的營養標示填，存好之後下次掃這個條碼就找得到。') : '');
   openScreen('scr-myfood');
 }
 function afterMyFoodChange() {
   persist();
   renderAll();
-  if (screenStack.includes('scr-food')) renderFoodMine($('foodSearch').value.trim());
+  if (screenStack.includes('scr-food')) renderFoodResults();
+  if (screenStack.includes('scr-pack')) renderPackScreen();
+  if (screenStack.includes('scr-eatout') && !$('eoPlan').classList.contains('hidden')) renderEatoutPlan();
 }
 $('mf-save').addEventListener('click', () => {
   const form = { ex: {} };
@@ -3225,18 +3283,23 @@ $('mf-save').addEventListener('click', () => {
   if (!old && mfSource) form.source = mfSource;
   const { food, error } = customFoodFromForm(form, { id: old ? old.id : uid('cf'), now: now() });
   if (error) { setBox('mf-note', 'err', error); return; }
-  if (!old && customFoods().some(f => f.name === food.name)) { setBox('mf-note', 'err', '已經有「' + food.name + '」了，請換個名稱（例如加上店名）'); return; }
+  if (mfPack) Object.assign(food, packFields(food, { packId: mfPack.packId, brand: $('mf-brand').value }), mfPack.replaces ? { replaces: mfPack.replaces } : {});
+  // 同名：我的食物裡不能重複；資料庫裡同一家店不能重複（不同店可以都有「鍋貼」）
+  const sameName = (f) => f !== old && f.name === food.name && (mfPack ? f.packId === food.packId && (f.brand || '') === (food.brand || '') : !myLoose().every(x => x !== f));
+  if (customFoods().some(sameName)) { setBox('mf-note', 'err', '已經有「' + food.name + '」了，請換個名稱' + (mfPack ? '' : '（例如加上店名）')); return; }
   const list = customFoods();
   if (old) list[list.indexOf(old)] = food; else list.unshift(food);
+  const pkName = mfPack && (foodPacks().find(p => p.id === mfPack.packId) || {}).name;
   afterMyFoodChange();
   if (mfThenRecord && !old) afterClose(() => openGrams(food)); else closeScreen();
-  showToast((old ? '已更新' : '已存到我的食物：') + '「' + food.name + '」');
+  showToast((old ? '已更新' : pkName ? '已存到「' + pkName + '」：' : '已存到我的食物：') + '「' + food.name + '」');
 });
 $('mf-delete').addEventListener('click', () => {
   const list = customFoods();
   const food = list.find(f => f.id === mfEditing);
   if (!food) return;
-  openConfirm('刪除「' + food.name + '」', '只會從我的食物拿掉，已經記的飲食記錄不會改變。', () => {
+  const msg = food.replaces && food.packId ? '會恢復資料庫原本的數字，已經記的飲食記錄不會改變。' : food.packId ? '只會從資料庫拿掉你加的這一樣，已經記的飲食記錄不會改變。' : '只會從我的食物拿掉，已經記的飲食記錄不會改變。';
+  openConfirm(food.replaces && food.packId ? '恢復原本的「' + food.name + '」' : '刪除「' + food.name + '」', msg, () => {
     const idx = list.indexOf(food);
     list.splice(idx, 1);
     tombstone('customFoods:' + food.id);
@@ -3249,6 +3312,17 @@ $('mf-delete').addEventListener('click', () => {
       afterMyFoodChange();
     });
   }, '刪除');
+});
+
+// 資料庫裡自己加的 → 移回我的食物（改過原本那一樣的：原本的會回來，這一樣變成我的食物）
+$('mf-unpack').addEventListener('click', () => {
+  const food = customFoods().find(f => f.id === mfEditing);
+  if (!food) return;
+  ['packId', 'replaces', 'base', 'variant'].forEach(k => { delete food[k]; });
+  touch(food);
+  afterMyFoodChange();
+  closeScreen();
+  showToast('已移回我的食物：「' + food.name + '」');
 });
 
 /* ---------------- 食物資料庫（foodPacks） ---------------- */
@@ -3283,7 +3357,7 @@ const kcalRange = (foods) => {
 let packGroups = [];
 function renderFoodPacks(q) {
   const box = $('foodPacks');
-  const packs = foodPacks();
+  const packs = packsView();
   const only = packs.find(p => p.id === foodFilter);
   if (!q || !packs.length || !(foodFilter === '' || only)) { box.innerHTML = ''; packGroups = []; return; }
   const hits = searchPacks(packs, q, { packId: only ? only.id : null });
@@ -3341,13 +3415,20 @@ $('pickList').addEventListener('click', (e) => {
 });
 
 // 我的食物分頁：資料庫清單、匯入、刪除
+const minePacked = (packId) => customFoods().filter(f => f.packId === packId);
 function renderPackList() {
   const packs = foodPacks();
-  $('packList').innerHTML = packs.length ? packs.map(p => `<div class="flex items-center gap-2 bg-stone-50 rounded-xl p-3">
+  $('packList').innerHTML = packs.length ? packs.map(p => {
+    const mine = minePacked(p.id);
+    const fixed = mine.filter(f => f.replaces).length;
+    const info = [p.org, p.edition, (p.foods || []).length + ' 樣', mine.length - fixed ? '我加了 ' + (mine.length - fixed) + ' 樣' : '', fixed ? '改過 ' + fixed + ' 樣' : ''].filter(Boolean).join('・');
+    return `<div class="flex items-center gap-2 bg-stone-50 rounded-xl p-3">
       <span class="min-w-0 flex-1"><span class="block text-lg font-semibold text-stone-900 leading-snug break-words">${esc(p.name)}</span>
-      <span class="block text-sm text-stone-500 break-words">${esc([p.org, p.edition, (p.foods || []).length + ' 樣'].filter(Boolean).join('・'))}</span></span>
+      <span class="block text-sm text-stone-500 break-words">${esc(info)}</span>
+      <button type="button" data-pack-open="${esc(p.id)}" class="btn-secondary w-full mt-2">打開：找、新增、修改</button></span>
       <span class="shrink-0 flex flex-col gap-1"><button type="button" data-pack-share="${esc(p.id)}" class="chip-btn chip-lg">分享</button>
-      <button type="button" data-pack-del="${esc(p.id)}" class="chip-btn chip-lg">刪除</button></span></div>`).join('')
+      <button type="button" data-pack-del="${esc(p.id)}" class="chip-btn chip-lg">刪除</button></span></div>`;
+  }).join('')
     : '<p class="rounded-2xl bg-stone-50 text-stone-600 p-4 text-base leading-relaxed">還沒有。用「整理工具」把試算表（例如連鎖店外食營養表）做成資料庫檔，再按「匯入」。</p>';
 }
 function afterPackChange() {
@@ -3411,12 +3492,14 @@ $('packList').addEventListener('click', (e) => {
   const b = e.target.closest('[data-pack-share]');
   const pack = b && foodPacks().find(p => p.id === b.getAttribute('data-pack-share'));
   if (!pack) return;
-  shareFile(fileSafe('食物資料_' + pack.name + (pack.edition ? '_' + pack.edition : '')) + '.json', JSON.stringify(packToFile(pack)), 'application/json',
+  // 原本的＋自己加、改過的一起分享
+  shareFile(fileSafe('食物資料_' + pack.name + (pack.edition ? '_' + pack.edition : '')) + '.json', JSON.stringify(packFileWithMine(pack, customFoods(), { now: now() })), 'application/json',
     '已下載。對方在「我的食物 → 匯入食物資料庫」選這個檔案');
 });
 // 別人分享的我的食物：新的先問要不要加；同名但數字不同的再問一次要不要換（預設留自己的）
 function importMyFoods(data) {
-  const plan = planMyFoodsImport(customFoods(), data.foods, { makeId: uid, now: now() });
+  // 只和我的食物清單比：資料庫裡自己加的同名食物不要被蓋掉（會掉了 packId）
+  const plan = planMyFoodsImport(myLoose(), data.foods, { makeId: uid, now: now() });
   const names = (list) => list.slice(0, 5).map(f => '「' + f.name + '」').join('') + (list.length > 5 ? '等' : '');
   if (!plan.add.length && !plan.update.length) { showToast(plan.same ? '這些食物你都有了（' + plan.same + ' 樣）' : '檔案裡沒有可以加的食物'); return; }
   const askUpdate = () => {
@@ -3443,7 +3526,8 @@ $('packList').addEventListener('click', (e) => {
   const list = foodPacks();
   const pack = list.find(p => p.id === b.getAttribute('data-pack-del'));
   if (!pack) return;
-  openConfirm('刪除「' + pack.name + '」', '只會刪掉這個資料庫，已經記的飲食記錄不會改變；用到它的套餐會用存套餐時的數字。', () => {
+  const mine = minePacked(pack.id).filter(f => !f.replaces).length;
+  openConfirm('刪除「' + pack.name + '」', '只會刪掉這個資料庫，已經記的飲食記錄不會改變；用到它的套餐會用存套餐時的數字。' + (mine ? '你加的 ' + mine + ' 樣會回到我的食物。' : ''), () => {
     const idx = list.indexOf(pack);
     list.splice(idx, 1);
     tombstone('foodPacks:' + pack.id);
@@ -3455,6 +3539,104 @@ $('packList').addEventListener('click', (e) => {
       afterPackChange();
     });
   }, '刪除');
+});
+
+// 資料庫的內容：搜尋、新增到這個資料庫、修改（自己加的直接改；原本的改成自己的版本）
+let packOpenId = null;
+$('packList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pack-open]');
+  if (!b) return;
+  packOpenId = b.getAttribute('data-pack-open');
+  $('packSearch').value = '';
+  openScreen('scr-pack');
+  renderPackScreen();
+});
+function renderPackScreen() {
+  const view = packsView().find(p => p.id === packOpenId);
+  if (!view) { $('packFoods').innerHTML = ''; return; }
+  const mine = minePacked(view.id);
+  const fixed = mine.filter(f => f.replaces).length;
+  $('packTitle').textContent = '📚 ' + view.name;
+  $('packInfo').textContent = '共 ' + view.foods.length + ' 樣' + (mine.length - fixed ? '，你加了 ' + (mine.length - fixed) + ' 樣' : '') + (fixed ? '，改過 ' + fixed + ' 樣' : '') + '。數字不對可以點那一樣修改。';
+  const q = $('packSearch').value.trim();
+  let list;
+  if (q) {
+    const hits = searchPacks([view], q, { limit: 60 }).map(h => h.food);
+    // 打店名：列這家全部
+    const byBrand = view.foods.filter(f => f.brand && f.brand.includes(q));
+    list = [...new Set([...byBrand, ...hits])].slice(0, 80);
+  } else list = [...view.foods.filter(f => f.packId), ...view.foods.filter(f => !f.packId).slice(0, 30)];
+  const tag = (f) => f.replaces ? '<span class="ml-1 px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 text-sm font-bold align-middle">改過</span>'
+    : f.packId ? '<span class="ml-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-sm font-bold align-middle">我加的</span>' : '';
+  $('packFoods').innerHTML = (list.length ? list.map(f => `<button type="button" data-pf="${esc(f.id)}" class="pick-row">
+      <span class="min-w-0 flex-1 text-left"><span class="block text-lg font-semibold text-stone-900 leading-snug break-words">${esc(f.name)}${tag(f)}</span>
+      ${f.brand ? `<span class="block text-sm text-stone-500 break-words">${esc(f.brand)}</span>` : ''}
+      <span class="block text-base text-emerald-700 font-bold tabular-nums">一份 ${esc(servingText(f))}　${servingKcal(f)} kcal</span></span>
+      <span class="pick-add">修改</span></button>`).join('') : `<p class="text-base text-stone-500 py-2">找不到「${esc(q)}」，可以按上面的「＋ 新增到這個資料庫」。</p>`)
+    + (!q && view.foods.length > list.length ? '<p class="text-base text-stone-500 py-2">只列前面幾樣，打字找其他的。</p>' : '');
+}
+$('packSearch').addEventListener('input', renderPackScreen);
+$('packAddBtn').addEventListener('click', () => {
+  const q = $('packSearch').value.trim();
+  const view = packsView().find(p => p.id === packOpenId);
+  const brand = view && q && view.foods.some(f => f.brand === q) ? q : '';   // 正在看某一家：店家先填好
+  openMyFood(null, '', null, { packId: packOpenId, brand });
+});
+$('packFoods').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pf]');
+  if (!b) return;
+  const view = packsView().find(p => p.id === packOpenId);
+  const f = view && view.foods.find(x => x.id === b.getAttribute('data-pf'));
+  if (!f) return;
+  if (isMine(f)) openMyFood(f);
+  else openMyFood(null, '', null, { packId: packOpenId, brand: f.brand || '', replaces: f.id, from: f });
+});
+
+// 我的食物 → 移到資料庫（packId＋店家；同一個物件，id 不變：記錄、套餐都不受影響）
+let moveTarget = null;
+function renderMove() {
+  const packs = foodPacks();
+  const n = selectedFoods().length;
+  $('moveWhat').textContent = '要移的：' + selectedFoods().slice(0, 5).map(f => '「' + f.name + '」').join('') + (n > 5 ? '等 ' + n + ' 樣' : '');
+  if (!moveTarget) moveTarget = packs.length ? packs[0].id : 'new';
+  $('movePacks').innerHTML = [...packs.map(p => [p.id, p.name]), ['new', '＋ 新建一個資料庫']].map(([id, name]) =>
+    `<button type="button" data-move-to="${esc(id)}" class="pick-row${moveTarget === id ? ' pick-done' : ''}" aria-pressed="${moveTarget === id}">
+      <span class="text-2xl shrink-0">${moveTarget === id ? '🔘' : '⚪'}</span>
+      <span class="min-w-0 flex-1 text-left text-lg font-semibold text-stone-900 break-words">${esc(name)}</span></button>`).join('');
+  $('moveNewBox').classList.toggle('hidden', moveTarget !== 'new');
+  const view = packsView().find(p => p.id === moveTarget);
+  $('moveBrandList').innerHTML = view ? brandsOf([view]).map(b => `<option value="${esc(b.brand)}"></option>`).join('') : '';
+  setBox('moveNote', null, '');
+}
+$('movePacks').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-move-to]');
+  if (!b) return;
+  moveTarget = b.getAttribute('data-move-to');
+  renderMove();
+  if (moveTarget === 'new') $('moveNewName').focus();
+});
+$('moveSaveBtn').addEventListener('click', () => {
+  const foods = selectedFoods();
+  if (!foods.length) { closeScreen(); return; }
+  let pack = foodPacks().find(p => p.id === moveTarget);
+  let created = null;
+  if (!pack) {
+    const name = $('moveNewName').value.trim();
+    if (!name) { setBox('moveNote', 'err', '請填新資料庫的名稱，例如「常吃的外食」'); $('moveNewName').focus(); return; }
+    if (foodPacks().some(p => p.name === name)) { setBox('moveNote', 'err', '已經有「' + name + '」了，請在上面選它'); return; }
+    created = pack = { id: uid('pk'), name, org: '自己建的', foods: [], updatedAt: now() };
+    foodPacks().push(pack);
+  }
+  const before = foods.map(f => [f, { packId: f.packId, brand: f.brand, base: f.base, variant: f.variant, updatedAt: f.updatedAt }]);
+  foods.forEach(f => { Object.assign(f, packFields(f, { packId: pack.id, brand: $('moveBrand').value })); touch(f); });
+  mfSelected = null;
+  afterMyFoodChange();
+  closeScreen();
+  showToast('已把 ' + foods.length + ' 樣移到「' + pack.name + '」', '復原', () => {
+    before.forEach(([f, old]) => { Object.keys(old).forEach(k => { if (old[k] == null) delete f[k]; else f[k] = old[k]; }); touch(f); });
+    if (created) { foodPacks().splice(foodPacks().indexOf(created), 1); tombstone('foodPacks:' + created.id); }
+    afterMyFoodChange();
+  });
 });
 
 /* ---------------- 掃商品條碼 ---------------- */
@@ -3647,7 +3829,7 @@ const eo = { brand: '', adj: 0, list: [] };
 function openEatout() {
   eo.adj = 0;
   $('eoSearch').value = '';
-  showEatoutPick(!eo.brand || !brandsOf(foodPacks()).some(b => b.brand === eo.brand));
+  showEatoutPick(!eo.brand || !brandsOf(packsView()).some(b => b.brand === eo.brand));
 }
 function showEatoutPick(pick) {
   $('eoPick').classList.toggle('hidden', !pick);
@@ -3657,7 +3839,7 @@ function showEatoutPick(pick) {
 function renderEatoutBrands() {
   const q = $('eoSearch').value.trim().toLowerCase();
   const recent = state.meta.eatoutRecent || [];
-  let list = brandsOf(foodPacks());
+  let list = brandsOf(packsView());
   if (q) list = list.filter(b => b.brand.toLowerCase().includes(q));
   // 最近去過的排前面
   list.sort((a, b) => (recent.includes(a.brand) ? recent.indexOf(a.brand) : 99) - (recent.includes(b.brand) ? recent.indexOf(b.brand) : 99));
@@ -3669,7 +3851,7 @@ function renderEatoutBrands() {
 }
 function eatoutFoods() {
   const out = [];
-  foodPacks().forEach(pk => (pk.foods || []).forEach(f => { if (f.brand === eo.brand) { foodPack.set(f, pk); out.push(f); } }));
+  packsView().forEach(pk => (pk.foods || []).forEach(f => { if (f.brand === eo.brand) { foodPack.set(f, pk); out.push(f); } }));
   return out;
 }
 function eatoutBudget() {
@@ -3699,6 +3881,11 @@ function renderEatoutPlan() {
     : (b.budget > 0 ? '<p class="text-base text-stone-600 leading-relaxed">這家店的東西都超過 ' + b.budget + ' 大卡。可以按「多 50 大卡」，或點一份、和別人分著吃。</p>' : '');
 }
 $('eoSearch').addEventListener('input', renderEatoutBrands);
+// 這家有新菜：存進有這家店的資料庫（品項最多的那個），店家先填好
+$('eoAddBtn').addEventListener('click', () => {
+  const pk = packsView().map(p => [p, p.foods.filter(f => f.brand === eo.brand).length]).filter(x => x[1]).sort((a, b) => b[1] - a[1])[0];
+  if (pk) openMyFood(null, '', null, { packId: pk[0].id, brand: eo.brand });
+});
 $('eoChange').addEventListener('click', () => { $('eoSearch').value = ''; showEatoutPick(true); });
 $('scr-eatout').addEventListener('click', (e) => {
   const br = e.target.closest('[data-eo-brand]');

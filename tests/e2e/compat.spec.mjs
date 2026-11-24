@@ -114,6 +114,26 @@ test('食物資料庫（foodPacks）備份檔：資料庫匯入、看不懂的�
   await expect(page.locator('#foodPacks')).toContainText('台灣麥當勞');
 });
 
+test('資料庫裡自己加、改過的（customFoods 的 packId、replaces）備份檔：我的食物只列沒歸到資料庫的；查到的是改過的數字；資料庫刪掉的回到我的食物', async ({ page }) => {
+  await openApp(page);
+  expect(await importFile(page, fx('backup-v3-pack-additions.json'))).toContain('匯入完成');
+  const s = await appState(page);
+  expect(s.customFoods.find(f => f.id === 'cf_add')).toMatchObject({ packId: 'pk_fx2', futureField: 2 });
+  await closeScreens(page);
+  await page.click('.mobile-nav-tab[data-tab=library]');
+  await expect(page.locator('#myFoodList')).toContainText('無糖豆漿');
+  await expect(page.locator('#myFoodList')).toContainText('舊資料庫的蛋餅');
+  await expect(page.locator('#myFoodList')).not.toContainText('嫩煎雞腿堡');
+  await expect(page.locator('#packList')).toContainText('我加了 1 樣・改過 1 樣');
+  await page.click('.mobile-nav-tab[data-tab=log]');
+  await page.click('[data-food-open=all]');
+  await page.fill('#foodSearch', '漢堡');
+  await expect(page.locator('#foodPacks')).toContainText('250 kcal');
+  await expect(page.locator('#foodPacks')).not.toContainText('260 kcal');
+  await page.fill('#foodSearch', '麥當勞');
+  await expect(page.locator('#foodPacks')).toContainText('嫩煎雞腿堡');
+});
+
 test('套餐（combos）備份檔：套餐都匯入、看不懂的欄位保留；資料庫找不到、刪掉、AI 估的品項用 snapshot 照樣能放進購物車', async ({ page }) => {
   await openApp(page);
   expect(await importFile(page, fx('backup-v3-combos.json'))).toContain('匯入完成');

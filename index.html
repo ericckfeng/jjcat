@@ -191,6 +191,15 @@
         </div>
         <button type="button" id="myFoodAddBtn" class="btn-primary btn-xl w-full">＋ 新增我的食物</button>
         <input id="myFoodSearch" type="search" class="field text-lg" placeholder="搜尋我的食物" />
+        <button type="button" id="myFoodSelectBtn" class="btn-secondary w-full">☑️ 選幾樣：移到資料庫、分享</button>
+        <div id="myFoodSelectBar" class="hidden rounded-2xl bg-sky-50 border border-sky-200 p-3 space-y-2">
+          <p id="myFoodSelectText" class="text-base font-semibold text-sky-900">點食物勾選</p>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" id="myFoodMoveBtn" class="btn-primary">移到資料庫…</button>
+            <button type="button" id="myFoodShareSelBtn" class="btn-secondary">分享選的</button>
+          </div>
+          <button type="button" id="myFoodSelectDone" class="block text-base text-stone-600 underline py-1">取消選取</button>
+        </div>
         <div id="myFoodList" class="space-y-2"></div>
         <div class="space-y-2 pt-1">
           <button type="button" id="myFoodShareBtn" class="btn-secondary w-full">分享我的食物（給家人、營養師）</button>
@@ -341,6 +350,11 @@
   <div id="scr-myfood" class="screen hidden" role="dialog" aria-label="我的食物">
     <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2 id="myFoodTitle">⭐ 新增我的食物</h2></div>
     <div class="scr-body">
+      <div id="mf-packBox" class="hidden rounded-2xl bg-sky-50 border border-sky-200 p-3 space-y-2">
+        <p id="mf-packText" class="text-base text-sky-900 leading-relaxed"></p>
+        <label class="block"><span class="block text-base text-stone-700 mb-1">店家</span><input id="mf-brand" type="text" list="mf-brandList" autocomplete="off" class="field text-lg" placeholder="例如：八方雲集" /></label>
+        <datalist id="mf-brandList"></datalist>
+      </div>
       <label class="block"><span class="scr-label">名稱</span><input id="mf-name" type="text" class="field text-lg" placeholder="例如：全家烤地瓜、無糖豆漿" /></label>
       <div class="rounded-2xl bg-white border border-stone-200 p-3 space-y-3">
         <div class="scr-label mb-0">一份是多少？</div>
@@ -372,9 +386,38 @@
         </details>
       </div>
       <p id="mf-note" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
+      <button type="button" id="mf-unpack" class="hidden btn-secondary w-full">移回「我的食物」</button>
       <button type="button" id="mf-delete" class="hidden text-base text-rose-600 underline self-start py-2">刪除這樣食物</button>
     </div>
     <div class="scr-foot"><button type="button" id="mf-save" class="btn-primary btn-xl w-full">儲存</button></div>
+  </div>
+
+  <!-- 食物資料庫的內容（我的食物分頁 → 資料庫「打開」）：搜尋、新增到這個資料庫、修改（原本的改成自己的版本） -->
+  <div id="scr-pack" class="screen hidden" role="dialog" aria-label="食物資料庫">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2 id="packTitle">📚 食物資料庫</h2></div>
+    <div class="scr-body">
+      <p id="packInfo" class="text-base text-stone-600 leading-relaxed"></p>
+      <button type="button" id="packAddBtn" class="btn-primary btn-xl w-full">＋ 新增到這個資料庫</button>
+      <input id="packSearch" type="search" class="field text-lg" placeholder="找食物或店家，例如：鍋貼、八方雲集" autocomplete="off" />
+      <div id="packFoods" class="space-y-2"></div>
+    </div>
+    <div class="scr-foot"><button type="button" data-back class="btn-primary btn-xl w-full">完成</button></div>
+  </div>
+
+  <!-- 我的食物移到資料庫：選資料庫（或新建）＋店家 -->
+  <div id="scr-move" class="screen hidden" role="dialog" aria-label="移到資料庫">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>📦 移到資料庫</h2></div>
+    <div class="scr-body">
+      <p id="moveWhat" class="text-base text-stone-700 leading-relaxed"></p>
+      <div class="scr-label">移到哪一個？</div>
+      <div id="movePacks" class="space-y-2"></div>
+      <label id="moveNewBox" class="hidden block"><span class="block text-base text-stone-700 mb-1">新資料庫的名稱</span><input id="moveNewName" type="text" class="field text-lg" placeholder="例如：常吃的外食" /></label>
+      <label class="block"><span class="scr-label">店家（可不填）</span><input id="moveBrand" type="text" list="moveBrandList" autocomplete="off" class="field text-lg" placeholder="例如：八方雲集" /></label>
+      <datalist id="moveBrandList"></datalist>
+      <p class="text-base text-stone-600 leading-relaxed">移過去之後，在「查食物」「外食怎麼點」都找得到，我的食物清單會變短。已經記的飲食記錄、套餐都不受影響；想移回來，在資料庫裡點那一樣「移回我的食物」。</p>
+      <p id="moveNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
+    </div>
+    <div class="scr-foot"><button type="button" id="moveSaveBtn" class="btn-primary btn-xl w-full">移過去</button></div>
   </div>
 
   <!-- 套餐：存成套餐（從購物車）／修改套餐（從我的食物分頁） -->
@@ -437,6 +480,7 @@
           </div>
         </div>
         <div id="eoList" class="space-y-3"></div>
+        <button type="button" id="eoAddBtn" class="btn-secondary w-full">＋ 這家有新菜（存進資料庫）</button>
         <p class="text-sm text-stone-500 leading-relaxed">數字來自你匯入的食物資料庫。按「就點這個」之後，還可以改份數、拿掉，再記到這一餐。</p>
       </div>
     </div>

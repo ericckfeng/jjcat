@@ -439,3 +439,46 @@ export function appendPasted(prev, next) {
   const same = next.length && next[0].join('|') === prev[0].join('|');
   return [...prev, ...(same ? next.slice(1) : next)];
 }
+
+/* ---------------- 自己加到資料庫的食物 ---------------- */
+// 資料庫匯入後原樣不動；自己加的、改過的存在「我的食物」（customFoods），多標：
+//   packId：屬於哪個資料庫；brand：哪一家店；replaces：改的是資料庫原本的哪一樣（原本的藏起來）
+//   base、variant：和資料庫一樣拆好（查食物「同一個品項收成一組」用）
+// 我的食物一樣一樣同步，手機和 iPad 各自加的都會留著；資料庫刪掉了，自己加的會回到我的食物
+
+// 畫面用的資料庫：原本的（拿掉被改過的）＋自己加的。自己加的是 customFoods 裡的同一個物件（修改、記錄都照我的食物）
+export function packsWithMine(packs, mine) {
+  const byPack = new Map();
+  (mine || []).forEach(f => { if (f && f.packId) (byPack.get(f.packId) || byPack.set(f.packId, []).get(f.packId)).push(f); });
+  return (packs || []).map(p => {
+    const adds = byPack.get(p.id);
+    if (!adds) return p;
+    const hidden = new Set(adds.map(f => f.replaces).filter(Boolean));
+    return { ...p, foods: [...(p.foods || []).filter(f => !hidden.has(f.id)), ...adds] };
+  });
+}
+// 我的食物清單要列的：沒有歸到資料庫的（資料庫已經刪掉的也算回來）
+export function looseMine(mine, packs) {
+  const ids = new Set((packs || []).map(p => p.id));
+  return (mine || []).filter(f => f && !(f.packId && ids.has(f.packId)));
+}
+// 歸到資料庫時要加的欄位（名稱拆成品項＋規格）；brand 空白＝不改原本的店家
+export function packFields(food, { packId, brand }) {
+  const { base, variant } = splitVariant(food.name);
+  const out = { packId, base, variant: variant || null };
+  const b = String(brand == null ? '' : brand).trim();
+  out.brand = b || food.brand || null;
+  return out;
+}
+// 分享資料庫：原本的＋自己加的，合成一個檔案（給別人，或拿回整理工具繼續改）
+//   改過的用原本那一樣的 id：別人換成新版時，取代原本那一樣
+export function packFileWithMine(pack, mine, { now = Date.now() } = {}) {
+  const [view] = packsWithMine([pack], mine);
+  const foods = (view.foods || []).map(f => {
+    if (!f.packId) return f;
+    const c = { id: f.replaces || f.id };
+    [...FOOD_KEYS, 'base', 'variant'].forEach(k => { if (f[k] != null && f[k] !== '') c[k] = f[k]; });
+    return c;
+  });
+  return packToFile({ ...pack, foods }, { now });
+}

@@ -1,0 +1,28 @@
+{
+  "app": "diet-tracker",
+  "version": 3,
+  "exportedAt": "2026-11-27T12:00:00.000Z",
+  "targets": { "kcal": 1800 },
+  "logs": {},
+  "days": {},
+  "quickItems": [],
+  "foodPacks": [
+    {
+      "id": "pk_fx2",
+      "name": "外食連鎖店",
+      "org": "自己整理",
+      "askBy": "serving",
+      "updatedAt": 1764040000000,
+      "foods": [
+        { "id": "pf_h1", "name": "漢堡", "base": "漢堡", "brand": "台灣麥當勞", "serving": { "label": "1份" }, "perServing": { "kcal": 260, "p": 12.2 } },
+        { "id": "pf_h2", "name": "麥香魚", "base": "麥香魚", "brand": "台灣麥當勞", "serving": { "label": "1份" }, "perServing": { "kcal": 330 } }
+      ]
+    }
+  ],
+  "customFoods": [
+    { "id": "cf_add", "name": "嫩煎雞腿堡", "base": "嫩煎雞腿堡", "variant": null, "packId": "pk_fx2", "brand": "台灣麥當勞", "serving": { "label": "1份" }, "perServing": { "kcal": 420, "p": 28 }, "updatedAt": 1764050000000, "futureField": 2 },
+    { "id": "cf_fix", "name": "漢堡", "base": "漢堡", "variant": null, "packId": "pk_fx2", "brand": "台灣麥當勞", "replaces": "pf_h1", "serving": { "label": "1份" }, "perServing": { "kcal": 250, "p": 12 }, "updatedAt": 1764050000000 },
+    { "id": "cf_loose", "name": "無糖豆漿", "serving": { "label": "1 杯" }, "perServing": { "kcal": 120 }, "updatedAt": 1764050000000 },
+    { "id": "cf_orphan", "name": "舊資料庫的蛋餅", "packId": "pk_deleted", "brand": "早餐店", "perServing": { "kcal": 250 }, "updatedAt": 1764050000000 }
+  ]
+}

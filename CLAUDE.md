@@ -53,7 +53,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/party.js` | **純函式**：吃到飽速記的範本與換算。**畫面 Rev. 43 已拿掉**，只用來把舊版留在裝置上、還沒記下來的速記（`meta.party`）記成記錄（有單元測試） |
 | `js/myfoods.js` | **純函式**：我的食物（`customFoods`）：新增頁表單 ↔ 每 100 g／每份、以份計的換算、搜尋、依常用排序（有單元測試） |
 | `js/combos.js` | **純函式**：套餐（`combos`）：購物車 → 套餐（每樣存 `snapshot`）、選套餐時找回現在的食物（找不到用 snapshot）、合計、搜尋、排序（有單元測試） |
-| `js/packs.js` | **純函式**：食物資料庫（`foodPacks`）：試算表欄位對照、份量／規格拆解、表格 → 食物、找重複、資料庫檔與標準 CSV、查食物的搜尋與「同一個品項收成一組」（整理工具和 App 共用，有單元測試） |
+| `js/packs.js` | **純函式**：食物資料庫（`foodPacks`）：試算表欄位對照、份量／規格拆解、表格 → 食物、找重複、資料庫檔與標準 CSV、查食物的搜尋與「同一個品項收成一組」；自己加到資料庫的（我的食物的 `packId`）合進畫面用的資料庫 `packsWithMine`、我的食物清單 `looseMine`、分享 `packFileWithMine`（整理工具和 App 共用，有單元測試） |
 | `tools/foodpack.html`、`tools/foodpack.js` | 食物資料庫整理工具（獨立頁面，不碰 App 的 localStorage）：試算表 → 資料庫檔，App「我的食物 → 匯入食物資料庫」讀進來 |
 | `js/barcode.js` | **純函式**：條碼：號碼整理、檢查碼、UPC／EAN 比對、在我的食物和食物資料庫找條碼、Open Food Facts 回應 → 我的食物表單（有單元測試）。拍照辨識（BarcodeDetector／ZXing）在 `app.js` |
 | `js/foodbook.js` | **純函式**：AI 建檔小工具的提示詞與回傳格式、整理 AI 回傳、驗算提醒（熱量／公克、三大營養素、長條圖估讀）、匯出成資料庫檔（有單元測試） |
@@ -77,6 +77,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 重點機制：
 
 - **狀態**：`state`（要同步的資料＋只存本機的 `meta`）存 `localStorage['diet_tracker_v2']`；照片另外存 IndexedDB。
+- **資料庫和我的食物**：讀資料庫的食物一律用 `packsView()`（原本的＋自己加、改過的），我的食物清單用 `myLoose()`；不要直接改 `foodPacks` 裡的食物（整包合併，兩台裝置會互蓋），自己加的存在 `customFoods` 標 `packId`。
 - **儲存**：改到「要同步的資料」一律呼叫 `persist()`（會標記 dirty 並排程同步）；只改本機設定用 `persistLocal()`。每日欄位用 `setDayField(field, value, date)`，它會寫入欄位時間戳 `_t`。新增／修改飲食記錄或我的食物要更新 `updatedAt`；刪除要呼叫 `tombstone('e:'+id)`、`tombstone('customFoods:'+id)`、`tombstone('combos:'+id)` 或 `tombstone('foodPacks:'+id)`。舊的「常吃的」`quickItems` 已停用：不顯示、不新增，但要原樣保留、照常同步。
 - **同步**：`doSync()` 下載雲端 JSON → `mergeData(local, remote)` → 上傳照片（只傳新的）→ 下載缺的照片 → 有變才上傳合併結果。照片以 `photoKey`（編輯換照片時變成 `id-時間`）區分版本。一筆最多 3 張照片：第 2、3 張的 key 在記錄的 `morePhotos`（`x_<id>_<時間>`，不能有「-」，原因見 `DATA_FORMAT.md`），新增、刪除、複製記錄時要一起處理（`deleteEntryPhotos`、`morePhotoKeys`）。
 - **睡眠**：昨晚的睡眠記在**起床那天**（`nightDate() === ui.date`），補眠也記在當天；這樣才能和當天吃多少比較。

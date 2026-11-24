@@ -212,3 +212,34 @@ test('貼上 AI 的回答：```csv 區塊、Markdown 表格、Excel（Tab）都�
   assert.deepEqual(foods.map(f => [f.brand, f.name, f.perServing.kcal]), [['麥當勞', '漢堡', 260], ['麥當勞', '薯條(中, 大)', 330]]);
   assert.equal(guessMapping(['頁碼', '名稱'])[0], 'page');
 });
+
+import { packsWithMine, looseMine, packFields, packFileWithMine } from '../../js/packs.js';
+test('自己加到資料庫的：畫面用的資料庫＝原本的（拿掉改過的）＋自己加的；我的食物只列沒歸到資料庫的', () => {
+  const pk = { id: 'pk_a', name: '外食', foods: [{ id: 'pf_1', name: '鍋貼', brand: '八方雲集' }, { id: 'pf_2', name: '酸辣湯', brand: '八方雲集' }] };
+  const add = { id: 'cf_new', name: '咖哩鍋貼', packId: 'pk_a', brand: '八方雲集', perServing: { kcal: 60 } };
+  const fix = { id: 'cf_fix', name: '鍋貼', packId: 'pk_a', brand: '八方雲集', replaces: 'pf_1', perServing: { kcal: 55 } };
+  const loose = { id: 'cf_x', name: '堅果' };
+  const orphan = { id: 'cf_o', name: '舊店', packId: 'pk_gone' };
+  const [view] = packsWithMine([pk], [add, fix, loose, orphan]);
+  assert.deepEqual(view.foods.map(f => f.id), ['pf_2', 'cf_new', 'cf_fix']);
+  assert.equal(view.foods[1], add);   // 同一個物件：修改、記錄都照我的食物
+  assert.equal(pk.foods.length, 2);   // 原本的資料庫不動
+  assert.deepEqual(looseMine([add, fix, loose, orphan], [pk]).map(f => f.id), ['cf_x', 'cf_o']);
+  assert.equal(packsWithMine([pk], [loose])[0], pk);
+});
+test('歸到資料庫：名稱拆成品項＋規格；沒填店家就留原本的', () => {
+  assert.deepEqual(packFields({ name: '珍珠奶茶(大杯/微糖)' }, { packId: 'pk_a', brand: ' 50嵐 ' }), { packId: 'pk_a', base: '珍珠奶茶', variant: '大杯/微糖', brand: '50嵐' });
+  assert.deepEqual(packFields({ name: '鍋貼', brand: '八方雲集' }, { packId: 'pk_a', brand: '' }), { packId: 'pk_a', base: '鍋貼', variant: null, brand: '八方雲集' });
+});
+test('分享資料庫：合成原本的＋自己加的；改過的用原本的 id，不帶 packId、updatedAt', () => {
+  const pk = { id: 'pk_a', name: '外食', edition: '2026', updatedAt: 5, foods: [{ id: 'pf_1', name: '鍋貼', brand: '八方雲集', perServing: { kcal: 50 } }] };
+  const fix = { id: 'cf_fix', name: '鍋貼', base: '鍋貼', packId: 'pk_a', brand: '八方雲集', replaces: 'pf_1', perServing: { kcal: 55 }, updatedAt: 9 };
+  const add = { id: 'cf_new', name: '咖哩鍋貼', base: '咖哩鍋貼', variant: null, packId: 'pk_a', brand: '八方雲集', perServing: { kcal: 60 }, updatedAt: 9 };
+  const file = packFileWithMine(pk, [fix, add], { now: 0 });
+  assert.deepEqual(file.pack, { id: 'pk_a', name: '外食', edition: '2026' });
+  assert.deepEqual(file.foods, [
+    { id: 'pf_1', name: '鍋貼', brand: '八方雲集', perServing: { kcal: 55 }, base: '鍋貼' },
+    { id: 'cf_new', name: '咖哩鍋貼', brand: '八方雲集', perServing: { kcal: 60 }, base: '咖哩鍋貼' }
+  ]);
+  assert.ok(packFromFile(file).pack);   // 別人匯入得了
+});

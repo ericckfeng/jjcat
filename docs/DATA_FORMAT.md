@@ -144,7 +144,9 @@
 { id: 'cf_xxxx', name, serving?: { g?, label? },
   per100g?: { kcal, p?, f?, c?, sugar?, na?, fiber? }, exPer100g?: { grain?, prot?, ... },     // 以克計
   perServing?: { kcal, p?, f?, c?, sugar?, na?, fiber? }, exPerServing?: { ... },               // 以份計
-  aliases?, category?, barcode?, source?, note?, updatedAt }
+  aliases?, category?, barcode?, source?, note?,
+  packId?, brand?, base?, variant?, replaces?,                                                  // 自己加到資料庫的（Rev. 58 起）
+  updatedAt }
 ```
 
 - 兩種形狀二選一：知道一份幾克 → `per100g`（新增頁填的「一份」數字 ×100÷克數，取到小數 2 位），記的時候問幾克、預填 `serving.g`；不知道克數 → `perServing`，記的時候問幾份。和 `tfda_foods.json` 同形狀，`foods.js` 的 `nutrientsFor` 直接能用。
@@ -152,6 +154,12 @@
 - 清單照規則 5 合併（`id`＋`updatedAt`），刪除用 `tomb['customFoods:<id>']`。匯入備份檔和記錄一樣「只加不刪」，不套用備份檔裡的刪除標記。
 - `aliases`、`category`、`barcode`、`source`、`note` 是之後（條碼、機構資料庫）用的，修改時要原樣保留。
 - `source` 目前會出現的值：`'ai-label'`（AI 讀營養標示後存的）、`'label'`（修改記錄時照標示存的）、`'off'`（掃條碼、數字來自 Open Food Facts）、`'lookup'`（待查回填時存的，以份計，一份＝那一筆吃的量）；手動新增的沒有。
+- **自己加到資料庫的**（Rev. 58 起）：資料庫（`foodPacks`）匯入後原樣不動；自己加的、改過的存在我的食物，多標 `packId`（屬於哪個資料庫）、`brand`（店家）、`base`／`variant`（名稱拆成品項＋規格，`packs.js` 的 `splitVariant`）、`replaces`（改的是資料庫原本的哪一樣，原本那一樣在畫面上藏起來）。
+  - 為什麼不直接改 `foodPacks`：資料庫是整包比 `updatedAt` 合併，兩台裝置各加一樣會有一邊不見；我的食物是一樣一樣合併，各自加的都會留著。
+  - 畫面用 `packsWithMine(foodPacks, customFoods)`：資料庫的食物＝原本的（拿掉被 `replaces` 的）＋這些；我的食物清單只列 `looseMine`（沒有 `packId`，或 `packId` 的資料庫已經刪掉的）。
+  - 移到資料庫／移回我的食物：同一個物件加上／拿掉 `packId`、`replaces`、`base`、`variant`，`id` 不變，記錄的 `customFoodId`、套餐都不受影響。記錄另外帶 `src`／`srcName`（資料庫）。
+  - 分享資料庫：`packFileWithMine` 合成原本的＋自己加的；改過的用原本那一樣的 `id`。
+  - 自己新建的資料庫：`foodPacks` 裡 `{ id: 'pk_…', name, org: '自己建的', foods: [], updatedAt }`，食物全部在我的食物裡。
 - `barcode`（第 5 步起會寫）：商品條碼，只有數字（8～14 碼）。掃條碼時先比對我的食物、再比對食物資料庫的 `barcode`；UPC-A（12 碼）和前面補 0 的 EAN-13 算同一個（`js/barcode.js` 的 `sameBarcode`）。同一個條碼只能給一樣我的食物。
 
 ### Combo（套餐，最上層 `combos`，第 3 步起）
@@ -224,6 +232,7 @@
 | v3（Rev. 45，第 1 步） | 2026-11-21 | 最上層新增 `customFoods`（我的食物），「常吃的」`quickItems` 停用（不顯示、不新增，資料保留）。記錄新增 `customFoodId`、`servings`、`fiber`。`tfda_foods.json` 加回 `fiber`。**發佈時用 `python3 scripts/bump.py --min-rev`**，把 `DATA_MIN_REV` 調成這一版：還沒更新的 App 會暫停同步、提示更新。 |
 | v3（Rev. 47，第 3 步） | 2026-11-21 | 最上層新增 `combos`（套餐），記錄新增選填 `comboId`。**沒有調 `DATA_MIN_REV`**：Rev. 39 起的 App 都會原樣保留、照規則合併看不懂的最上層清單，`DATA_MIN_REV` 已經是 45。樣本：`backup-v3-combos.json`。 |
 | v3（Rev. 47，第 4 步） | 2026-11-21 | 最上層新增 `foodPacks`（食物資料庫）；記錄新增選填 `src`、`srcName`、`packFoodId`；套餐的品項可以有 `src`＋`packFoodId`。沒有調 `DATA_MIN_REV`（理由同套餐）。樣本：`backup-v3-foodpacks.json`。 |
+| v3（Rev. 58） | 2026-11-24 | 我的食物新增選填 `packId`、`brand`、`base`、`variant`、`replaces`（自己加到資料庫的、改過資料庫原本的）；可以自己新建空的資料庫（`foods: []`）。**發佈時用 `python3 scripts/bump.py --min-rev`**（使用者決定）：舊版會把這些食物列在我的食物清單裡、看起來亂，所以讓還沒更新的裝置暫停同步、提示更新。樣本：`backup-v3-pack-additions.json`。 |
 | v3（Rev. 52） | 2026-11-22 | 每日欄位新增 `steps`（走路步數）、`targets.steps`（每天步數下限）；每日 CSV 最後加一欄「步數」。`meta.badgesSeen`（小成就）。都是舊版會原樣保留的欄位，沒有調 `DATA_MIN_REV`。 |
 | v3（App v23） | 2026-11-19 | 每日欄位新增 `smm`（骨骼肌）；`targets.bodyFat`（目標體脂率）；`targets.calc.bmrSource` 可為 `ffm`。每日 CSV 最後再加一欄骨骼肌。 |
 | v3（App v24） | 2026-11-19 | 每日欄位新增 `vfl`、`pa`、`ecw`。每日 CSV 最後加三欄。 |

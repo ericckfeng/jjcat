@@ -143,6 +143,17 @@ export function readFilledCsv(text) {
   return { items, error: items.length ? '' : '表格裡沒有填好熱量的列' };
 }
 
+// 回填的一列 → 存成我的食物的表單（myfoods.js 的 customFoodFromForm 吃的格式）。
+// 一份＝這一筆吃的量（份量寫「拳頭 1/2 × 2」這種，下次吃一樣多就選 1 份）。
+// 沒有「查到的名稱」不存：記錄的名字多半是「午餐拍照待查」，存進去之後認不出是什麼
+export function lookupMyFoodForm(row, lk) {
+  const name = String((row && row.name) || '').trim();
+  if (!name || !(row.kcal >= 0)) return null;
+  const form = { name, servingG: '', servingLabel: sizeText(lk) || '1 份', kcal: row.kcal, p: '', f: '', c: '', ex: {} };
+  ['p', 'f', 'c'].forEach(k => { if (row[k] != null) form[k] = row[k]; });
+  return form;
+}
+
 // 給 AI 的說明：連同待查表和照片一起貼給 ChatGPT／Gemini
 export const AI_LOOKUP_PROMPT = [
   '附件是我的飲食「待查表」（CSV）和照片，照片檔名開頭就是表格的「編號」。',

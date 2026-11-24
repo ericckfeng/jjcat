@@ -20,7 +20,7 @@ import { toCsv } from './lookup.js';
 import { normalizeBarcode, checkDigitOk, findByBarcode, offUrl, offToForm } from './barcode.js';
 import { computeBadges, badgesToShow, newBadges, remainText } from './achievements.js';
 import { comboFromCart, resolveCombo, comboTotals, comboSummary, searchCombos, sortCombos } from './combos.js';
-import { HAND_REFS, AMOUNTS, LOOKUP_CATS, lookupCat, cleanAmount, amountText, sizeText, estimateLookup, buildLookupCsv, readFilledCsv, AI_LOOKUP_PROMPT } from './lookup.js';
+import { HAND_REFS, AMOUNTS, LOOKUP_CATS, lookupCat, cleanAmount, amountText, sizeText, estimateLookup, buildLookupCsv, readFilledCsv, lookupMyFoodForm, AI_LOOKUP_PROMPT } from './lookup.js';
 import { partyTemplate, startCounts, partyEntries, partyTotals } from './party.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros } from './bank.js';
@@ -1352,7 +1352,20 @@ function importLookup() {
   items.forEach(row => { const hit = findEntry(row.id); if (hit) found.push({ row, ...hit }); else missing.push(row.id); });
   if (!found.length) { setBox('lookupNote', 'err', '表格裡的編號都對不到這台的記錄（可能已經刪掉了）。'); return; }
   const list = found.map(({ row, it }) => '・' + (row.name || it.name) + '：' + (it.pending ? '' : '（已經查過）') + it.kcal + ' → ' + row.kcal + ' 大卡').join('\n');
-  openConfirm('回填 ' + found.length + ' 筆', list + (missing.length ? '\n\n另外 ' + missing.length + ' 筆對不到記錄，會略過。' : ''), () => {
+  // 也存到我的食物：要有「查到的名稱」，我的食物裡已經有同名的就不存
+  const mine = [];
+  if ($('lookupSaveMineCheck').checked) {
+    found.forEach(({ row, it }) => {
+      const form = lookupMyFoodForm(row, it.lookup);
+      if (form && !customFoods().some(f => f.name === form.name) && !mine.some(m => m.name === form.name)) mine.push(form);
+    });
+  }
+  const mineText = mine.length ? '\n\n也存到我的食物（' + mine.length + ' 樣）：' + mine.map(m => m.name).join('、') : '';
+  openConfirm('回填 ' + found.length + ' 筆', list + mineText + (missing.length ? '\n\n另外 ' + missing.length + ' 筆對不到記錄，會略過。' : ''), () => {
+    mine.forEach(form => {
+      const { food } = customFoodFromForm({ ...form, source: 'lookup' }, { id: uid('cf'), now: now() });
+      if (food) customFoods().unshift(food);
+    });
     found.forEach(({ row, it }) => {
       Object.assign(it, { kcal: row.kcal, multiplier: 1, pending: false, updatedAt: now() });
       if (row.name) it.name = row.name;
@@ -1363,7 +1376,7 @@ function importLookup() {
     renderAll();
     renderLookup();
     $('lookupPaste').value = '';
-    setBox('lookupNote', 'ok', '已回填 ' + found.length + ' 筆' + (missing.length ? '，' + missing.length + ' 筆對不到記錄' : '') + '。');
+    setBox('lookupNote', 'ok', '已回填 ' + found.length + ' 筆' + (missing.length ? '，' + missing.length + ' 筆對不到記錄' : '') + '。' + (mine.length ? '\n也存了 ' + mine.length + ' 樣到我的食物，下次吃一樣的直接選。' : ''));
   }, '回填');
 }
 

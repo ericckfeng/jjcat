@@ -525,6 +525,10 @@
         <button type="button" id="lookupPromptBtn" class="btn-secondary w-full">📋 複製給 AI 的說明</button>
         <textarea id="lookupPaste" rows="5" class="field font-mono text-base" placeholder="把填好的表格貼在這裡（AI 回的文字整段貼上就可以）"></textarea>
         <input id="lookupFileInput" type="file" accept=".csv,text/csv,text/plain" class="hidden" />
+        <label class="flex items-center gap-2.5 text-base text-stone-700 cursor-pointer select-none">
+          <input id="lookupSaveMineCheck" type="checkbox" class="big-check" checked />
+          查到的也存到「我的食物」（下次吃一樣的直接選）
+        </label>
         <div class="grid grid-cols-2 gap-2">
           <button type="button" id="lookupFileBtn" class="btn-secondary">選檔案</button>
           <button type="button" id="lookupImportBtn" class="btn-primary">📥 回填</button>

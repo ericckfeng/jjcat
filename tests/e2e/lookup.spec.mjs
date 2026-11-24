@@ -130,15 +130,47 @@ test('待查表：匯出表格＋照片；AI 填好的整段貼回來，確認�
   await page.click('#lookupImportBtn');
   await expect(page.locator('#confirmModal')).toContainText('回填 2 筆');
   await expect(page.locator('#confirmModal')).toContainText('另外 1 筆對不到記錄');
+  await expect(page.locator('#confirmModal')).toContainText('也存到我的食物（2 樣）：炸春捲、滷肉飯');
   await page.click('#confirmOkBtn');
   await expect(page.locator('#lookupNote')).toContainText('已回填 2 筆');
+  await expect(page.locator('#lookupNote')).toContainText('也存了 2 樣到我的食物');
   await expect(page.locator('#lookupList')).toContainText('沒有待查的記錄了');
   const s = await appState(page);
   const all = Object.values(s.logs).flat();
   expect(all.find(i => i.id === 'item_y')).toMatchObject({ name: '炸春捲', kcal: 320, p: 6, f: 18, c: 33, pending: false, ex: null, lookup: { cat: 'fried' } });
   expect(all.find(i => i.id === 'item_t')).toMatchObject({ name: '滷肉飯', kcal: 520, pending: false, hasPhoto: true });
+  // 查到的也存成我的食物：以份計，一份＝那一筆吃的量
+  expect(s.customFoods.find(f => f.name === '炸春捲')).toMatchObject({ serving: { label: '拳頭 1/3 × 2' }, perServing: { kcal: 320, p: 6, f: 18, c: 33 }, source: 'lookup' });
+  expect(s.customFoods.find(f => f.name === '滷肉飯')).toMatchObject({ perServing: { kcal: 520 }, source: 'lookup' });
   await page.goBack();
   await expect(page.locator('#lookupTile')).toBeHidden();
+});
+
+test('待查表回填：取消勾「也存到我的食物」就不存；我的食物已經有同名的不重複存', async ({ page }) => {
+  await seed(page);
+  await openApp(page);
+  await page.click('#lookupTile');
+  const head = '編號,日期,餐別,名稱,大小,類別,目前粗估(大卡),照片,查到的名稱,熱量(大卡),蛋白質(克),脂肪(克),碳水(克),備註';
+  await page.uncheck('#lookupSaveMineCheck');
+  await page.fill('#lookupPaste', [head, 'item_y,,,,,,,,炸春捲,320,,,,'].join('\n'));
+  await page.click('#lookupImportBtn');
+  await expect(page.locator('#confirmModal')).toContainText('320');
+  await expect(page.locator('#confirmModal')).not.toContainText('也存到我的食物');
+  await page.click('#confirmOkBtn');
+  await expect(page.locator('#confirmModal')).toBeHidden();
+  expect((await appState(page)).customFoods || []).toEqual([]);
+  await page.check('#lookupSaveMineCheck');
+  await page.fill('#lookupPaste', [head, 'item_y,,,,,,,,炸春捲,300,,,,', 'item_t,,,,,,,,炸春捲,310,,,,'].join('\n'));
+  await page.click('#lookupImportBtn');
+  await expect(page.locator('#confirmModal')).toContainText('也存到我的食物（1 樣）：炸春捲');
+  await page.click('#confirmOkBtn');
+  await expect(page.locator('#confirmModal')).toBeHidden();
+  await page.fill('#lookupPaste', [head, 'item_y,,,,,,,,炸春捲,290,,,,'].join('\n'));
+  await page.click('#lookupImportBtn');
+  await expect(page.locator('#confirmModal')).toContainText('290');
+  await expect(page.locator('#confirmModal')).not.toContainText('也存到我的食物');
+  await page.click('#confirmOkBtn');
+  expect((await appState(page)).customFoods.map(f => f.name)).toEqual(['炸春捲']);
 });
 
 test('待查表：不是待查表的內容會說明原因', async ({ page }) => {

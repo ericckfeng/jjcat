@@ -151,7 +151,7 @@
 - 沒填的營養素不寫（不是 0）。`na` 單位 mg，其他 g；`fiber`＝膳食纖維。
 - 清單照規則 5 合併（`id`＋`updatedAt`），刪除用 `tomb['customFoods:<id>']`。匯入備份檔和記錄一樣「只加不刪」，不套用備份檔裡的刪除標記。
 - `aliases`、`category`、`barcode`、`source`、`note` 是之後（條碼、機構資料庫）用的，修改時要原樣保留。
-- `source` 目前會出現的值：`'ai-label'`（AI 讀營養標示後存的）、`'label'`（修改記錄時照標示存的）、`'off'`（掃條碼、數字來自 Open Food Facts）；手動新增的沒有。
+- `source` 目前會出現的值：`'ai-label'`（AI 讀營養標示後存的）、`'label'`（修改記錄時照標示存的）、`'off'`（掃條碼、數字來自 Open Food Facts）、`'lookup'`（待查回填時存的，以份計，一份＝那一筆吃的量）；手動新增的沒有。
 - `barcode`（第 5 步起會寫）：商品條碼，只有數字（8～14 碼）。掃條碼時先比對我的食物、再比對食物資料庫的 `barcode`；UPC-A（12 碼）和前面補 0 的 EAN-13 算同一個（`js/barcode.js` 的 `sameBarcode`）。同一個條碼只能給一樣我的食物。
 
 ### Combo（套餐，最上層 `combos`，第 3 步起）

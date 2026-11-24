@@ -1,7 +1,7 @@
 // 待查：手掌法粗估、待查表 CSV 匯出與回填（js/lookup.js）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateLookup, sizeText, amountText, cleanAmount, buildLookupCsv, parseCsv, readFilledCsv, CSV_HEAD } from '../../js/lookup.js';
+import { estimateLookup, sizeText, amountText, cleanAmount, buildLookupCsv, parseCsv, readFilledCsv, lookupMyFoodForm, CSV_HEAD } from '../../js/lookup.js';
 
 test('粗估：飯 1 拳頭＝1 碗＝4 份全穀 280 大卡；半個拳頭 × 2 也一樣', () => {
   assert.deepEqual(estimateLookup({ cat: 'grain', ref: 'fist', amt: 1 }), { kcal: 280, p: 8, c: 60, f: 0, ex: { grain: 4 } });
@@ -60,4 +60,12 @@ test('回填：不是待查表就說明原因', () => {
   assert.match(readFilledCsv('a,b\n1,2').error, /編號/);
   assert.match(readFilledCsv('編號,名稱\nitem_a,x').error, /熱量/);
   assert.match(readFilledCsv('編號,熱量(大卡)\nitem_a,').error, /沒有填好/);
+});
+
+test('回填的一列存成我的食物：以份計、一份＝這一筆的量；沒有查到的名稱不存', () => {
+  assert.deepEqual(lookupMyFoodForm({ id: 'e1', name: '燒賣', kcal: 240, p: 10, f: 14 }, { cat: 'prot', ref: 'thumb', amt: 1, n: 4 }),
+    { name: '燒賣', servingG: '', servingLabel: sizeText({ cat: 'prot', ref: 'thumb', amt: 1, n: 4 }), kcal: 240, p: 10, f: 14, c: '', ex: {} });
+  assert.equal(lookupMyFoodForm({ id: 'e2', name: '滷肉飯', kcal: 500 }, null).servingLabel, '1 份');
+  assert.equal(lookupMyFoodForm({ id: 'e3', kcal: 300 }, null), null);
+  assert.equal(lookupMyFoodForm({ id: 'e4', name: '  ', kcal: 300 }, null), null);
 });

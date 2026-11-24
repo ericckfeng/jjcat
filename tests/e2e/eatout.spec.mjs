@@ -73,7 +73,7 @@ test('選麥當勞 → 午餐建議 630 大卡內 → 第 1 組放進購物車 �
   expect(errors).toEqual([]);
 });
 
-test('再打開記得上次的店家；今天吃得差不多了會說明；沒有店家資料時不出現按鈕', async ({ page }) => {
+test('再打開記得上次的店家；今天吃得差不多了只建議無糖茶、再少就說明', async ({ page }) => {
   await seed(page, { breakfast: 1700 });
   await openApp(page);
   await page.click('[data-food-open=all] >> nth=0');
@@ -81,11 +81,24 @@ test('再打開記得上次的店家；今天吃得差不多了會說明；沒�
   await page.click('#eatoutOpenBtn');
   await page.click('[data-eo-brand="台灣麥當勞"]');
   await expect(page.locator('#eoBudgetText')).toContainText('晚餐建議 100 大卡以內');
-  await expect(page.locator('#eoList')).toContainText('這家店的東西都超過 100 大卡');
+  // 主餐都放不下：只建議喝無糖綠茶
+  await expect(page.locator('#eoList > div')).toHaveCount(1);
+  await expect(page.locator('#eoList')).toContainText('無糖綠茶');
+  await page.click('[data-eo-adj="-50"]');
+  await page.click('[data-eo-adj="-50"]');
+  await expect(page.locator('#eoBudgetText')).toContainText('今天的熱量差不多用完了');
   await page.goBack();
   await page.click('#eatoutOpenBtn');
   await expect(page.locator('#eoPlan')).toBeVisible();
   await expect(page.locator('#eoBrand')).toHaveText('台灣麥當勞');
   await page.click('#eoChange');
   await expect(page.locator('#eoBrands [data-eo-brand]').first()).toContainText('最近去過');
+});
+
+test('沒有店家資料的食物資料庫：查食物頁不出現「在外面吃，幫我配」', async ({ page }) => {
+  await seed(page, { packs: [{ ...PACK, foods: PACK.foods.map(({ brand, ...f }) => f) }] });
+  await openApp(page);
+  await page.click('[data-food-open=all] >> nth=0');
+  await expect(page.locator('#foodSearch')).toBeVisible();
+  await expect(page.locator('#eatoutOpenBtn')).toBeHidden();
 });

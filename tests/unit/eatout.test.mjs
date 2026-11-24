@@ -63,7 +63,9 @@ test('看不出主餐的店（飲料店）：一樣或兩樣；預算太少就�
     { name: '四季春(無糖)', brand: '50嵐', category: '純茶', perServing: { kcal: 0 } }
   ];
   const out = suggestMeals(tea, 400);
-  assert.equal(out[0].items[0].food.name, '珍珠奶茶(大杯/無糖)');
+  assert.ok(out.every(c => c.items.length === 1));   // 不會建議兩杯
+  assert.deepEqual(out.map(c => c.items[0].food.name), ['四季春(無糖)', '珍珠奶茶(大杯/無糖)']);   // 熱量、糖少的在前；400 大卡放不下正常糖
+  assert.equal(roleOf({ name: '四季春+珍波椰(大杯/無糖)', category: '找口感/特調' }), 'drink');
   assert.ok(out.every(c => c.total.kcal <= 400));
-  assert.deepEqual(suggestMeals(tea, 0), []);
+  assert.deepEqual(suggestMeals(tea, 0).map(c => c.total.kcal), [0]);   // 今天吃完了：飲料店還是可以喝無糖茶
 });

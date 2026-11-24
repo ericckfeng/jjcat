@@ -6,7 +6,7 @@
 
 const ROLE_RULES = [
   ['sauce', /醬|調味|糖包|糖漿|奶精|奶油球|沾料|佐料|加料/],
-  ['drink', /飲|茶|咖啡|拿鐵|奶昔|可樂|汽水|果汁|豆漿|牛奶|鮮奶|冰沙|氣泡|啤酒|水$/],
+  ['drink', /[大中小]杯|無糖|微糖|半糖|少糖|正常糖|飲|茶|咖啡|拿鐵|奶昔|可樂|汽水|果汁|豆漿|牛奶|鮮奶|冰沙|氣泡|啤酒|水$/],
   ['main', /主餐|主食|正餐|套餐|飯|麵|粥|堡|便當|披薩|比薩|三明治|潛艇|捲餅|吐司|貝果|義大利|焗|丼|餃|拉麵|烏龍|河粉|米粉/]
 ];
 // 分類欄（例如「主餐」「奶茶」「醬料」）先看，看不出來再看名稱
@@ -83,7 +83,10 @@ export function suggestMeals(foods, budget, { n = 3, top = 15 } = {}) {
     const t = total(items);
     // 外食多半會點飲料：配無糖、沒熱量的飲料加一點分，讓它排在只點主餐的前面
     const zeroDrink = items.some(u => u.role === 'drink' && (Number(u.n.kcal) || 0) <= 10);
-    if (t.kcal <= budget && t.kcal > 0) combos.push({ items, total: t, s: score(t, budget) + (zeroDrink ? 2 : 0) });
+    // 沒有主餐的店（飲料店、點心店）是額外吃的：熱量、糖越少越好
+    const s = mains.length ? score(t, budget) + (zeroDrink ? 2 : 0) : (t.p || 0) - (t.sugar || 0) * 0.8 - t.kcal / 50;
+    // 有主餐的店，0 大卡的（只有無糖茶）不算一餐；飲料店的無糖茶正是最好的選擇
+    if (t.kcal <= budget && (t.kcal > 0 || !mains.length)) combos.push({ items, total: t, s });
   };
   if (mains.length) {
     mains.forEach(m => {
@@ -92,22 +95,28 @@ export function suggestMeals(foods, budget, { n = 3, top = 15 } = {}) {
       drinks.forEach(d => { tryAdd([m, d]); sides.forEach(s => tryAdd([m, s, d])); });
     });
   } else {
-    // 看不出主餐（例如飲料店、點心店）：一樣或兩樣
-    const all = [...sides, ...drinks];
-    all.forEach((a, i) => { tryAdd([a]); all.slice(i + 1).forEach(b => tryAdd([a, b])); });
+    // 看不出主餐（例如飲料店、點心店）：一樣，或一樣點心配一杯飲料（不會建議兩杯飲料）
+    sides.forEach(a => { tryAdd([a]); drinks.forEach(d => tryAdd([a, d])); });
+    drinks.forEach(d => tryAdd([d]));
   }
   combos.sort((a, b) => b.s - a.s);
-  // 三組的第一樣（主餐）不同，才有得選
-  const out = [];
-  const used = new Set();
-  for (const c of combos) {
-    const key = c.items[0].food;
-    if (used.has(key)) continue;
-    used.add(key);
-    out.push({ items: c.items.map(({ food, amount, byServing, role }) => ({ food, amount, byServing, role })), total: c.total, notes: notesOf(c.total, c.items) });
-    if (out.length >= n) break;
+  // 三組的第一樣（主餐）不同，才有得選；先挑配餐也不重複的，不夠再放寬（飲料可以重複，無糖茶本來就適合每一組）
+  const chosen = [];
+  const mainsUsed = new Set();
+  const sidesUsed = new Set();
+  for (const strict of [true, false]) {
+    for (const c of combos) {
+      if (chosen.length >= n) break;
+      if (chosen.includes(c) || mainsUsed.has(c.items[0].food)) continue;
+      const others = c.items.slice(1).filter(u => u.role !== 'drink').map(u => u.food);
+      if (strict && others.some(f => sidesUsed.has(f))) continue;
+      chosen.push(c);
+      mainsUsed.add(c.items[0].food);
+      others.forEach(f => sidesUsed.add(f));
+    }
   }
-  return out;
+  return chosen.sort((a, b) => b.s - a.s)
+    .map(c => ({ items: c.items.map(({ food, amount, byServing, role }) => ({ food, amount, byServing, role })), total: c.total, notes: notesOf(c.total, c.items) }));
 }
 
 function notesOf(t, items) {

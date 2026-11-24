@@ -3646,7 +3646,7 @@ function renderEatoutPlan() {
   $('eoBudgetText').textContent = b.budget > 0
     ? label + '建議 ' + b.budget + ' 大卡以內（今天目標 ' + b.target + '，已經吃了 ' + b.eaten + '）'
     : '今天的熱量差不多用完了（目標 ' + b.target + '，已經吃了 ' + b.eaten + '）。真的餓，選無糖飲料或清淡的，也可以按「多 50 大卡」看看。';
-  eo.list = b.budget > 0 ? suggestMeals(eatoutFoods(), b.budget) : [];
+  eo.list = suggestMeals(eatoutFoods(), b.budget);   // 吃完了也算：飲料店還有無糖茶
   const line = (t) => [['蛋白質', t.p], ['碳水', t.c], ['脂肪', t.f]].filter(x => x[1] != null).map(x => x[0] + ' ' + x[1] + ' 克').join('・');
   $('eoList').innerHTML = eo.list.length ? eo.list.map((c, i) => `<div class="rounded-2xl border border-stone-200 bg-white p-3 space-y-2">
       <div class="text-lg font-bold text-stone-900">第 ${i + 1} 組・<span class="tabular-nums">${c.total.kcal}</span> 大卡</div>

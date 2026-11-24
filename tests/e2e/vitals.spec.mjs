@@ -97,3 +97,43 @@ test('血壓：記好幾次、不合理會說明、很高會提醒、可以刪�
   expect(await page.evaluate(() => window.__dietApp.lastReportText())).toContain('血糖：空腹平均 108（1 次）、飯後 2 小時平均 62（1 次）');
   expect(errors).toEqual([]);
 });
+
+test('趨勢：血壓、血糖有記錄就畫圖（好幾次取平均）；功能都關、也沒記錄就整張不出現；關掉睡眠、體重的卡片也收起來', async ({ page }) => {
+  const errors = [];
+  await page.addInitScript(() => {
+    if (localStorage.getItem('diet_tracker_v2')) return;
+    const ymd = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+    localStorage.setItem('diet_tracker_v2', JSON.stringify({
+      quickItems: [], tomb: {}, logs: {}, meta: { welcomed: true },
+      days: {
+        [ymd(1)]: { bp: [{ id: 'a', sys: 130, dia: 85 }, { id: 'b', sys: 126, dia: 81 }], glucose: [{ id: 'g', kind: 'fasting', v: 104 }] },
+        [ymd(0)]: { bp: [{ id: 'c', sys: 140, dia: 90 }], glucose: [{ id: 'h', kind: 'after', v: 165 }] }
+      },
+      profile: { features: { sleep: false, weight: false } }, profileAt: 1
+    }));
+  });
+  await openApp(page, { errors });
+  await page.click('.mobile-nav-tab[data-tab=trends]');
+  await expect(page.locator('#vitalsCard')).toBeVisible();
+  await expect(page.locator('#bpChartWrap')).toBeVisible();
+  await expect(page.locator('#bpStats')).toContainText('132/85');   // 3 次平均
+  await expect(page.locator('#bpStats')).toContainText('量了 3 次（2 天）');
+  await expect(page.locator('#bpStats')).toContainText('140/90');
+  await expect(page.locator('#glStats')).toContainText('空腹平均');
+  await expect(page.locator('#glStats')).toContainText('飯後 2 小時平均');
+  // 圖真的畫出來了（測試用的是真的 Chart.js）
+  expect(await page.evaluate(() => typeof Chart !== 'undefined' && Boolean(Chart.getChart('bpChart')) && Boolean(Chart.getChart('glChart')))).toBe(true);
+  expect(await page.evaluate(() => Chart.getChart('bpChart').data.datasets[0].data.slice(-2))).toEqual([128, 140]);
+  await expect(page.locator('#sleepCard')).toBeHidden();
+  await expect(page.locator('#weightCard')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('趨勢：沒開血壓血糖、也沒記錄：看不到血壓血糖卡片；睡眠、體重照常', async ({ page }) => {
+  await seed(page);
+  await openApp(page);
+  await page.click('.mobile-nav-tab[data-tab=trends]');
+  await expect(page.locator('#vitalsCard')).toBeHidden();
+  await expect(page.locator('#sleepCard')).toBeVisible();
+  await expect(page.locator('#weightCard')).toBeVisible();
+});

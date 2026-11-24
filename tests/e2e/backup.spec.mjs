@@ -25,8 +25,9 @@ test('從沒備份過：提醒資料只在這支手機；按「晚點」就收�
   await page.click('#snoozeBackupBtn');
   await expect(page.locator('#backupBanner')).toBeHidden();
   await expect(page.locator('#toastMsg')).toContainText('3 天後再提醒你');
-  const until = await page.evaluate(() => window.__dietApp.state.meta.backupSnoozeUntil);
-  expect(until - Date.now()).toBeGreaterThan(2.9 * DAY);
+  // 用網頁裡的時間比（測試把網頁時鐘固定在今天中午，和電腦現在的時間不同）
+  const left = await page.evaluate(() => window.__dietApp.state.meta.backupSnoozeUntil - Date.now());
+  expect(left).toBeGreaterThan(2.9 * DAY);
   await page.reload();
   await page.waitForFunction(() => window.__dietApp);
   await expect(page.locator('#backupBanner')).toBeHidden();

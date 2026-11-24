@@ -56,3 +56,18 @@ export function vitalsSummary(days, dates) {
 // 一天的寫法（CSV、明細用）
 export const bpText = (list) => (list || []).map(r => (r.t ? r.t + ' ' : '') + r.sys + '/' + r.dia + (r.pulse ? ' 脈搏' + r.pulse : '')).join('；');
 export const glucoseText = (list) => (list || []).map(r => (r.t ? r.t + ' ' : '') + glucoseKindLabel(r.kind) + ' ' + r.v).join('；');
+
+// 趨勢圖用：每天一個點（那天量了好幾次就平均），沒量的是 null（圖上斷開）
+//   bp：{ sys: [], dia: [] }；glucose：{ fasting: [], after: [], ... }（只有期間內量過的種類）
+export function dailyVitals(days, dates) {
+  const avg = (a) => (a.length ? Math.round(a.reduce((s, x) => s + x, 0) / a.length) : null);
+  const list = (d, k) => (Array.isArray(days && days[d] && days[d][k]) ? days[d][k] : []);
+  const sys = dates.map(d => avg(list(d, 'bp').filter(r => r && r.sys).map(r => r.sys)));
+  const dia = dates.map(d => avg(list(d, 'bp').filter(r => r && r.dia).map(r => r.dia)));
+  const glucose = {};
+  GLUCOSE_KINDS.forEach(([k]) => {
+    const series = dates.map(d => avg(list(d, 'glucose').filter(r => r && r.kind === k && r.v).map(r => r.v)));
+    if (series.some(v => v != null)) glucose[k] = series;
+  });
+  return { bp: { sys, dia }, glucose, hasBp: sys.some(v => v != null), hasGlucose: Object.keys(glucose).length > 0 };
+}

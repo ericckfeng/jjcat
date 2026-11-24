@@ -30,7 +30,7 @@ import { wallDays, wallPhotoCount } from './photowall.js';
 import { splitAdvice, activeAdvice, todaysAdvice, toggleDone } from './advice.js';
 import { FEATURES, featureOn, featuresOff, BADGE_FEATURE } from './features.js';
 import { backupReminder, backupText, SNOOZE_DAYS } from './backup.js';
-import { GLUCOSE_KINDS, glucoseKindLabel, bpReading, glucoseReading, bpAlert, glucoseAlert, bpText, glucoseText } from './vitals.js';
+import { GLUCOSE_KINDS, glucoseKindLabel, bpReading, glucoseReading, bpAlert, glucoseAlert, bpText, glucoseText, vitalsSummary, dailyVitals } from './vitals.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
@@ -1682,7 +1682,10 @@ function renderTrends() {
   // 身體數據、睡眠的文字摘要不靠 Chart.js；圖表函式自己會檢查 Chart 在不在
   const labels = dates.map(fmtMD);
   renderBodyChart(dates, labels);
+  // 功能開關關掉體重、這段期間也沒量：身體數據卡片不出現
+  $('weightCard').classList.toggle('hidden', !featureOn(state.profile, 'weight') && !dates.some(d => num((state.days[d] || {}).weight) != null));
   renderSleepChart(dates, labels);
+  renderVitalsCharts(dates, labels);
   if (typeof Chart !== 'undefined') {
     const values = s.totals.map(t => t.kcal);
     if (kcalChart) kcalChart.destroy();
@@ -1720,10 +1723,62 @@ function renderTrends() {
   $('trendNutr').innerHTML = nh;
 }
 
+// 血壓、血糖：功能開關有打開、或這段期間有記錄才出現（關掉的人看不到空的圖）
+let bpChart = null, glChart = null;
+const GL_COLORS = { fasting: '#0ea5e9', before: '#14b8a6', after: '#f97316', bedtime: '#8b5cf6', other: '#78716c' };
+function renderVitalsCharts(dates, labels) {
+  const v = dailyVitals(state.days, dates);
+  const bpOn = featureOn(state.profile, 'bp') || v.hasBp;
+  const glOn = featureOn(state.profile, 'glucose') || v.hasGlucose;
+  $('vitalsCard').classList.toggle('hidden', !bpOn && !glOn);
+  $('bpBlock').classList.toggle('hidden', !bpOn);
+  $('glBlock').classList.toggle('hidden', !glOn);
+  $('bpEmpty').classList.toggle('hidden', v.hasBp);
+  $('bpChartWrap').classList.toggle('hidden', !v.hasBp);
+  $('glEmpty').classList.toggle('hidden', v.hasGlucose);
+  $('glChartWrap').classList.toggle('hidden', !v.hasGlucose);
+  const sum = vitalsSummary(state.days, dates);
+  const bpDays = v.bp.sys.filter(x => x != null).length;
+  $('bpStats').innerHTML = sum.bp ? [
+    statTile('平均', sum.bp.sys + '/' + sum.bp.dia, '量了 ' + sum.bp.n + ' 次（' + bpDays + ' 天）'),
+    statTile('最高', sum.bp.max.sys + '/' + sum.bp.max.dia, '')
+  ].join('') : '';
+  $('glStats').innerHTML = sum.glucose.map(g => statTile(g.label + '平均', String(g.avg), g.n + ' 次' + (g.min !== g.max ? '・' + g.min + '～' + g.max : ''))).join('');
+  if (bpChart) { bpChart.destroy(); bpChart = null; }
+  if (glChart) { glChart.destroy(); glChart = null; }
+  if (typeof Chart === 'undefined') return;
+  const opts = (y) => ({
+    responsive: true, maintainAspectRatio: false, animation: false, spanGaps: true,
+    plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+    scales: { y: { ...y, grid: { color: '#f5f5f4' } }, x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } } }
+  });
+  const ref = (label, value) => ({ label, data: Array(dates.length).fill(value), borderColor: '#a8a29e', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0 });
+  if (bpOn && v.hasBp) {
+    bpChart = new Chart($('bpChart').getContext('2d'), {
+      type: 'line',
+      data: { labels, datasets: [
+        { label: '上面（收縮壓）', data: v.bp.sys, borderColor: '#e11d48', backgroundColor: '#e11d48', borderWidth: 2.5, pointRadius: 3 },
+        { label: '下面（舒張壓）', data: v.bp.dia, borderColor: '#2563eb', backgroundColor: '#2563eb', borderWidth: 2.5, pointRadius: 3 },
+        ref('130/80', 130), { ...ref('', 80) }
+      ] },
+      options: { ...opts({ suggestedMin: 60, suggestedMax: 160, title: { display: true, text: 'mmHg' } }), plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, filter: (it) => it.text } } } }
+    });
+  }
+  if (glOn && v.hasGlucose) {
+    glChart = new Chart($('glChart').getContext('2d'), {
+      type: 'line',
+      data: { labels, datasets: Object.entries(v.glucose).map(([k, data]) => ({ label: glucoseKindLabel(k), data, borderColor: GL_COLORS[k], backgroundColor: GL_COLORS[k], borderWidth: 2.5, pointRadius: 3 })) },
+      options: opts({ suggestedMin: 60, suggestedMax: 200 })
+    });
+  }
+}
+
 let sleepChart = null;
 function renderSleepChart(dates, labels) {
   const rows = dates.map(d => daySleep(state.days[d] || {}));
   const has = rows.some(r => r.total > 0);
+  // 功能開關關掉睡眠、這段期間也沒記：整張卡片不出現
+  $('sleepCard').classList.toggle('hidden', !has && !featureOn(state.profile, 'sleep'));
   $('sleepEmpty').classList.toggle('hidden', has);
   $('sleepChartWrap').classList.toggle('hidden', !has);
   if (sleepChart) { sleepChart.destroy(); sleepChart = null; }

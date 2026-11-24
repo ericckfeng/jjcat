@@ -270,6 +270,26 @@
         <div id="sleepStats" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
         <p id="sleepInsight" class="text-sm text-stone-700 leading-relaxed"></p>
       </section>
+      <!-- 血壓、血糖（功能開關有打開、或這段期間有記錄才出現） -->
+      <section id="vitalsCard" class="hidden bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
+        <div class="flex items-baseline justify-between gap-2 flex-wrap">
+          <h2 class="text-base font-bold text-stone-900">血壓・血糖</h2>
+          <span class="text-sm text-stone-500">一天量好幾次的取平均</span>
+        </div>
+        <div id="bpBlock" class="space-y-2">
+          <div class="text-base font-semibold text-stone-800">🩺 血壓</div>
+          <div id="bpEmpty" class="text-sm text-stone-400">這段期間還沒有血壓記錄，可在首頁「血壓」填寫。</div>
+          <div id="bpChartWrap" class="relative h-52 w-full"><canvas id="bpChart"></canvas></div>
+          <div id="bpStats" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+        </div>
+        <div id="glBlock" class="space-y-2">
+          <div class="text-base font-semibold text-stone-800">🩸 血糖（mg/dL）</div>
+          <div id="glEmpty" class="text-sm text-stone-400">這段期間還沒有血糖記錄，可在首頁「血糖」填寫。</div>
+          <div id="glChartWrap" class="relative h-52 w-full"><canvas id="glChart"></canvas></div>
+          <div id="glStats" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+        </div>
+        <p class="text-sm text-stone-500 leading-relaxed">只畫出記錄，不判斷；目標請照醫生說的。</p>
+      </section>
       <section class="bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
         <h2 class="text-sm font-bold text-stone-900">營養素與六大類（有填的日子平均）</h2>
         <div id="trendNutr" class="space-y-3"></div>

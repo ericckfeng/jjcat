@@ -47,3 +47,16 @@ test('期間摘要和一天的寫法', () => {
   assert.equal(bpText(days['2026-11-23'].bp), '07:00 130/85；21:00 120/80 脈搏72');
   assert.equal(glucoseText(days['2026-11-23'].glucose), '空腹 100；飯後 2 小時 160');
 });
+
+import { dailyVitals } from '../../js/vitals.js';
+test('趨勢圖：每天一個點，量好幾次就平均；沒量的是 null；只列量過的血糖種類', () => {
+  const days = {
+    '2026-11-23': { bp: [{ sys: 130, dia: 85 }, { sys: 121, dia: 80 }], glucose: [{ kind: 'fasting', v: 100 }, { kind: 'fasting', v: 111 }] },
+    '2026-11-25': { glucose: [{ kind: 'after', v: 150 }] }
+  };
+  const v = dailyVitals(days, ['2026-11-23', '2026-11-24', '2026-11-25']);
+  assert.deepEqual(v.bp, { sys: [126, null, null], dia: [83, null, null] });
+  assert.deepEqual(v.glucose, { fasting: [106, null, null], after: [null, null, 150] });
+  assert.equal(v.hasBp, true);
+  assert.equal(dailyVitals({}, ['2026-11-23']).hasGlucose, false);
+});

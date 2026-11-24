@@ -192,6 +192,12 @@ textarea.field { min-height: 0; resize: vertical; }
   background: var(--emerald); color: #fff; font-weight: 700; font-size: 1rem; display: flex; align-items: center;
 }
 .pick-row.pick-done { background: #d1fae5; border-color: #34d399; }
+/* 我的食物列右邊的「修改」：和選擇分開，不會誤按 */
+.mine-edit {
+  flex-shrink: 0; width: 4.25rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .15rem;
+  border-radius: 1rem; background: #fff; border: 1px solid var(--stone-200); color: var(--stone-700); font-size: .95rem; font-weight: 700;
+}
+.mine-edit:active { background: var(--stone-100); }
 .pick-row.pick-done .pick-add { background: #047857; }
 
 /* 列印：只印報告 */

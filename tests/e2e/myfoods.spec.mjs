@@ -156,6 +156,45 @@ test('自己輸入：勾「也存到我的食物」——照標示算過的存�
   expect(s.quickItems).toEqual([]);   // 不再寫進舊的常吃清單
 });
 
+test('自己輸入：沒填名稱不能存成我的食物（不會出現「午餐拍照待查」這種名字）', async ({ page }) => {
+  await openApp(page);
+  await page.click('[data-screen=scr-manual]');
+  await page.fill('#foodKcalInput', '300');
+  await page.check('#saveMineCheck');
+  await page.click('#scr-manual .scr-foot button');
+  await expect(page.locator('#toast')).toContainText('請先在最上面填名稱');
+  await expect(page.locator('#scr-manual')).toBeVisible();
+  expect((await appState(page)).customFoods || []).toEqual([]);
+  await page.click('#toastAction');
+  await page.fill('#foodNameInput', '鮭魚飯糰');
+  await page.click('#scr-manual .scr-foot button');
+  await expect(page.locator('#scr-manual')).toBeHidden();
+  expect((await appState(page)).customFoods.map(f => f.name)).toEqual(['鮭魚飯糰']);
+});
+
+test('首頁「我的食物」：每一樣旁邊可以直接修改名稱，改完回到清單（手機特大字不會橫移）', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('diet_tracker_v2')) localStorage.setItem('diet_tracker_v2', JSON.stringify({ quickItems: [], tomb: {}, meta: { welcomed: true, fontSize: 'xl' } }));
+  });
+  await openApp(page);
+  await page.click('[data-food-open=mine] >> nth=0');
+  await page.click('#foodMine [data-mf-new]');
+  await newFood(page, { name: '午餐拍照待查', servingLabel: '1 份', kcal: 450 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await page.click('#foodMine .mine-edit');
+  await expect(page.locator('#myFoodTitle')).toHaveText('⭐ 修改我的食物');
+  await expect(page.locator('#mf-name')).toHaveValue('午餐拍照待查');
+  await page.fill('#mf-name', '雞腿便當');
+  await page.click('#mf-save');
+  await expect(page.locator('#scr-myfood')).toBeHidden();
+  await expect(page.locator('#scr-food')).toBeVisible();
+  await expect(page.locator('#foodMine [data-cf-id]')).toContainText('雞腿便當');
+  const s = await appState(page);
+  expect(s.customFoods.map(f => f.name)).toEqual(['雞腿便當']);
+  expect(s.logs[await todayOf(page)] || []).toEqual([]);   // 修改不會記一筆
+});
+
 test('舊的「常吃的」清單：不顯示，但資料原樣保留、會備份；舊捷徑 ?go=quick 打開我的食物', async ({ page }) => {
   await page.addInitScript(() => {
     if (localStorage.getItem('diet_tracker_v2')) return;

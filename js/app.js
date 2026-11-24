@@ -2946,6 +2946,12 @@ $('addFoodForm').addEventListener('submit', async (e) => {
   }
   if (!Number.isFinite(kcal) || kcal < 0) return;
   const rawName = $('foodNameInput').value.trim();
+  // 沒填名稱會自動叫「午餐拍照待查」：這種名字存進我的食物，之後就認不出是什麼
+  if (!rawName && $('saveMineCheck').checked) {
+    showError('要存到「我的食物」，請先在最上面填名稱，例如「全聯雞胸肉」。\n不想存的話，把「也存到我的食物」取消勾選。');
+    $('foodNameInput').focus();
+    return;
+  }
   const mealLabel = MEAL_META[ui.meal].label;
   const name = rawName || (photos.length ? mealLabel + '拍照待查' : mealLabel + '快記');
   const mult = Number($('portionSelect').value) || 1;
@@ -3069,11 +3075,13 @@ function customFoods() {
 function isMine(food) { return Boolean(food && customFoods().includes(food)); }
 function myFoodRowHTML(f, action) {
   const attr = action === 'edit' ? `data-mf-edit="${esc(f.id)}"` : `data-cf-id="${esc(f.id)}"`;
-  return `<button type="button" ${attr} class="pick-row">
+  const row = `<button type="button" ${attr} class="pick-row${action === 'edit' ? '' : ' min-w-0 flex-1'}">
     <span class="min-w-0 flex-1 text-left"><span class="block text-lg font-semibold text-stone-900 leading-snug break-words">${action === 'edit' ? '' : '<span class="mr-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-sm font-bold align-middle">我的</span>'}${esc(f.name)}</span>
     <span class="block text-base text-emerald-700 font-bold tabular-nums">一份 ${esc(servingText(f))}　${servingKcal(f)} kcal</span></span>
     <span class="pick-add">${action === 'edit' ? '修改' : '選擇 ›'}</span>
   </button>`;
+  // 選食物的地方也能直接修改（名字、數字錯了不用再去找下方分頁）
+  return action === 'edit' ? row : `<div class="flex gap-2 items-stretch">${row}<button type="button" data-mf-edit="${esc(f.id)}" class="mine-edit" aria-label="修改${esc(f.name)}">✏️<span>修改</span></button></div>`;
 }
 // 查食物頁上方：我的食物（「⭐ 我的食物」打開時沒打字就列全部，最常記的在前）
 let foodMode = 'all';

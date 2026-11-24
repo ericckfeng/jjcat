@@ -162,6 +162,16 @@
   - 自己新建的資料庫：`foodPacks` 裡 `{ id: 'pk_…', name, org: '自己建的', foods: [], updatedAt }`，食物全部在我的食物裡。
 - `barcode`（第 5 步起會寫）：商品條碼，只有數字（8～14 碼）。掃條碼時先比對我的食物、再比對食物資料庫的 `barcode`；UPC-A（12 碼）和前面補 0 的 EAN-13 算同一個（`js/barcode.js` 的 `sameBarcode`）。同一個條碼只能給一樣我的食物。
 
+### Advice（營養師的叮嚀，最上層 `advice`，Rev. 59 起）
+
+```
+{ id: 'ad_xxxx', text, from?, date, active, updatedAt }
+```
+
+- `text`：一條叮嚀（使用者從 LINE 貼上、拆成一行一條，`js/advice.js` 的 `splitAdvice`）；`from`：營養師名字（可沒有）；`date`：哪一天說的（只算這天之後的「做到幾天」）；`active: false`＝不用再提醒（不出現在首頁、報告不列，可以恢復）。
+- 每日欄位 `adviceDone`：那天按了「今天做到了」的叮嚀 id 陣列（用 `setDayField`，整個陣列換掉）。報告列出每一條做到幾天（`adviceStats`）。
+- 清單照規則 5 合併，刪除用 `tomb['advice:<id>']`。`meta.adviceFrom`：上次填的營養師名字（只存本機）。
+
 ### Combo（套餐，最上層 `combos`，第 3 步起）
 
 ```
@@ -232,6 +242,7 @@
 | v3（Rev. 45，第 1 步） | 2026-11-21 | 最上層新增 `customFoods`（我的食物），「常吃的」`quickItems` 停用（不顯示、不新增，資料保留）。記錄新增 `customFoodId`、`servings`、`fiber`。`tfda_foods.json` 加回 `fiber`。**發佈時用 `python3 scripts/bump.py --min-rev`**，把 `DATA_MIN_REV` 調成這一版：還沒更新的 App 會暫停同步、提示更新。 |
 | v3（Rev. 47，第 3 步） | 2026-11-21 | 最上層新增 `combos`（套餐），記錄新增選填 `comboId`。**沒有調 `DATA_MIN_REV`**：Rev. 39 起的 App 都會原樣保留、照規則合併看不懂的最上層清單，`DATA_MIN_REV` 已經是 45。樣本：`backup-v3-combos.json`。 |
 | v3（Rev. 47，第 4 步） | 2026-11-21 | 最上層新增 `foodPacks`（食物資料庫）；記錄新增選填 `src`、`srcName`、`packFoodId`；套餐的品項可以有 `src`＋`packFoodId`。沒有調 `DATA_MIN_REV`（理由同套餐）。樣本：`backup-v3-foodpacks.json`。 |
+| v3（Rev. 59） | 2026-11-24 | 最上層新增 `advice`（營養師的叮嚀）；每日欄位新增 `adviceDone`；`meta.adviceFrom`。舊版會原樣保留，沒有調 `DATA_MIN_REV`（已經是 58）。樣本：`backup-v3-advice.json`。 |
 | v3（Rev. 58） | 2026-11-24 | 我的食物新增選填 `packId`、`brand`、`base`、`variant`、`replaces`（自己加到資料庫的、改過資料庫原本的）；可以自己新建空的資料庫（`foods: []`）。**發佈時用 `python3 scripts/bump.py --min-rev`**（使用者決定）：舊版會把這些食物列在我的食物清單裡、看起來亂，所以讓還沒更新的裝置暫停同步、提示更新。樣本：`backup-v3-pack-additions.json`。 |
 | v3（Rev. 52） | 2026-11-22 | 每日欄位新增 `steps`（走路步數）、`targets.steps`（每天步數下限）；每日 CSV 最後加一欄「步數」。`meta.badgesSeen`（小成就）。都是舊版會原樣保留的欄位，沒有調 `DATA_MIN_REV`。 |
 | v3（App v23） | 2026-11-19 | 每日欄位新增 `smm`（骨骼肌）；`targets.bodyFat`（目標體脂率）；`targets.calc.bmrSource` 可為 `ffm`。每日 CSV 最後再加一欄骨骼肌。 |

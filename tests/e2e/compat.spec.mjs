@@ -134,6 +134,18 @@ test('資料庫裡自己加、改過的（customFoods 的 packId、replaces）�
   await expect(page.locator('#foodPacks')).toContainText('嫩煎雞腿堡');
 });
 
+test('營養師的叮嚀（advice、每日 adviceDone）備份檔：叮嚀和做到了都匯入、看不懂的欄位保留；不用再提醒的不出現在首頁', async ({ page }) => {
+  await openApp(page);
+  expect(await importFile(page, fx('backup-v3-advice.json'))).toContain('匯入完成');
+  const s = await appState(page);
+  expect(s.advice.find(a => a.id === 'ad_veg')).toMatchObject({ futureField: 3 });
+  expect(s.days['2026-11-27'].adviceDone).toEqual(['ad_veg']);
+  await closeScreens(page);
+  await page.click('.mobile-nav-tab[data-tab=log]');
+  await expect(page.locator('#adviceToday li')).toHaveCount(1);
+  await expect(page.locator('#adviceToday')).toContainText('午餐便當多一份青菜');
+});
+
 test('套餐（combos）備份檔：套餐都匯入、看不懂的欄位保留；資料庫找不到、刪掉、AI 估的品項用 snapshot 照樣能放進購物車', async ({ page }) => {
   await openApp(page);
   expect(await importFile(page, fx('backup-v3-combos.json'))).toContain('匯入完成');

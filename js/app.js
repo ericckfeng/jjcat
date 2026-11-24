@@ -27,6 +27,7 @@ import { calorieBank, bankMacros, weekOf } from './bank.js';
 import { mealPastePrompt, LABEL_PASTE_PROMPT, mealFromPaste, labelFromPaste, foodDiaryLines, weekReviewPrompt } from './ai.js';
 import { brandsOf, mealBudget, suggestMeals } from './eatout.js';
 import { wallDays, wallPhotoCount } from './photowall.js';
+import { splitAdvice, activeAdvice, todaysAdvice, toggleDone } from './advice.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
@@ -943,6 +944,7 @@ function openScreen(id) {
   if (id === 'scr-data') { renderCloud(); renderBackupInfo(); }   // 關掉自動同步的人也要看得到雲端區塊
   if (id === 'scr-weekly') renderWeekly();
   if (id === 'scr-badges') renderBadges();
+  if (id === 'scr-advice') { $('advicePaste').value = ''; $('adviceDate').value = todayStr(); $('adviceFrom').value = state.meta.adviceFrom || ''; adviceDraft = []; renderAdviceDraft(); setBox('adviceNote', null, ''); renderAdviceScreen(); }
   if (id === 'scr-photowall') { wallMonday = weekOf(ui.date)[0]; renderPhotoWall(); }
   if (id === 'scr-exercise') renderStepsGoal();
   if (id === 'scr-ai') { resetAi(); ['aiFallbackBtn', 'aiPasteFallbackBtn', 'aiPasteWrap'].forEach(x => $(x).classList.add('hidden')); $('aiPasteText').value = ''; }
@@ -2663,6 +2665,7 @@ function renderAll() {
   if (screenStack.includes('scr-lookup')) renderLookup();
   renderAiUi();
   renderWeeklyCard();
+  renderAdviceCard();
   renderMealSelector();
   renderLogs();
   renderDayPanel();
@@ -3102,6 +3105,115 @@ $('lightboxEditEntryBtn').addEventListener('click', () => {
   // 從照片牆看別天的：修改頁只看「現在顯示的那天」，先切過去
   if (lightboxDate && lightboxDate !== ui.date) { ui.date = lightboxDate; renderAll(); }
   openEditModal(lightboxItemId);
+});
+
+/* ---------------- 營養師的叮嚀（js/advice.js） ---------------- */
+// 最上層 advice：[{ id, text, from, date, active, updatedAt }]，一條一條同步（tomb 'advice:<id>'）
+function adviceList() {
+  if (!Array.isArray(state.advice)) state.advice = [];
+  return state.advice;
+}
+// 首頁卡片：有叮嚀才出現；未來的日子不出現。做到了記在那天的 adviceDone
+function renderAdviceCard() {
+  const today = todaysAdvice(adviceList(), ui.date);
+  const show = today.length > 0 && ui.date <= todayStr();
+  $('adviceCard').classList.toggle('hidden', !show);
+  const n = activeAdvice(adviceList()).length;
+  $('adviceTileSub').textContent = n ? '現在有 ' + n + ' 條，首頁每天輪流提醒' : '把營養師在 LINE、門診說的話存進來，每天提醒';
+  if (!show) return;
+  const done = (getDay(ui.date) || {}).adviceDone || [];
+  $('adviceToday').innerHTML = today.map(a => {
+    const ok = done.includes(a.id);
+    return `<li class="flex items-center gap-2 bg-white rounded-xl border border-sky-100 p-2">
+      <span class="min-w-0 flex-1 text-lg text-stone-900 leading-snug break-words">${esc(a.text)}</span>
+      <button type="button" data-advice-done="${esc(a.id)}" class="shrink-0 ${ok ? 'btn-primary' : 'btn-secondary'} px-3" aria-pressed="${ok}">${ok ? '✓ 做到了' : '今天做到了'}</button></li>`;
+  }).join('');
+}
+$('adviceToday').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-advice-done]');
+  if (!b) return;
+  const id = b.getAttribute('data-advice-done');
+  const next = toggleDone((getDay(ui.date) || {}).adviceDone, id);
+  setDayField('adviceDone', next.length ? next : null);
+  renderAdviceCard();
+  if (next.includes(id)) showToast('很好！營養師看報告時會看到 👍');
+});
+function renderAdviceScreen() {
+  const on = activeAdvice(adviceList());
+  const off = adviceList().filter(a => a.active === false);
+  const sub = (a) => [a.from, a.date ? fmtMD(a.date) + ' 說的' : ''].filter(Boolean).join('・');
+  $('adviceList').innerHTML = on.length ? on.map(a => `<div class="rounded-2xl bg-sky-50 border border-sky-200 p-3 space-y-2">
+      <div class="text-lg font-semibold text-stone-900 leading-snug break-words">${esc(a.text)}</div>
+      ${sub(a) ? `<div class="text-sm text-stone-500">${esc(sub(a))}</div>` : ''}
+      <button type="button" data-advice-off="${esc(a.id)}" class="chip-btn chip-lg">不用再提醒</button></div>`).join('')
+    : '<p class="rounded-2xl bg-stone-50 text-stone-600 p-4 text-base leading-relaxed">還沒有。把營養師說的話貼在下面，存起來之後，首頁每天會輪流提醒 2 條，可以按「今天做到了」；給營養師的報告會列出每一條做到幾天。</p>';
+  $('adviceOff').classList.toggle('hidden', !off.length);
+  $('adviceOffList').innerHTML = off.map(a => `<div class="flex items-center gap-2">
+      <span class="min-w-0 flex-1 text-base text-stone-600 break-words">${esc(a.text)}</span>
+      <button type="button" data-advice-on="${esc(a.id)}" class="chip-btn chip-lg shrink-0">再提醒</button>
+      <button type="button" data-advice-del="${esc(a.id)}" class="chip-btn chip-lg shrink-0">刪除</button></div>`).join('');
+}
+$('scr-advice').addEventListener('click', (e) => {
+  const off = e.target.closest('[data-advice-off]');
+  const on = e.target.closest('[data-advice-on]');
+  const del = e.target.closest('[data-advice-del]');
+  const id = (off || on || del) && (off || on || del).getAttribute(off ? 'data-advice-off' : on ? 'data-advice-on' : 'data-advice-del');
+  const a = id && adviceList().find(x => x.id === id);
+  if (!a) return;
+  if (del) {
+    openConfirm('刪除這條叮嚀', '「' + a.text + '」。以前按過的「做到了」會留在記錄裡，但報告不會再列這一條。', () => {
+      adviceList().splice(adviceList().indexOf(a), 1);
+      tombstone('advice:' + a.id);
+      persist(); renderAll(); renderAdviceScreen();
+    }, '刪除');
+    return;
+  }
+  a.active = Boolean(on);
+  touch(a);
+  persist(); renderAll(); renderAdviceScreen();
+  if (off) showToast('這條不會再出現在首頁，在「不用再提醒的」可以恢復');
+});
+// 貼上的話 → 一條一條（可以改字、拿掉）→ 存起來
+let adviceDraft = [];
+function renderAdviceDraft() {
+  $('advicePreview').classList.toggle('hidden', !adviceDraft.length);
+  $('adviceSaveBtn').classList.toggle('hidden', !adviceDraft.length);
+  $('adviceSaveBtn').textContent = '存起來（' + adviceDraft.length + ' 條）';
+  $('advicePreview').innerHTML = '<div class="text-base text-stone-600">看一下對不對，可以改字、拿掉不要的：</div>' + adviceDraft.map((t, i) => `<div class="flex items-center gap-2">
+      <input type="text" data-advice-edit="${i}" value="${esc(t)}" class="field text-lg min-w-0 flex-1" />
+      <button type="button" data-advice-drop="${i}" class="chip-btn chip-lg shrink-0" aria-label="拿掉">✕</button></div>`).join('');
+}
+$('adviceSplitBtn').addEventListener('click', () => {
+  adviceDraft = splitAdvice($('advicePaste').value);
+  renderAdviceDraft();
+  setBox('adviceNote', adviceDraft.length ? null : 'err', adviceDraft.length ? '' : '沒有讀到叮嚀。請貼上營養師說的話，一行一條。');
+});
+$('advicePreview').addEventListener('input', (e) => {
+  const inp = e.target.closest('[data-advice-edit]');
+  if (inp) adviceDraft[Number(inp.getAttribute('data-advice-edit'))] = inp.value;
+});
+$('advicePreview').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-advice-drop]');
+  if (!b) return;
+  adviceDraft.splice(Number(b.getAttribute('data-advice-drop')), 1);
+  renderAdviceDraft();
+});
+$('adviceSaveBtn').addEventListener('click', () => {
+  const texts = adviceDraft.map(t => t.trim()).filter(Boolean);
+  if (!texts.length) return;
+  const from = $('adviceFrom').value.trim();
+  const date = $('adviceDate').value || todayStr();
+  const have = new Set(activeAdvice(adviceList()).map(a => a.text));
+  const add = texts.filter(t => !have.has(t)).map(text => ({ id: uid('ad'), text, from: from || null, date, active: true, updatedAt: now() }));
+  adviceList().push(...add);
+  state.meta.adviceFrom = from;   // 下次預填（只存本機）
+  persist();
+  renderAll();
+  adviceDraft = [];
+  $('advicePaste').value = '';
+  renderAdviceDraft();
+  renderAdviceScreen();
+  setBox('adviceNote', 'ok', '存好了 ' + add.length + ' 條' + (texts.length > add.length ? '（' + (texts.length - add.length) + ' 條已經有了）' : '') + '。首頁每天會輪流提醒 2 條。');
 });
 
 /* ---------------- 餐點照片牆（js/photowall.js） ---------------- */

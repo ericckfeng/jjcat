@@ -97,6 +97,14 @@
         <h2 id="tipsTitle" class="text-base font-bold text-stone-800">今天的小提醒</h2>
         <ul id="tipsList" class="space-y-2"></ul>
       </section>
+      <!-- 營養師的叮嚀（有叮嚀才出現）：每天輪流 2 條，按「做到了」 -->
+      <section id="adviceCard" class="hidden rounded-2xl bg-sky-50 border border-sky-200 p-4 space-y-2">
+        <div class="flex items-center gap-2">
+          <h2 class="min-w-0 flex-1 text-lg font-bold text-sky-900">👩‍⚕️ 營養師的叮嚀</h2>
+          <button type="button" data-screen="scr-advice" class="chip-btn chip-lg shrink-0">全部 ›</button>
+        </div>
+        <ul id="adviceToday" class="space-y-2"></ul>
+      </section>
       <!-- 上週的小芽週報（週一起出現，看過就收起來） -->
       <button type="button" id="weeklyCard" data-screen="scr-weekly" class="tile tile-wide w-full hidden">
         <span class="tile-ic">📅</span><span class="min-w-0 flex-1 text-left"><span class="tile-t block">上週的小芽週報</span><span id="weeklyCardSub" class="tile-s block"></span></span><span class="text-2xl text-stone-400 shrink-0" aria-hidden="true">›</span>
@@ -266,6 +274,7 @@
     <!-- TAB 4: REPORT -->
     <div id="tab-report" class="tab-panel hidden space-y-4">
       <button type="button" data-screen="scr-weekly" class="no-print tile tile-wide w-full"><span class="tile-ic">📅</span><span class="min-w-0 flex-1 text-left"><span class="tile-t block">小芽週報</span><span class="tile-s block">上週做得好的事，和下週可以試的一件事</span></span></button>
+      <button type="button" data-screen="scr-advice" class="no-print tile tile-wide w-full"><span class="tile-ic">👩‍⚕️</span><span class="min-w-0 flex-1 text-left"><span class="tile-t block">營養師的叮嚀</span><span id="adviceTileSub" class="tile-s block">把營養師在 LINE、門診說的話存進來，每天提醒</span></span></button>
       <button type="button" data-screen="scr-photowall" class="no-print tile tile-wide w-full"><span class="tile-ic">📸</span><span class="min-w-0 flex-1 text-left"><span class="tile-t block">餐點照片牆</span><span class="tile-s block">一週吃了什麼，用照片看</span></span></button>
       <button type="button" data-screen="scr-badges" class="no-print tile tile-wide w-full"><span class="tile-ic">🏅</span><span class="min-w-0 flex-1 text-left"><span class="tile-t block">我的小成就</span><span id="badgeTileSub" class="tile-s block">連續記錄、喝水、量體重…</span></span></button>
       <section class="no-print bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
@@ -1007,6 +1016,32 @@
       <button type="button" id="weeklyShareBtn" class="btn-secondary btn-xl w-full">💬 傳到 LINE／分享</button>
       <button type="button" data-back class="btn-primary btn-xl w-full">完成</button>
     </div>
+  </div>
+
+  <!-- 營養師的叮嚀：貼上營養師說的話 → 拆成一條一條 → 存起來；首頁每天輪流提醒，報告列做到幾天 -->
+  <div id="scr-advice" class="screen hidden" role="dialog" aria-label="營養師的叮嚀">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>👩‍⚕️ 營養師的叮嚀</h2></div>
+    <div class="scr-body">
+      <div id="adviceList" class="space-y-2"></div>
+      <details id="adviceOff" class="hidden rounded-2xl border border-stone-200 bg-white">
+        <summary class="px-3 py-2 text-base font-semibold text-stone-700 cursor-pointer">不用再提醒的</summary>
+        <div id="adviceOffList" class="p-3 space-y-2"></div>
+      </details>
+      <section class="rounded-2xl bg-white border border-stone-200 p-3 space-y-3">
+        <div class="scr-label mb-0">加新的叮嚀</div>
+        <p class="text-base text-stone-600 leading-relaxed">在 LINE 長按營養師的訊息 →「複製」，貼在下面；門診說的也可以自己打，一行一條。</p>
+        <textarea id="advicePaste" rows="5" class="field text-lg" placeholder="例如：&#10;1. 午餐便當多一份青菜&#10;2. 晚餐飯吃半碗就好"></textarea>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="block"><span class="block text-base text-stone-600 mb-1">營養師（可不填）</span><input id="adviceFrom" type="text" class="field text-lg" placeholder="王營養師" /></label>
+          <label class="block"><span class="block text-base text-stone-600 mb-1">哪一天說的</span><input id="adviceDate" type="date" class="field text-lg" /></label>
+        </div>
+        <button type="button" id="adviceSplitBtn" class="btn-secondary w-full">整理成一條一條</button>
+        <div id="advicePreview" class="hidden space-y-2"></div>
+        <button type="button" id="adviceSaveBtn" class="hidden btn-primary btn-xl w-full"></button>
+        <p id="adviceNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
+      </section>
+    </div>
+    <div class="scr-foot"><button type="button" data-back class="btn-primary btn-xl w-full">完成</button></div>
   </div>
 
   <!-- 餐點照片牆（報告分頁進來）：一週七天，每天有照片的記錄，點照片看大圖、修正 -->

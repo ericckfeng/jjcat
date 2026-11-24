@@ -1,0 +1,15 @@
+{
+  "app": "diet-tracker",
+  "version": 3,
+  "exportedAt": "2026-11-28T12:00:00.000Z",
+  "targets": { "kcal": 1800 },
+  "logs": {},
+  "days": {
+    "2026-11-27": { "adviceDone": ["ad_veg"], "_t": { "adviceDone": 1764200000000 } }
+  },
+  "quickItems": [],
+  "advice": [
+    { "id": "ad_veg", "text": "午餐便當多一份青菜", "from": "王營養師", "date": "2026-11-25", "active": true, "updatedAt": 1764100000000, "futureField": 3 },
+    { "id": "ad_old", "text": "睡前不吃宵夜", "from": null, "date": "2026-11-01", "active": false, "updatedAt": 1764100000000 }
+  ]
+}

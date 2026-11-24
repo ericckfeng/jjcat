@@ -4,6 +4,7 @@ import { MEASURES, bmiCategory, weightAvgChange, muscleChange, latestSmi, smiLow
 import { waterGoal } from './targets.js';
 import { nightSummary } from './meals.js';
 import { buildHighlights } from './highlights.js';
+import { adviceStats } from './advice.js';
 const EXTRA_MEASURES = MEASURES.filter(m => m.key !== 'weight' && m.key !== 'waist');
 
 const WEEK = '日一二三四五六';
@@ -250,6 +251,14 @@ export async function buildReportHTML(ctx, opts) {
   h += '</tr></tbody></table></div>';
   h += '<div class="muted" style="margin-top:4px">紅字＝超過目標 10% 以上；橘字＝蔬菜／水果／乳品低於目標；* ＝當天有暫估待修的記錄（熱量欄）或含補眠（睡眠欄）。昨晚的睡眠記在起床那天（含當天補眠），橘字＝不到 6 小時。營養素與份數只計入有填的記錄。' + (night.days ? '夜間＝晚上 10 點到早上 7 點吃的（不含早餐與事後補記），只記錄供參考。' : '') + '</div>';
 
+  // 營養師的叮嚀：這段期間每一條做到幾天
+  const adv = adviceStats(state.advice, days, dates);
+  if (adv.length) {
+    h += '<h2>👩‍⚕️ 營養師的叮嚀・做到幾天</h2><ul class="qs">';
+    adv.forEach(x => { h += `<li>${esc(x.advice.text)}　<b>${x.done} / ${x.days} 天</b></li>`; });
+    h += '</ul><div class="muted">使用者每天在 App 首頁按「今天做到了」；只算叮嚀給了之後的日子。</div>';
+  }
+
   // 想問營養師
   const qs = dates.filter(d => days[d] && days[d].question);
   if (qs.length) {
@@ -372,6 +381,12 @@ export function buildReportText(ctx, opts) {
   if (sl.length) extra.push('平均睡眠 ' + r1(sl.reduce((a, r) => a + r.total, 0) / sl.length / 60) + ' 小時（不到 6 小時 ' + sl.filter(r => r.total < 360).length + ' 天）');
   if (extra.length) lines.push(extra.join('｜'));
   if (s.pending) lines.push('⚠ 有 ' + s.pending + ' 筆是暫估、還沒修正');
+  const adv = adviceStats(state.advice, state.days, dates);
+  if (adv.length) {
+    lines.push('');
+    lines.push('營養師的叮嚀（做到幾天）：');
+    adv.forEach(x => lines.push('・' + x.advice.text.replace(/\s+/g, ' ') + ' ' + x.done + '/' + x.days + ' 天'));
+  }
   const qs = dates.filter(d => state.days[d] && state.days[d].question);
   if (qs.length) {
     lines.push('');

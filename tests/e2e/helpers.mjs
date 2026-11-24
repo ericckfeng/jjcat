@@ -1,9 +1,18 @@
 // 共用：CDN 離線替身、開啟 App、讀取狀態
+import { readFileSync } from 'node:fs';
 const CDN_FILES = {
   '/npm/chart.js@4.4.1/dist/chart.umd.js': 'node_modules/chart.js/dist/chart.umd.js',
   '/npm/@zxing/library@0.21.3/umd/index.min.js': 'node_modules/@zxing/library/umd/index.min.js'
 };
+// 公測邀請碼：測試預設不用邀請碼（INVITE_URL 換成空的），測邀請碼的測試傳 inviteUrl 換成模擬的網址
+export async function stubInviteUrl(page, url = '') {
+  await page.route(/\/js\/config\.js(\?.*)?$/, r => r.fulfill({
+    contentType: 'text/javascript',
+    body: readFileSync(new URL('../../js/config.js', import.meta.url), 'utf8').replace(/export const INVITE_URL = '[^']*';/, 'export const INVITE_URL = ' + JSON.stringify(url) + ';')
+  }));
+}
 export async function stubCdn(page) {
+  await stubInviteUrl(page);
   // Tailwind 替身只提供 .hidden（畫面切換）和 Tailwind 預設的 border-box（寬度含內距，檢查畫面有沒有比手機寬才準）
   await page.route('https://cdn.tailwindcss.com/**', r => r.fulfill({
     contentType: 'application/javascript',
@@ -23,12 +32,13 @@ export async function stubCdn(page) {
 // keepWelcome：保留新裝置的歡迎畫面（預設會按「直接開始」關掉，方便測其他流程）
 // 時鐘固定從今天中午 12 點開始走：晚上 10 點後記錄會問「這是現在吃的嗎？」，
 // 不固定的話測試結果會跟著跑測試的時間變。自己 page.clock.install 的測試傳 ownClock: true。
-export async function openApp(page, { errors, keepWelcome = false, ownClock = false } = {}) {
+export async function openApp(page, { errors, keepWelcome = false, ownClock = false, inviteUrl = '' } = {}) {
   if (!ownClock) {
     const noon = new Date(); noon.setHours(12, 0, 0, 0);
     await page.clock.install({ time: noon });
   }
   await stubCdn(page);
+  if (inviteUrl) await stubInviteUrl(page, inviteUrl);   // 後登記的 route 優先
   if (errors) {
     page.on('pageerror', e => errors.push(String(e)));
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });

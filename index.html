@@ -1050,6 +1050,31 @@
     </div>
   </div>
 
+  <!-- 公測邀請碼（js/invite.js）：新裝置要輸入、號碼被停用要重新輸入；蓋在所有畫面上面，不能關 -->
+  <div id="inviteGate" class="invite-gate hidden" role="dialog" aria-modal="true" aria-label="輸入邀請碼">
+    <div class="invite-card space-y-4">
+      <div class="text-center space-y-1">
+        <div class="text-5xl" aria-hidden="true">🌱</div>
+        <h2 class="text-2xl font-bold text-stone-900">飲控隨身記・公測</h2>
+        <p id="inviteLead" class="text-lg text-stone-700 leading-relaxed">現在是公測期間，請輸入邀請你的人給你的邀請碼。</p>
+      </div>
+      <div id="inviteStepCode" class="space-y-3">
+        <label class="block"><span class="scr-label">邀請碼</span>
+          <span class="invite-code"><span aria-hidden="true">JJ-</span><input id="inviteCode" type="text" inputmode="numeric" autocomplete="off" maxlength="8" class="field field-xl tabular-nums" placeholder="4 個數字" /></span>
+        </label>
+        <button type="button" id="inviteCodeBtn" class="btn-primary btn-xl w-full">確認</button>
+      </div>
+      <div id="inviteStepName" class="hidden space-y-3">
+        <label class="block"><span class="scr-label">你的姓名</span><input id="inviteName" type="text" maxlength="30" autocomplete="name" class="field text-lg" placeholder="例如：王美華" /></label>
+        <p class="text-base text-stone-600 leading-relaxed">按「開始使用」會把<b>邀請碼、你填的姓名和這台裝置的名稱</b>（例如「iPhone」）送到公測管理者的 Google 試算表，只用來管理公測人數。你的飲食記錄不會送出去。</p>
+        <button type="button" id="inviteNameBtn" class="btn-primary btn-xl w-full">開始使用</button>
+        <button type="button" id="inviteBackBtn" class="block w-full text-base text-stone-600 underline py-1">換一組邀請碼</button>
+      </div>
+      <p id="inviteNote" class="hidden rounded-2xl whitespace-pre-line p-3 text-base leading-relaxed"></p>
+      <p class="text-center text-base"><a href="guide.html" target="_blank" rel="noopener" class="text-emerald-700 underline">📖 使用說明</a>・<a href="privacy.html" target="_blank" rel="noopener" class="text-emerald-700 underline">隱私權政策</a></p>
+    </div>
+  </div>
+
   <!-- 營養師的叮嚀：貼上營養師說的話 → 拆成一條一條 → 存起來；首頁每天輪流提醒，報告列做到幾天 -->
   <div id="scr-advice" class="screen hidden" role="dialog" aria-label="營養師的叮嚀">
     <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>👩‍⚕️ 營養師的叮嚀</h2></div>

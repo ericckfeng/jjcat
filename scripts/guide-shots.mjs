@@ -98,9 +98,14 @@ async function putPhotos(page, ids) {
 
 const browser = await chromium.launch();
 await mkdir(OUT, { recursive: true });
-async function fresh({ state = demoState(), photos = true } = {}) {
+async function fresh({ state = demoState(), photos = true, invite = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'zh-TW', serviceWorkers: 'block' });
   const page = await ctx.newPage();
+  // 邀請碼畫面：假的網址（只拍畫面，不送出）；其他截圖不用邀請碼
+  await page.route(/\/js\/config\.js(\?.*)?$/, async r => {
+    const body = (await readFile(join(ROOT, 'js/config.js'), 'utf8')).replace(/export const INVITE_URL = '[^']*';/, 'export const INVITE_URL = ' + JSON.stringify(invite ? 'https://example.invalid/exec' : '') + ';');
+    r.fulfill({ contentType: 'text/javascript', body });
+  });
   if (state) await page.addInitScript((s) => { if (!localStorage.getItem('diet_tracker_v2')) localStorage.setItem('diet_tracker_v2', JSON.stringify(s)); }, state);
   await page.goto(BASE);
   await page.waitForFunction(() => window.__dietApp && typeof Chart !== 'undefined');
@@ -122,7 +127,8 @@ async function shot(page, name, { el = null, full = false } = {}) {
 }
 const scrollTo = (page, sel) => page.locator(sel).first().evaluate(el => el.scrollIntoView({ block: 'start' }));
 
-// 1. 第一次打開：歡迎畫面
+// 1. 第一次打開：邀請碼（公測期間）、歡迎畫面
+{ const { ctx, page } = await fresh({ state: null, invite: true }); await page.fill('#inviteCode', '4821'); await shot(page, '00-invite'); await ctx.close(); }
 { const { ctx, page } = await fresh({ state: null }); await shot(page, '01-welcome'); await ctx.close(); }
 // 加入主畫面的提示（安裝那一段用）
 { const st = demoState(); st.meta.installHintDismissed = false;

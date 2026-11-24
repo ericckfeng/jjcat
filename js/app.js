@@ -30,6 +30,8 @@ import { wallDays, wallPhotoCount } from './photowall.js';
 import { splitAdvice, activeAdvice, todaysAdvice, toggleDone } from './advice.js';
 import { FEATURES, featureOn, featuresOff, BADGE_FEATURE } from './features.js';
 import { backupReminder, backupText, SNOOZE_DAYS } from './backup.js';
+import { normalizeInvite, gateState, needCheck, waitSeconds, addFail, inviteMessage } from './invite.js';
+import { INVITE_URL } from './config.js';
 import { GLUCOSE_KINDS, glucoseKindLabel, bpReading, glucoseReading, bpAlert, glucoseAlert, bpText, glucoseText, vitalsSummary, dailyVitals } from './vitals.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
 
@@ -5337,12 +5339,100 @@ function openFromUrl() {
   openScreen(id);
 }
 
+/* ---------------- 公測邀請碼（js/invite.js；管理者的試算表 tools/invite/Code.gs） ---------------- */
+// 送到管理者的 Apps Script：只送邀請碼、姓名、這台的裝置 ID 和名稱（不送飲食記錄）
+async function callInvite(payload) {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const r = await fetch(INVITE_URL, { method: 'POST', body: JSON.stringify(payload), signal: ctrl.signal });   // text/plain：不用預檢
+    clearTimeout(timer);
+    return await r.json();
+  } catch (e) {
+    return { ok: false, reason: 'network' };
+  }
+}
+let invitePending = null;   // 號碼對了、等填姓名：{ code }
+function showInviteGate(reason) {
+  $('inviteGate').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  $('inviteStepCode').classList.remove('hidden');
+  $('inviteStepName').classList.add('hidden');
+  $('inviteLead').textContent = reason ? '你的邀請碼要重新確認。' : '現在是公測期間，請輸入邀請你的人給你的邀請碼。';
+  setBox('inviteNote', reason ? 'err' : null, reason ? inviteMessage(reason) : '');
+}
+function hideInviteGate() {
+  $('inviteGate').classList.add('hidden');
+  if (!screenStack.length) document.body.style.overflow = '';
+}
+// 開 App 時：沒設網址就不管；舊裝置記成放行；新裝置、被停用的要輸入；其他的每天問一次有沒有被停用
+function initInviteGate() {
+  const g = gateState({ url: INVITE_URL, invite: state.meta.invite, hasData: hasLocalData(), linked: Boolean(state.meta.cloud.linked) });
+  if (g === 'off') return;
+  if (g === 'legacy') { state.meta.invite = { legacy: true, at: now(), rev: APP_REV }; persistLocal(); return; }
+  if (g === 'new' || g === 'locked') { showInviteGate(g === 'locked' ? state.meta.invite.reason : null); return; }
+  if (needCheck(state.meta.invite, now()) && navigator.onLine !== false) checkInviteAgain();
+}
+async function checkInviteAgain() {
+  const inv = state.meta.invite;
+  const r = await callInvite({ action: 'ping', code: inv.code, deviceId: state.meta.deviceId, deviceName: myDeviceName() });
+  if (r.ok) { inv.lastCheck = now(); persistLocal(); return; }
+  // 連不上、太忙：下次再問，不擋人
+  if (!['unknown', 'disabled', 'full'].includes(r.reason)) return;
+  Object.assign(inv, { locked: true, reason: r.reason });
+  persistLocal();
+  showInviteGate(r.reason);
+}
+$('inviteCode').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
+  $('inviteCodeBtn').click();
+});
+$('inviteCodeBtn').addEventListener('click', async () => {
+  const wait = waitSeconds(state.meta.inviteFails, now());
+  if (wait) { setBox('inviteNote', 'err', '輸錯太多次了，請 ' + wait + ' 秒後再試。'); return; }
+  const code = normalizeInvite($('inviteCode').value);
+  if (!code) { setBox('inviteNote', 'err', '邀請碼是 4 個數字，例如 JJ-4821 就填 4821。'); return; }
+  const btn = $('inviteCodeBtn');
+  btn.disabled = true; btn.textContent = '確認中…';
+  const r = await callInvite({ action: 'check', code, deviceId: state.meta.deviceId });
+  btn.disabled = false; btn.textContent = '確認';
+  if (!r.ok) {
+    if (r.reason === 'unknown') { state.meta.inviteFails = addFail(state.meta.inviteFails, now()); persistLocal(); }
+    setBox('inviteNote', 'err', inviteMessage(r.reason));
+    return;
+  }
+  delete state.meta.inviteFails;
+  invitePending = { code };
+  // 這組碼已經有人登記過姓名（同一個人的第二台）：直接用那個姓名
+  if (r.name) { $('inviteName').value = r.name; }
+  $('inviteStepCode').classList.add('hidden');
+  $('inviteStepName').classList.remove('hidden');
+  setBox('inviteNote', 'ok', r.name ? '邀請碼正確。這組邀請碼登記的是「' + r.name + '」，是你的話直接按「開始使用」。' : '邀請碼正確！請填你的姓名。');
+});
+$('inviteBackBtn').addEventListener('click', () => { invitePending = null; showInviteGate(null); });
+$('inviteNameBtn').addEventListener('click', async () => {
+  if (!invitePending) return;
+  const name = $('inviteName').value.trim();
+  if (!name) { setBox('inviteNote', 'err', inviteMessage('name')); $('inviteName').focus(); return; }
+  const btn = $('inviteNameBtn');
+  btn.disabled = true; btn.textContent = '送出中…';
+  const r = await callInvite({ action: 'register', code: invitePending.code, deviceId: state.meta.deviceId, deviceName: myDeviceName(), name });
+  btn.disabled = false; btn.textContent = '開始使用';
+  if (!r.ok) { setBox('inviteNote', 'err', inviteMessage(r.reason)); return; }
+  state.meta.invite = { code: invitePending.code, name, at: now(), rev: APP_REV, lastCheck: now() };
+  invitePending = null;
+  persistLocal();
+  hideInviteGate();
+  showToast('歡迎加入公測，' + name + '！');
+});
+
 (async function init() {
   await loadState();
   if (!state.meta.deviceId) { state.meta.deviceId = uid('dev'); persistLocal(); }
   applyFontSize();
   renderAll();
   switchTab('log');
+  initInviteGate();
   const redirect = cloud.isConfigured() ? cloud.consumeRedirect() : null;
   if (redirect) {
     if (redirect.silent && redirect.error) {

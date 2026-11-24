@@ -330,3 +330,10 @@ button.mascot-chip { cursor: pointer; }
   display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover;
   border-radius: .75rem; background: var(--stone-100); margin-bottom: .3rem;
 }
+
+/* 公測邀請碼：蓋在所有畫面（全螢幕頁 45 起、modal 70）上面 */
+.invite-gate { position: fixed; inset: 0; z-index: 90; background: var(--stone-50, #fafaf9); overflow-y: auto; padding: 1.5rem 1rem calc(1.5rem + env(safe-area-inset-bottom)); }
+.invite-gate.hidden { display: none; }
+.invite-card { max-width: 26rem; margin: 0 auto; background: #fff; border: 1px solid var(--stone-200); border-radius: 1.5rem; padding: 1.5rem 1.25rem; }
+.invite-code { display: flex; align-items: center; gap: .5rem; font-size: 1.75rem; font-weight: 700; color: var(--stone-700); }
+.invite-code .field { flex: 1; min-width: 0; letter-spacing: .3em; }

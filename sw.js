@@ -1,6 +1,8 @@
 // Service Worker：讓 App 可以離線開啟
 // 自己的檔案「先上網抓最新版，失敗才用快取」；CDN 檔案「有快取就用快取」
-const CACHE = 'diet-tracker-v52';
+const CACHE = 'diet-tracker-v53';
+// Chart.js、ZXing 有加檢查碼（integrity）：瀏覽器用 CORS 方式抓，快取裡不能拿看不到內容的（opaque）版本給它。
+// 換 CDN 檔案的版本時，檢查碼要重算：printf "sha384-%s" "$(curl -s <網址> | openssl dgst -sha384 -binary | openssl base64 -A)"
 const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 const CORE = [
   './',
@@ -82,7 +84,8 @@ self.addEventListener('fetch', (event) => {
   if (!CDN_HOSTS.includes(url.hostname)) return;
   event.respondWith(
     caches.match(req).then((cached) => {
-      if (cached) return cached;
+      // 舊版存的 opaque 版本不能回給 CORS 請求（會載入失敗），改上網重抓
+      if (cached && !(cached.type === 'opaque' && req.mode === 'cors')) return cached;
       return fetch(req).then((res) => {
         if (res && (res.ok || res.type === 'opaque')) {
           const copy = res.clone();

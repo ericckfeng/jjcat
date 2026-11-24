@@ -28,6 +28,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 - Tailwind 用 CDN 版（`cdn.tailwindcss.com`，執行時產生 CSS），所以可以直接在 HTML／JS 字串裡用 Tailwind class。**共用元件樣式寫在 `css/app.css`（純 CSS，用 rem）**，不要依賴 `@apply`。
 - 字體大小用 rem：使用者可切「標準／大／特大」（根字級 16／18／20px），新畫面在特大、寬 375px 時不能出現水平捲軸。
 - Chart.js 也是 CDN；程式要能在 `Chart` 不存在時照常運作。
+- 版本固定的 CDN 檔案（Chart.js、ZXing、foodpack 工具的 xlsx）都加了檢查碼 `integrity`＋`crossorigin="anonymous"`。**換版本要一起重算檢查碼**（指令在 `sw.js` 開頭），Chart.js、ZXing 也要改 `package.json` 的 devDependencies：e2e 會用 npm 裝的同一版檔案驗證檢查碼。
 
 ## 檔案與架構
 

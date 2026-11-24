@@ -1,11 +1,21 @@
 // 共用：CDN 離線替身、開啟 App、讀取狀態
+const CDN_FILES = {
+  '/npm/chart.js@4.4.1/dist/chart.umd.js': 'node_modules/chart.js/dist/chart.umd.js',
+  '/npm/@zxing/library@0.21.3/umd/index.min.js': 'node_modules/@zxing/library/umd/index.min.js'
+};
 export async function stubCdn(page) {
   // Tailwind 替身只提供 .hidden，足夠讓畫面切換正常運作
   await page.route('https://cdn.tailwindcss.com/**', r => r.fulfill({
     contentType: 'application/javascript',
     body: "(()=>{const s=document.createElement('style');s.textContent='.hidden{display:none!important}';document.head.appendChild(s)})()"
   }));
-  await page.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ contentType: 'application/javascript', body: '' }));
+  // Chart.js、ZXing 有加檢查碼（integrity）：給 npm 裝的同一版真實檔案，檢查碼算錯時測試會失敗
+  await page.route('https://cdn.jsdelivr.net/**', r => {
+    const url = r.request().url();
+    const local = Object.entries(CDN_FILES).find(([k]) => url.endsWith(k));
+    if (!local) return r.fulfill({ contentType: 'application/javascript', body: '' });
+    return r.fulfill({ contentType: 'application/javascript', headers: { 'access-control-allow-origin': '*' }, path: local[1] });
+  });
   await page.route('https://fonts.googleapis.com/**', r => r.fulfill({ contentType: 'text/css', body: '' }));
   await page.route('https://fonts.gstatic.com/**', r => r.fulfill({ body: '' }));
 }

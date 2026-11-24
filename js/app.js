@@ -3381,6 +3381,8 @@ $('packList').addEventListener('click', (e) => {
 // 拍一張照片再辨識（和拍營養標示一樣），iPhone 也能用：有 BarcodeDetector（Android Chrome）就用，沒有才載入 ZXing
 let manualBarcode = '';   // 從掃條碼去「自己輸入」拍營養標示：存成我的食物時記下這個條碼
 const ZXING_URL = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+// 檔案內容的檢查碼：CDN 上的檔案被改過就不執行（換版本要重算，見 sw.js 開頭說明）
+const ZXING_SRI = 'sha384-BzBxP10ZE72aitqj5UMmUsbKFliP/DZqA8Wq+BNNhlIJDGoEd1tpkMYXOg9+n6sB';
 let zxingLoading = null;
 function loadZxing() {
   if (window.ZXing) return Promise.resolve(window.ZXing);
@@ -3388,6 +3390,9 @@ function loadZxing() {
     zxingLoading = new Promise((resolve, reject) => {
       const s = document.createElement('script');
       s.src = ZXING_URL;
+      s.integrity = ZXING_SRI;
+      s.crossOrigin = 'anonymous';
+      s.referrerPolicy = 'no-referrer';
       s.onload = () => (window.ZXing ? resolve(window.ZXing) : reject(new Error('ZXing')));
       s.onerror = () => { zxingLoading = null; reject(new Error('ZXing')); };
       document.head.appendChild(s);
@@ -3496,7 +3501,12 @@ $('scanFile').addEventListener('change', async (e) => {
   lookupBarcode(code);
 });
 $('scanLookupBtn').addEventListener('click', () => lookupBarcode($('scanInput').value));
-$('scanInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') lookupBarcode($('scanInput').value); });
+$('scanInput').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  // 注音、倉頡選字時按的 Enter 不算查詢（Safari 要另外看 keyCode 229）
+  if (e.isComposing || e.keyCode === 229) return;
+  lookupBarcode($('scanInput').value);
+});
 $('scanResult').addEventListener('click', (e) => {
   if (!scanForm) return;
   const form = scanForm;

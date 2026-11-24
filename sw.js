@@ -35,6 +35,7 @@ const CORE = [
   './js/photowall.js',
   './js/advice.js',
   './js/vitals.js',
+  './js/backup.js',
   './js/features.js',
   './js/characters.js',
   './js/version.js',

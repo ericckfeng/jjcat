@@ -29,6 +29,7 @@ import { brandsOf, mealBudget, suggestMeals } from './eatout.js';
 import { wallDays, wallPhotoCount } from './photowall.js';
 import { splitAdvice, activeAdvice, todaysAdvice, toggleDone } from './advice.js';
 import { FEATURES, featureOn, featuresOff, BADGE_FEATURE } from './features.js';
+import { backupReminder, backupText, SNOOZE_DAYS } from './backup.js';
 import { GLUCOSE_KINDS, glucoseKindLabel, bpReading, glucoseReading, bpAlert, glucoseAlert, bpText, glucoseText } from './vitals.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
 
@@ -2659,29 +2660,21 @@ function renderBanners() {
   renderUpdateBanner();
   const show = !isStandalone() && !state.meta.installHintDismissed;
   $('installBanner').classList.toggle('hidden', !show);
-  const hasData = Object.values(state.logs).some(l => l && l.length);
+  // 備份提醒（js/backup.js）：沒連雲端 7 天沒備份；連了雲端但 7 天沒同步成功；登入過期；要先更新
   const c = state.meta.cloud;
+  const linked = cloud.isConfigured() && c.linked;
+  const r = cloudBusy ? null : backupReminder({
+    hasData: Object.values(state.logs).some(l => l && l.length), logDays: Object.keys(state.logs).length,
+    linked, needAuth: Boolean(c.needAuth), blocked: syncBlocked(), lastSync: c.lastSync, lastBackup: state.meta.lastBackup,
+    snoozeUntil: state.meta.backupSnoozeUntil, now: Date.now()
+  });
   const banner = $('backupBanner');
-  if (cloud.isConfigured() && c.linked) {
-    const show = hasData && c.needAuth && !cloudBusy;
-    banner.classList.toggle('hidden', !show);
-    banner.dataset.mode = 'reauth';
-    $('goBackupBtn').textContent = '重新連結';
-    $('backupBannerText').textContent = 'Google 登入過期了，點一下重新連結，就能繼續自動同步。';
-    return;
-  }
-  const last = state.meta.lastBackup;
-  const daysSince = last ? Math.floor((Date.now() - last) / 86400000) : null;
-  const needBackup = hasData && (daysSince === null ? Object.keys(state.logs).length >= 3 : daysSince >= 7);
-  banner.classList.toggle('hidden', !needBackup);
-  banner.dataset.mode = 'goto';
-  $('goBackupBtn').textContent = '去備份';
-  if (needBackup) {
-    const tip = cloud.isConfigured() ? '可以連結 Google 雲端自動同步。' : '建議定期下載備份。';
-    $('backupBannerText').textContent = daysSince === null
-      ? '資料只存在這支手機，' + tip
-      : '已經 ' + daysSince + ' 天沒備份了，' + tip;
-  }
+  banner.classList.toggle('hidden', !r);
+  if (!r) return;
+  banner.dataset.mode = r.mode;
+  $('goBackupBtn').textContent = { reauth: '重新連結', update: '更新', sync: '立即同步', goto: '去備份' }[r.mode];
+  $('snoozeBackupBtn').classList.toggle('hidden', r.mode === 'reauth');
+  $('backupBannerText').textContent = backupText(r, { cloudReady: cloud.isConfigured() });
 }
 function renderAll() {
   renderSummary();
@@ -2729,8 +2722,18 @@ $('portionGroup').addEventListener('click', (e) => {
 });
 $('dismissInstallBtn').addEventListener('click', () => { state.meta.installHintDismissed = true; persistLocal(); renderBanners(); });
 $('goBackupBtn').addEventListener('click', () => {
-  if ($('backupBanner').dataset.mode === 'reauth') { startSignIn('sync'); return; }
+  const mode = $('backupBanner').dataset.mode;
+  if (mode === 'reauth') { startSignIn('sync'); return; }
+  if (mode === 'update') { updateApp(); return; }
+  if (mode === 'sync') { goToCloudSection(); cloudRun('sync'); return; }   // 打開資料與備份頁，看得到同步的結果
   goToCloudSection();
+});
+// 晚點：3 天內不再提醒（只存這台裝置）
+$('snoozeBackupBtn').addEventListener('click', () => {
+  state.meta.backupSnoozeUntil = Date.now() + SNOOZE_DAYS * 86400000;
+  persistLocal();
+  renderBanners();
+  showToast(SNOOZE_DAYS + ' 天後再提醒你');
 });
 /* ---------------- 歡迎（新裝置第一次打開） ---------------- */
 // 只在這台裝置沒有任何資料、也沒連結雲端時出現；選過一次就不再出現（meta.welcomed 只存本機）

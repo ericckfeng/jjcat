@@ -65,6 +65,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/advice.js` | **純函式**：營養師的叮嚀（最上層 `advice`）：貼上的話拆成一條一條、首頁每天輪流 2 條、做到了（每日 `adviceDone`）、報告的做到幾天（有單元測試）。畫面 `scr-advice` 從報告分頁或首頁卡片進去 |
 | `js/features.js` | **純函式**：功能開關（`profile.features`）：不是記飲食的功能（體重、喝水、運動、睡眠、心情、體脂機、血壓、血糖）可以各自關掉，首頁格子加 `data-feature`；小芽（`off`）、小成就（`BADGE_FEATURE`）跟著不提醒（有單元測試） |
 | `js/vitals.js` | **純函式**：血壓、血糖（每日 `bp`、`glucose`，一天好幾次）：檢查數字、只提醒明顯危險的（很高的血壓、低血糖）、期間摘要、CSV 寫法（有單元測試）。畫面 `scr-bp`、`scr-glucose` |
+| `js/backup.js` | **純函式**：首頁的備份提醒：沒連雲端 7 天沒備份、連了雲端但 7 天沒同步成功、登入過期、要先更新；「晚點」3 天（`meta.backupSnoozeUntil`）（有單元測試） |
 | `js/photowall.js` | **純函式**：餐點照片牆：一週每天有照片的記錄（照餐別、時間排）和當天合計（有單元測試）。畫面 `scr-photowall` 從報告分頁進去，點照片用共用的 `openLightbox(date, id)` 看大圖、修正（會切到那天） |
 | `js/version.js` | **純函式**：版本號（由 `scripts/bump.py` 改）、有沒有新版、雲端要求的最低版本 `DATA_MIN_REV`、「我的裝置」清單（有單元測試） |
 | `js/nutrition.js` | 餐別、營養素、六大類代換表、預設快選 |

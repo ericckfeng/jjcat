@@ -335,3 +335,35 @@ export function labelFromPaste(text) {
     carbs: num(at(col(['碳水', '醣類']))), sugar: num(at(col(['糖'], /醣/))), sodium_mg: num(at(col(['鈉'])))
   });
 }
+
+/* ---------- 一週回顧：給自己的 AI App 看（不用 Key，使用者自己分享出去） ---------- */
+// 每天吃了什麼，一天一行：「11/18（一）早餐 燕麥 300、豆漿 120｜午餐 …｜共 1650 kcal」
+// logs: state.logs；meals: [[key, 名稱]]（照餐別順序）；dayLabel(date) → 「11/18（一）」
+export function foodDiaryLines(logs, dates, { meals, dayLabel }) {
+  return dates.map(d => {
+    const list = (logs && logs[d]) || [];
+    if (!list.length) return dayLabel(d) + ' 沒有記錄';
+    const parts = meals.map(([key, label]) => {
+      const xs = list.filter(i => i.meal === key);
+      return xs.length ? label + ' ' + xs.map(i => i.name + ' ' + Math.round(Number(i.kcal) || 0) + (i.pending ? '（暫估）' : '')).join('、') : null;
+    }).filter(Boolean);
+    const total = Math.round(list.reduce((a, i) => a + (Number(i.kcal) || 0), 0));
+    return dayLabel(d) + ' ' + parts.join('｜') + '｜共 ' + total + ' kcal';
+  });
+}
+// summary：給營養師的文字摘要（report.js 的 buildReportText）；diary：foodDiaryLines
+export function weekReviewPrompt(summary, diary) {
+  return [
+    '你是台灣的營養師助理，個性溫和、會鼓勵人。下面是我上週的飲食記錄，請幫我看看。',
+    '請用繁體中文（台灣）、簡單好懂的話回答，給長輩看也懂，全部不超過 300 字：',
+    '1. 這週做得好的 2～3 件事（要具體，說到我吃的東西）。',
+    '2. 下週可以試的 1～2 件小事（具體、做得到，例如「午餐便當多一份青菜」，不要一次改很多）。',
+    '3. 我常吃的外食，有沒有比較好的點法或換法。',
+    '注意：每日目標是營養師訂的，不要叫我改目標；不要診斷疾病；有吃藥或身體狀況的問題，請提醒我問營養師或醫生。標「暫估」的熱量還不準。',
+    '',
+    summary,
+    '',
+    '【每天吃了什麼】（數字是熱量 kcal）',
+    ...diary
+  ].join('\n');
+}

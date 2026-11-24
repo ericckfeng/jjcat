@@ -24,7 +24,7 @@ import { HAND_REFS, AMOUNTS, LOOKUP_CATS, lookupCat, cleanAmount, amountText, si
 import { partyTemplate, startCounts, partyEntries, partyTotals } from './party.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros } from './bank.js';
-import { mealPastePrompt, LABEL_PASTE_PROMPT, mealFromPaste, labelFromPaste } from './ai.js';
+import { mealPastePrompt, LABEL_PASTE_PROMPT, mealFromPaste, labelFromPaste, foodDiaryLines, weekReviewPrompt } from './ai.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
@@ -2447,9 +2447,26 @@ function renderWeekly() {
   $('weeklyGood').parentElement.classList.toggle('hidden', empty);
   $('weeklyTry').parentElement.classList.toggle('hidden', empty);
   $('weeklyShareBtn').classList.toggle('hidden', empty);
+  // 有開「用自己的 AI App」或 Gemini Key 的人才出現（沒在用 AI 的人不會多一顆看不懂的按鈕）
+  $('weeklyAiBtn').classList.toggle('hidden', empty || !(aiPasteOn() || aiKey()));
+  setBox('weeklyAiNote', null, '');
   $('weeklyGood').innerHTML = w.good.map(g => `<li class="rounded-2xl bg-emerald-50 border border-emerald-200 p-3 text-lg font-semibold text-emerald-900 leading-relaxed">✓ ${esc(g)}</li>`).join('');
   $('weeklyTry').textContent = '👉 ' + w.tryNext;
 }
+// 一週回顧：摘要＋每天吃了什麼＋請 AI 怎麼回答，用分享選單傳給自己的 AI App（App 不另外傳送）
+$('weeklyAiBtn').addEventListener('click', async () => {
+  if (!lastWeekly) return;
+  const dates = datesBetween(lastWeekly.from, lastWeekly.to);
+  const diary = foodDiaryLines(state.logs, dates, {
+    meals: MEAL_KEYS.map(k => [k, MEAL_META[k].label]),
+    dayLabel: (d) => fmtMD(d) + '（' + WEEKDAY[parseDate(d).getDay()] + '）'
+  });
+  const text = weekReviewPrompt(buildReportText(reportContext(), { from: lastWeekly.from, to: lastWeekly.to }), diary);
+  const how = await shareToAi(text, null);
+  if (how === 'shared') setBox('weeklyAiNote', 'ok', '傳好了。AI 回答後，挑一件做得到的試試看；有吃藥或身體的問題，還是要問營養師。');
+  else if (how === 'copied') setBox('weeklyAiNote', 'info', '已經複製好了。打開你的 AI App（ChatGPT、Gemini…），長按輸入框 →「貼上」，再送出。');
+  else if (how === 'failed') showError('沒辦法分享，也沒辦法複製。請改用「傳到 LINE／分享」，把週報傳給營養師。');
+});
 $('weeklyShareBtn').addEventListener('click', async () => {
   if (!lastWeekly) return;
   const text = weeklyText({ ...lastWeekly, name: state.profile.name }, fmtMD);

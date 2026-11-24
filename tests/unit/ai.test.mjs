@@ -167,3 +167,31 @@ test('用自己的 AI App：提示詞要表格；貼回的回答（```csv、Mark
   assert.equal(lb.servingG, 25);
   assert.equal(labelFromPaste('找不到營養標示'), null);
 });
+
+import { foodDiaryLines, weekReviewPrompt } from '../../js/ai.js';
+test('一週回顧：每天一行，照餐別順序列吃了什麼和熱量；暫估的標出來；沒記的那天也列', () => {
+  const logs = {
+    '2026-11-16': [
+      { name: '滷肉飯', kcal: 520, meal: 'lunch' },
+      { name: '燕麥', kcal: 300.4, meal: 'breakfast' },
+      { name: '豆漿', kcal: 120, meal: 'breakfast' },
+      { name: '午餐拍照待查', kcal: 0, meal: 'dinner', pending: true }
+    ]
+  };
+  const lines = foodDiaryLines(logs, ['2026-11-16', '2026-11-17'], {
+    meals: [['breakfast', '早餐'], ['lunch', '午餐'], ['dinner', '晚餐'], ['snack', '點心']],
+    dayLabel: (d) => d.slice(5)
+  });
+  assert.deepEqual(lines, [
+    '11-16 早餐 燕麥 300、豆漿 120｜午餐 滷肉飯 520｜晚餐 午餐拍照待查 0（暫估）｜共 940 kcal',
+    '11-17 沒有記錄'
+  ]);
+});
+test('一週回顧：給 AI 的說明包含回答方式、不要改目標、摘要和每天的明細', () => {
+  const t = weekReviewPrompt('【飲食記錄摘要】小明 11/16～11/22', ['11/16（一） 午餐 便當 750｜共 750 kcal']);
+  assert.match(t, /繁體中文/);
+  assert.match(t, /不要叫我改目標/);
+  assert.match(t, /不超過 300 字/);
+  assert.ok(t.includes('【飲食記錄摘要】小明 11/16～11/22'));
+  assert.ok(t.endsWith('11/16（一） 午餐 便當 750｜共 750 kcal'));
+});

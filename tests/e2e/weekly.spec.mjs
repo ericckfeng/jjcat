@@ -69,3 +69,33 @@ test('上週完全沒記：週報畫面顯示說明，不顯示分享', async ({
   await expect(page.locator('#weeklyEmpty')).toBeVisible();
   await expect(page.locator('#weeklyShareBtn')).toBeHidden();
 });
+
+test('請我的 AI 看看這週：沒在用 AI 的人看不到；開了「用自己的 AI App」→ 摘要＋每天吃了什麼一起分享出去', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.addInitScript(() => {
+    window.__shared = [];
+    navigator.share = async (d) => { window.__shared.push(d.text); };
+  });
+  await seed(page, 4);
+  await openApp(page);
+  await page.click('#weeklyCard');
+  await expect(page.locator('#weeklyAiBtn')).toBeHidden();
+  await closeScreens(page);
+  await openSettings(page, '#aiSetupBtn');
+  await page.click('#aiPasteToggle');
+  await closeScreens(page);
+  await page.click('.mobile-nav-tab[data-tab=report]');
+  await page.click('#tab-report [data-screen=scr-weekly]');
+  await page.click('#weeklyAiBtn');
+  await expect(page.locator('#weeklyAiNote')).toContainText('傳好了');
+  const [text] = await page.evaluate(() => window.__shared);
+  expect(text).toContain('不要叫我改目標');
+  expect(text).toContain('【飲食記錄摘要】小明');
+  expect(text).toContain('午餐 便當 1750｜共 1750 kcal');
+  expect(text).toContain('沒有記錄');   // 第 5～7 天沒記
+  // 不能分享（電腦）：複製好，說明怎麼貼
+  await page.evaluate(() => { delete navigator.share; });
+  await page.click('#weeklyAiBtn');
+  await expect(page.locator('#weeklyAiNote')).toContainText('已經複製好了');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('【每天吃了什麼】');
+});

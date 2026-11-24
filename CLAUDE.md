@@ -49,7 +49,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/targets.js` | **純函式**：依體重試算目標（Mifflin-St Jeor、熱量底線、三大營養素、喝水目標、重算提醒）（有單元測試） |
 | `js/highlights.js` | **純函式**：營養師報告頂端的「本週重點」（有單元測試） |
 | `js/bank.js` | **純函式**：熱量銀行（一週總量控管、今天的建議熱量、營養素調整）（有單元測試） |
-| `js/ai.js` | AI 辨識：呼叫 Gemini（使用者自己的 Key，存 `meta.ai`）、整理回傳資料（純函式有單元測試）。只能用 CORS 允許的 `content-type`、`x-goog-api-key` 標頭。也有「用自己的 AI App」（不用 Key，`meta.aiPaste`）的提示詞和讀回答（`mealPastePrompt`、`mealFromPaste`、`labelFromPaste`） |
+| `js/ai.js` | AI 辨識：呼叫 Gemini（使用者自己的 Key，存 `meta.ai`）、整理回傳資料（純函式有單元測試）。只能用 CORS 允許的 `content-type`、`x-goog-api-key` 標頭。也有「用自己的 AI App」（不用 Key，`meta.aiPaste`）的提示詞和讀回答（`mealPastePrompt`、`mealFromPaste`、`labelFromPaste`），以及小芽週報「請我的 AI 看看這週」的 `foodDiaryLines`、`weekReviewPrompt` |
 | `js/party.js` | **純函式**：吃到飽速記的範本與換算。**畫面 Rev. 43 已拿掉**，只用來把舊版留在裝置上、還沒記下來的速記（`meta.party`）記成記錄（有單元測試） |
 | `js/myfoods.js` | **純函式**：我的食物（`customFoods`）：新增頁表單 ↔ 每 100 g／每份、以份計的換算、搜尋、依常用排序（有單元測試） |
 | `js/combos.js` | **純函式**：套餐（`combos`）：購物車 → 套餐（每樣存 `snapshot`）、選套餐時找回現在的食物（找不到用 snapshot）、合計、搜尋、排序（有單元測試） |
@@ -59,7 +59,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/foodbook.js` | **純函式**：AI 建檔小工具的提示詞與回傳格式、整理 AI 回傳、驗算提醒（熱量／公克、三大營養素、長條圖估讀）、匯出成資料庫檔（有單元測試） |
 | `tools/foodbook.html`、`tools/foodbook.js` | AI 建檔小工具（獨立頁面）：書頁照片／掃描 PDF（pdf.js）→ Gemini 讀數字，或「用你自己的 AI」（複製提示詞 → 貼回答）→ 對照照片校對 → 資料庫檔；進度存 IndexedDB `foodbook-tool` |
 | `js/achievements.js` | **純函式**：小成就（連續／累計記錄、喝水、量體重、睡眠、運動、體重前進），全部從記錄算、不存；哪些已經慶祝過存 `meta.badgesSeen`（有單元測試） |
-| `js/lookup.js` | **純函式**：拍照記・待查的手掌法粗估（`LOOKUP_CATS`）、大小寫法、待查表 CSV 匯出與回填（有單元測試） |
+| `js/lookup.js` | **純函式**：拍照記・待查的手掌法粗估（`LOOKUP_CATS`）、大小寫法、待查表 CSV 匯出與回填、回填時存成我的食物 `lookupMyFoodForm`（有單元測試） |
 | `js/version.js` | **純函式**：版本號（由 `scripts/bump.py` 改）、有沒有新版、雲端要求的最低版本 `DATA_MIN_REV`、「我的裝置」清單（有單元測試） |
 | `js/nutrition.js` | 餐別、營養素、六大類代換表、預設快選 |
 | `js/config.js` | Google OAuth 用戶端 ID（公開值，可以放程式碼裡） |

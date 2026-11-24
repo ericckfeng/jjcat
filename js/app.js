@@ -23,9 +23,10 @@ import { comboFromCart, resolveCombo, comboTotals, comboSummary, searchCombos, s
 import { HAND_REFS, AMOUNTS, LOOKUP_CATS, lookupCat, cleanAmount, amountText, sizeText, estimateLookup, buildLookupCsv, readFilledCsv, lookupMyFoodForm, AI_LOOKUP_PROMPT } from './lookup.js';
 import { partyTemplate, startCounts, partyEntries, partyTotals } from './party.js';
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
-import { calorieBank, bankMacros } from './bank.js';
+import { calorieBank, bankMacros, weekOf } from './bank.js';
 import { mealPastePrompt, LABEL_PASTE_PROMPT, mealFromPaste, labelFromPaste, foodDiaryLines, weekReviewPrompt } from './ai.js';
 import { brandsOf, mealBudget, suggestMeals } from './eatout.js';
+import { wallDays, wallPhotoCount } from './photowall.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
@@ -934,6 +935,7 @@ function openScreen(id) {
   if (id === 'scr-data') { renderCloud(); renderBackupInfo(); }   // 關掉自動同步的人也要看得到雲端區塊
   if (id === 'scr-weekly') renderWeekly();
   if (id === 'scr-badges') renderBadges();
+  if (id === 'scr-photowall') { wallMonday = weekOf(ui.date)[0]; renderPhotoWall(); }
   if (id === 'scr-exercise') renderStepsGoal();
   if (id === 'scr-ai') { resetAi(); ['aiFallbackBtn', 'aiPasteFallbackBtn', 'aiPasteWrap'].forEach(x => $(x).classList.add('hidden')); $('aiPasteText').value = ''; }
   if (id === 'scr-manual') { setBox('add-lb-note', null, ''); manualBarcode = ''; }
@@ -3056,25 +3058,64 @@ $('editLogForm').addEventListener('submit', async (e) => {
 
 $('mealLogContainer').addEventListener('click', async (e) => {
   const view = e.target.closest('.view-photo-btn');
-  if (view) {
-    const item = (state.logs[ui.date] || []).find(i => i.id === view.getAttribute('data-view-photo'));
-    if (!item) return;
-    lightboxItemId = item.id;
-    $('lightboxFoodTitle').textContent = item.name + (item.pending ? '（暫估待修）' : '');
-    $('lightboxFoodSub').textContent = MEAL_META[item.meal].label + '・目前 ' + item.kcal + ' kcal';
-    $('lightboxImgs').innerHTML = (await entryPhotos(item)).map((src, i) =>
-      `<img src="${src}" alt="照片 ${i + 1}" class="max-h-[60vh] w-auto object-contain" />`).join('');
-    openModal('photoLightboxModal');
-    return;
-  }
+  if (view) { openLightbox(ui.date, view.getAttribute('data-view-photo')); return; }
   const edit = e.target.closest('.edit-entry-btn');
   if (edit) { openEditModal(edit.getAttribute('data-edit-id')); return; }
   const del = e.target.closest('.del-entry-btn');
   if (del) deleteEntry(del.getAttribute('data-del-id'));
 });
+// 看大圖（首頁的記錄、照片牆共用）；date＝記錄在哪一天
+let lightboxDate = null;
+async function openLightbox(date, id) {
+  const item = (state.logs[date] || []).find(i => i.id === id);
+  if (!item) return;
+  lightboxItemId = item.id;
+  lightboxDate = date;
+  $('lightboxFoodTitle').textContent = item.name + (item.pending ? '（暫估待修）' : '');
+  $('lightboxFoodSub').textContent = (date === ui.date ? '' : fmtMD(date) + ' ') + MEAL_META[item.meal].label + '・目前 ' + item.kcal + ' kcal';
+  $('lightboxImgs').innerHTML = (await entryPhotos(item)).map((src, i) =>
+    `<img src="${src}" alt="照片 ${i + 1}" class="max-h-[60vh] w-auto object-contain" />`).join('');
+  openModal('photoLightboxModal');
+}
 $('lightboxEditEntryBtn').addEventListener('click', () => {
   closeModal('photoLightboxModal');
-  if (lightboxItemId) openEditModal(lightboxItemId);
+  if (!lightboxItemId) return;
+  // 從照片牆看別天的：修改頁只看「現在顯示的那天」，先切過去
+  if (lightboxDate && lightboxDate !== ui.date) { ui.date = lightboxDate; renderAll(); }
+  openEditModal(lightboxItemId);
+});
+
+/* ---------------- 餐點照片牆（js/photowall.js） ---------------- */
+let wallMonday = null;
+function renderPhotoWall() {
+  const dates = weekOf(wallMonday);
+  const today = todayStr();
+  const shown = dates.filter(d => d <= today);   // 還沒到的日子不列
+  const days = wallDays(state.logs, shown, MEAL_KEYS).reverse();   // 最近的在上面
+  $('wallRange').textContent = fmtMD(dates[0]) + '～' + fmtMD(dates[6]);
+  $('wallNext').disabled = dates[6] >= today;
+  const n = wallPhotoCount(days);
+  $('wallSummary').textContent = n ? '這週有 ' + n + ' 筆附照片的記錄。' : '這週還沒有附照片的記錄。記的時候拍一張，回頭看很有感覺，給營養師看也比較清楚。';
+  $('wallDays').innerHTML = days.map(d => `<section class="space-y-2">
+      <div class="flex items-baseline gap-2 flex-wrap">
+        <span class="text-lg font-bold text-stone-900">${esc(fmtMD(d.date))}（${WEEKDAY[parseDate(d.date).getDay()]}）</span>
+        <span class="text-base text-stone-500 tabular-nums">${d.count ? '共 ' + d.kcal + ' 大卡・記了 ' + d.count + ' 筆' : '沒有記錄'}</span>
+      </div>
+      ${d.items.length ? `<div class="grid grid-cols-3 gap-2">${d.items.map(it => `<button type="button" data-wall="${esc(d.date)}|${esc(it.id)}" class="wall-cell" aria-label="${esc(MEAL_META[it.meal].label + ' ' + it.name)}">
+          <img data-photo-id="${esc(it.id)}" alt="" class="wall-img" />
+          <span class="block text-sm font-semibold text-stone-800 leading-tight">${MEAL_META[it.meal].label}${it.pending ? '<span class="text-amber-700">・待查</span>' : ''}</span>
+          <span class="block text-sm text-stone-500 tabular-nums">${it.kcal} 大卡</span>
+        </button>`).join('')}</div>` : (d.count ? '<p class="text-base text-stone-400">這天的記錄沒有照片</p>' : '')}
+    </section>`).join('');
+  hydratePhotos($('wallDays'));
+}
+$('wallPrev').addEventListener('click', () => { wallMonday = addDays(wallMonday, -7); renderPhotoWall(); $('scr-photowall').querySelector('.scr-body').scrollTop = 0; });
+$('wallNext').addEventListener('click', () => { wallMonday = addDays(wallMonday, 7); renderPhotoWall(); $('scr-photowall').querySelector('.scr-body').scrollTop = 0; });
+$('wallDays').addEventListener('click', (e) => {
+  const c = e.target.closest('[data-wall]');
+  if (!c) return;
+  const [date, id] = c.getAttribute('data-wall').split('|');
+  openLightbox(date, id);
 });
 
 $('copyYesterdayBtn').addEventListener('click', () => {

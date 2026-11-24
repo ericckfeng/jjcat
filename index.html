@@ -257,6 +257,7 @@
     <!-- TAB 4: REPORT -->
     <div id="tab-report" class="tab-panel hidden space-y-4">
       <button type="button" data-screen="scr-weekly" class="no-print tile tile-wide w-full"><span class="tile-ic">📅</span><span class="min-w-0 flex-1 text-left"><span class="tile-t block">小芽週報</span><span class="tile-s block">上週做得好的事，和下週可以試的一件事</span></span></button>
+      <button type="button" data-screen="scr-photowall" class="no-print tile tile-wide w-full"><span class="tile-ic">📸</span><span class="min-w-0 flex-1 text-left"><span class="tile-t block">餐點照片牆</span><span class="tile-s block">一週吃了什麼，用照片看</span></span></button>
       <button type="button" data-screen="scr-badges" class="no-print tile tile-wide w-full"><span class="tile-ic">🏅</span><span class="min-w-0 flex-1 text-left"><span class="tile-t block">我的小成就</span><span id="badgeTileSub" class="tile-s block">連續記錄、喝水、量體重…</span></span></button>
       <section class="no-print bg-white rounded-2xl border border-stone-200 p-4 sm:p-5 space-y-3">
         <div>
@@ -962,6 +963,22 @@
       <button type="button" id="weeklyShareBtn" class="btn-secondary btn-xl w-full">💬 傳到 LINE／分享</button>
       <button type="button" data-back class="btn-primary btn-xl w-full">完成</button>
     </div>
+  </div>
+
+  <!-- 餐點照片牆（報告分頁進來）：一週七天，每天有照片的記錄，點照片看大圖、修正 -->
+  <div id="scr-photowall" class="screen hidden" role="dialog" aria-label="餐點照片牆">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>📸 餐點照片牆</h2></div>
+    <div class="scr-body">
+      <div class="flex items-center gap-2">
+        <button type="button" id="wallPrev" class="chip-btn chip-lg shrink-0" aria-label="上一週">‹ 上週</button>
+        <div id="wallRange" class="min-w-0 flex-1 text-center text-lg font-bold text-stone-900"></div>
+        <button type="button" id="wallNext" class="chip-btn chip-lg shrink-0" aria-label="下一週">下週 ›</button>
+      </div>
+      <p id="wallSummary" class="text-base text-stone-600 leading-relaxed"></p>
+      <div id="wallDays" class="space-y-4"></div>
+      <p class="text-sm text-stone-500 leading-relaxed">點照片可以看大圖，對照著修正份量和熱量。</p>
+    </div>
+    <div class="scr-foot"><button type="button" data-back class="btn-primary btn-xl w-full">完成</button></div>
   </div>
 
   <!-- 每餐份數分配（營養師給的），記完一餐就知道還差什麼 -->

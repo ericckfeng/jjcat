@@ -319,3 +319,14 @@ button.mascot-chip { cursor: pointer; }
 .copy-card:active { background: #ecfdf5; }
 .copy-items { list-style: none; margin: 0; padding: 0; font-size: 1rem; line-height: 1.5; color: var(--stone-700, #44403c); flex: 1; }
 .copy-go { display: block; margin-top: .25rem; text-align: center; background: var(--emerald, #10b981); color: #fff; font-weight: 700; font-size: 1.1rem; border-radius: .9rem; padding: .6rem; }
+
+/* 餐點照片牆：三張一排的方形縮圖，下面寫餐別和熱量 */
+.wall-cell {
+  display: block; min-width: 0; text-align: left; padding: .35rem; border-radius: 1rem;
+  background: #fff; border: 1px solid var(--stone-200);
+}
+.wall-cell:active { background: #ecfdf5; }
+.wall-img {
+  display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: cover;
+  border-radius: .75rem; background: var(--stone-100); margin-bottom: .3rem;
+}

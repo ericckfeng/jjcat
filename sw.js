@@ -32,6 +32,7 @@ const CORE = [
   './js/barcode.js',
   './js/achievements.js',
   './js/eatout.js',
+  './js/photowall.js',
   './js/characters.js',
   './js/version.js',
   './tfda_foods.json',

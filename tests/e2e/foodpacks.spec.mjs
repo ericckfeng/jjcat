@@ -48,6 +48,26 @@ test('整理工具：自動對欄位、合併同店同名、標出要確認的�
   expect(errors).toEqual([]);
 });
 
+test('整理工具：打開收起來的一段連續勾好幾個，每勾一個不會又收起來', async ({ page }) => {
+  await makePack(page);
+  const tfda = page.locator('details[data-sec=tfda]');
+  await expect(tfda).toBeVisible();
+  await expect(tfda).not.toHaveAttribute('open', '');
+  await tfda.locator('summary').click();
+  const box = tfda.locator('[data-drop]').first();
+  await box.check();
+  await expect(tfda).toHaveAttribute('open', '');
+  await box.uncheck();
+  await expect(tfda).toHaveAttribute('open', '');
+  await box.check();
+  await expect(tfda).toHaveAttribute('open', '');
+  await expect(box).toBeChecked();
+  // 自己收起來的也保持收起來
+  await tfda.locator('summary').click();
+  await page.locator('details[data-sec=same] [data-drop]').first().check();
+  await expect(tfda).not.toHaveAttribute('open', '');
+});
+
 const PACK = {
   app: 'diet-tracker-foods', version: 1, exportedAt: '2026-11-21T00:00:00.000Z',
   pack: { id: 'pk_test', name: '外食連鎖店', org: '自己整理', edition: '2026', askBy: 'serving' },

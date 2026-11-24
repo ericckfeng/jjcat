@@ -10,6 +10,7 @@ const st = {
   fileName: '', sheets: null,   // xlsx：{ 名稱: rows }
   head: [], rows: [], mapping: [],
   askBy: 'serving', drop: new Set(),   // drop：使用者決定拿掉的（「可能重複」裡的）食物 id
+  secOpen: {},   // 檢查結果每一段使用者打開／收起的狀態：勾選後重畫時保持原樣，不用每勾一個就再點開一次
   file: null
 };
 
@@ -204,21 +205,21 @@ function update() {
     (dropped.length ? `、合併重複 ${dropped.length} 樣` : '') + (st.drop.size ? `、拿掉 ${st.drop.size} 樣` : '') +
     (skipped.length ? `、<span class="text-rose-700">不收 ${skipped.length} 列</span>` : '') +
     (check.length ? `、<span class="text-amber-700">要確認 ${check.length} 樣</span>` : '') + '。';
-  const sec = (title, body, open = false) => `<details class="rounded-xl border border-stone-200" ${open ? 'open' : ''}><summary class="px-3 py-2 font-semibold cursor-pointer">${title}</summary><div class="p-3 space-y-1 text-base">${body}</div></details>`;
+  const sec = (key, title, body, open = false) => `<details data-sec="${key}" class="rounded-xl border border-stone-200" ${(st.secOpen[key] ?? open) ? 'open' : ''}><summary class="px-3 py-2 font-semibold cursor-pointer">${title}</summary><div class="p-3 space-y-1 text-base">${body}</div></details>`;
   const parts = [];
-  if (check.length) parts.push(sec(`⚠ 數字要確認（${check.length}）`, '<p class="muted text-sm">熱量和蛋白質×4＋碳水×4＋脂肪×9 差很多，可能抄錯。照原表收進去，請回原表確認後再做一次。</p>' + check.map(p => `<div>第 ${p.row} 列：${esc(p.msg)}</div>`).join(''), true));
+  if (check.length) parts.push(sec('check', `⚠ 數字要確認（${check.length}）`, '<p class="muted text-sm">熱量和蛋白質×4＋碳水×4＋脂肪×9 差很多，可能抄錯。照原表收進去，請回原表確認後再做一次。</p>' + check.map(p => `<div>第 ${p.row} 列：${esc(p.msg)}</div>`).join(''), true));
   if (dup.sameNumbers.length) {
-    parts.push(sec(`可能重複：同一家、數字完全一樣（${dup.sameNumbers.length} 組）`, '<p class="muted text-sm">名稱不同但熱量、三大營養素都一樣，可能是複製時沒改到。勾選要拿掉的。</p>' +
+    parts.push(sec('same', `可能重複：同一家、數字完全一樣（${dup.sameNumbers.length} 組）`, '<p class="muted text-sm">名稱不同但熱量、三大營養素都一樣，可能是複製時沒改到。勾選要拿掉的。</p>' +
       dup.sameNumbers.map(g => '<div class="rounded-lg bg-stone-50 p-2">' + g.map(f => `<label class="flex gap-2 items-center"><input type="checkbox" data-drop="${esc(f.id)}" ${st.drop.has(f.id) ? 'checked' : ''}/> 拿掉 ${esc(who(f))}</label>`).join('') + '</div>').join(''), true));
   }
-  if (dropped.length) parts.push(sec(`已合併：同一家、同一個名稱（${dropped.length}）`, '<p class="muted text-sm">名稱寫法只差空白、全形半形也算同一樣。留下資料比較完整的那一列。</p>' + dup.exact.map(g => '<div>' + g.map(f => esc(who(f))).join(' ＝ ') + '</div>').join('')));
-  if (skipped.length) parts.push(sec(`不收（${skipped.length}）`, skipped.map(p => `<div>第 ${p.row} 列：${esc(p.msg)}</div>`).join('')));
-  if (blank.length) parts.push(sec(`看不懂的數字，當成空白（${blank.length}）`, blank.map(p => `<div>第 ${p.row} 列：${esc(FIELD_LABEL[p.field])}「${esc(p.value)}」</div>`).join('')));
-  if (dup.crossBrand.length) parts.push(sec(`不同店的同一個品項（${dup.crossBrand.length} 組，不合併）`, '<p class="muted text-sm">各家數字不同，不會平均。App 查食物時收成一列，點進去選哪一家、哪一種。</p>' +
+  if (dropped.length) parts.push(sec('merged', `已合併：同一家、同一個名稱（${dropped.length}）`, '<p class="muted text-sm">名稱寫法只差空白、全形半形也算同一樣。留下資料比較完整的那一列。</p>' + dup.exact.map(g => '<div>' + g.map(f => esc(who(f))).join(' ＝ ') + '</div>').join('')));
+  if (skipped.length) parts.push(sec('skip', `不收（${skipped.length}）`, skipped.map(p => `<div>第 ${p.row} 列：${esc(p.msg)}</div>`).join('')));
+  if (blank.length) parts.push(sec('blank', `看不懂的數字，當成空白（${blank.length}）`, blank.map(p => `<div>第 ${p.row} 列：${esc(FIELD_LABEL[p.field])}「${esc(p.value)}」</div>`).join('')));
+  if (dup.crossBrand.length) parts.push(sec('cross', `不同店的同一個品項（${dup.crossBrand.length} 組，不合併）`, '<p class="muted text-sm">各家數字不同，不會平均。App 查食物時收成一列，點進去選哪一家、哪一種。</p>' +
     dup.crossBrand.map(g => `<div><b>${esc(g[0].base)}</b>：${esc([...new Set(g.map(f => f.brand || '（沒填店家）'))].join('、'))}</div>`).join('')));
   const overlap = tfda ? tfdaOverlap(merged, tfda) : [];
   if (overlap.length) {
-    parts.push(sec(`衛福部資料庫也有（${overlap.length}）`, '<p class="muted text-sm">App 查食物時，衛福部資料庫本來就有這些（每 100 g 的數字）。表裡的是一份的數字，留著記的時候比較方便；不想重複出現就勾掉。</p>' +
+    parts.push(sec('tfda', `衛福部資料庫也有（${overlap.length}）`, '<p class="muted text-sm">App 查食物時，衛福部資料庫本來就有這些（每 100 g 的數字）。表裡的是一份的數字，留著記的時候比較方便；不想重複出現就勾掉。</p>' +
       overlap.map(({ food: f, tfda: t }) => `<label class="flex gap-2 items-start"><input type="checkbox" class="mt-1.5" data-drop="${esc(f.id)}" ${st.drop.has(f.id) ? 'checked' : ''}/> <span>拿掉 ${esc(who(f))}<span class="muted">　衛福部：${esc(t.name)}</span></span></label>`).join('')));
   }
   $('checkBody').innerHTML = parts.join('');
@@ -240,6 +241,11 @@ function update() {
   $('previewMore').textContent = foods.length > 50 ? '只列前 50 樣，共 ' + foods.length + ' 樣。' : '';
   saveProgress();
 }
+// toggle 不會往上傳，要用 capture 才收得到
+$('checkBody').addEventListener('toggle', (e) => {
+  const d = e.target.closest && e.target.closest('details[data-sec]');
+  if (d) st.secOpen[d.getAttribute('data-sec')] = d.open;
+}, true);
 $('checkBody').addEventListener('change', (e) => {
   const c = e.target.closest('[data-drop]');
   if (!c) return;

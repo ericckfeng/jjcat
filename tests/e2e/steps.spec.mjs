@@ -47,7 +47,7 @@ test('設定步數下限 → 運動頁填步數，顯示還差幾步／達到了
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#exportDaysCsvBtn')]);
   const csv = Buffer.concat(await (await dl.createReadStream()).toArray()).toString();
   const lines = csv.replace(/^﻿/, '').split('\r\n');
-  expect(lines[0].endsWith(',步數')).toBe(true);
-  expect(lines.find(l => l.startsWith(today)).endsWith(',6500')).toBe(true);
+  expect(lines[0].endsWith(',步數,血壓,血糖')).toBe(true);   // 新欄位一律加在最後
+  expect(lines.find(l => l.startsWith(today)).endsWith(',6500,,')).toBe(true);
   expect(errors).toEqual([]);
 });

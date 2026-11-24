@@ -158,16 +158,18 @@
         </div>
       </section>
 
-      <!-- Body tiles -->
-      <section class="space-y-2">
+      <!-- Body tiles（⚙️ 設定 → 功能開關可以各自關掉，全部關掉這一區就不出現） -->
+      <section id="bodySection" class="space-y-2">
         <h2 class="sec-title">記錄身體</h2>
         <div class="grid grid-cols-2 gap-3">
-          <button type="button" data-screen="scr-sleep" class="tile col-span-2 tile-wide"><span class="tile-ic">😴</span><span class="min-w-0"><span class="tile-t block">睡眠</span><span id="tileSleep" class="tile-s block">記一下昨晚睡多久</span></span></button>
-          <button type="button" data-screen="scr-weight" class="tile"><span class="tile-ic">⚖️</span><span class="tile-t">體重・尺寸</span><span id="tileWeight" class="tile-s">還沒量</span></button>
-          <button type="button" data-screen="scr-water" class="tile"><span class="tile-ic">💧</span><span class="tile-t">喝水</span><span id="tileWater" class="tile-s">0 ml</span></button>
-          <button type="button" data-screen="scr-exercise" class="tile"><span class="tile-ic">🏃</span><span class="tile-t">運動</span><span id="tileExercise" class="tile-s">還沒記</span></button>
-          <button type="button" data-screen="scr-note" class="tile"><span class="tile-ic">📝</span><span class="tile-t">心情・備註</span><span id="tileNote" class="tile-s">想問營養師也寫這</span></button>
-          <button type="button" data-screen="scr-bodycomp" class="tile col-span-2 tile-wide"><span class="tile-ic">📊</span><span class="min-w-0"><span class="tile-t block">體脂機報告</span><span id="tileBodyComp" class="tile-s block">InBody、健身房或家用體脂機</span></span></button>
+          <button type="button" data-screen="scr-bp" data-feature="bp" class="tile"><span class="tile-ic">🩺</span><span class="tile-t">血壓</span><span id="tileBp" class="tile-s">還沒量</span></button>
+          <button type="button" data-screen="scr-glucose" data-feature="glucose" class="tile"><span class="tile-ic">🩸</span><span class="tile-t">血糖</span><span id="tileGlucose" class="tile-s">還沒量</span></button>
+          <button type="button" data-screen="scr-sleep" data-feature="sleep" class="tile col-span-2 tile-wide"><span class="tile-ic">😴</span><span class="min-w-0"><span class="tile-t block">睡眠</span><span id="tileSleep" class="tile-s block">記一下昨晚睡多久</span></span></button>
+          <button type="button" data-screen="scr-weight" data-feature="weight" class="tile"><span class="tile-ic">⚖️</span><span class="tile-t">體重・尺寸</span><span id="tileWeight" class="tile-s">還沒量</span></button>
+          <button type="button" data-screen="scr-water" data-feature="water" class="tile"><span class="tile-ic">💧</span><span class="tile-t">喝水</span><span id="tileWater" class="tile-s">0 ml</span></button>
+          <button type="button" data-screen="scr-exercise" data-feature="exercise" class="tile"><span class="tile-ic">🏃</span><span class="tile-t">運動</span><span id="tileExercise" class="tile-s">還沒記</span></button>
+          <button type="button" data-screen="scr-note" data-feature="note" class="tile"><span class="tile-ic">📝</span><span class="tile-t">心情・備註</span><span id="tileNote" class="tile-s">想問營養師也寫這</span></button>
+          <button type="button" data-screen="scr-bodycomp" data-feature="bodycomp" class="tile col-span-2 tile-wide"><span class="tile-ic">📊</span><span class="min-w-0"><span class="tile-t block">體脂機報告</span><span id="tileBodyComp" class="tile-s block">InBody、健身房或家用體脂機</span></span></button>
         </div>
       </section>
 
@@ -875,6 +877,11 @@
         <label class="flex items-start gap-3 py-1"><input id="docToggle" type="checkbox" class="big-check mt-1" /><span><b>🩺 營養師</b>：做得不夠時出來提醒，一天最多 2 次</span></label>
         <p class="text-sm text-stone-500">都不勾的話，提醒改用首頁的小卡片顯示。</p>
       </div>
+      <div class="rounded-2xl bg-white border border-stone-200 p-3 space-y-1 text-base text-stone-700">
+        <div class="font-semibold text-stone-900">首頁要記哪些（不是飲食的可以關掉）</div>
+        <div id="featureToggles"></div>
+        <p class="text-sm text-stone-500 leading-relaxed">關掉只是首頁不顯示、小芽不提醒；以前記的都還在，報告照常列出。會同步到你的其他裝置。</p>
+      </div>
       <label class="flex items-start gap-3 rounded-2xl bg-white border border-stone-200 p-3 text-base text-stone-700"><input id="bankToggle" type="checkbox" class="big-check mt-1" /><span><b>熱量銀行</b>：用一週總量控管。哪天多吃或少吃，差額會平均分到這週剩下的日子（每週一重新開始）</span></label>
       <p class="text-sm text-stone-500 leading-relaxed">「我在控制血糖」在「我的基本資料」；AI 辨識在設定的「AI 辨識」。</p>
     </div>
@@ -1162,6 +1169,43 @@
       <label class="block"><span class="scr-label">或直接輸入總量 (ml)</span><input id="dayWater" data-day-num="water" type="number" inputmode="numeric" step="50" min="0" max="8000" class="field tabular-nums" placeholder="0" /></label>
     </div>
     <div class="scr-foot"><button type="button" data-back data-saved class="btn-primary btn-xl w-full">完成</button></div>
+  </div>
+
+  <!-- 血壓（⚙️ 功能開關打開才出現在首頁）：一天可以量好幾次 -->
+  <div id="scr-bp" class="screen hidden" role="dialog" aria-label="血壓">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>🩺 血壓</h2></div>
+    <div class="scr-body">
+      <div class="grid grid-cols-2 gap-2">
+        <label class="block"><span class="block text-base text-stone-700 mb-1">上面的數字<br><span class="text-sm text-stone-500">收縮壓</span></span><input id="bpSys" type="number" inputmode="numeric" min="60" max="260" class="field field-xl tabular-nums" placeholder="120" /></label>
+        <label class="block"><span class="block text-base text-stone-700 mb-1">下面的數字<br><span class="text-sm text-stone-500">舒張壓</span></span><input id="bpDia" type="number" inputmode="numeric" min="30" max="160" class="field field-xl tabular-nums" placeholder="80" /></label>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <label class="block"><span class="block text-base text-stone-700 mb-1">脈搏（可不填）</span><input id="bpPulse" type="number" inputmode="numeric" min="30" max="220" class="field text-lg tabular-nums text-center" placeholder="70" /></label>
+        <label class="block"><span class="block text-base text-stone-700 mb-1">幾點量的</span><input id="bpTime" type="time" class="field text-lg" /></label>
+      </div>
+      <button type="button" id="bpAddBtn" class="btn-primary btn-xl w-full">記下來</button>
+      <p id="bpNote" class="hidden rounded-2xl whitespace-pre-line p-3 text-base leading-relaxed"></p>
+      <div><div class="scr-label"><span id="bpDayLabel">今天</span>量的</div><div id="bpList" class="space-y-2"></div></div>
+      <p class="text-sm text-stone-500 leading-relaxed">只記錄、不判斷；目標請照醫生說的。很高的血壓會提醒你。</p>
+    </div>
+    <div class="scr-foot"><button type="button" data-back class="btn-primary btn-xl w-full">完成</button></div>
+  </div>
+
+  <!-- 血糖（⚙️ 功能開關打開才出現在首頁；「我在控制血糖」的人預設打開） -->
+  <div id="scr-glucose" class="screen hidden" role="dialog" aria-label="血糖">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>🩸 血糖</h2></div>
+    <div class="scr-body">
+      <div><div class="scr-label">什麼時候量的？</div><div id="glKinds" class="grid grid-cols-3 gap-2"></div></div>
+      <div class="grid grid-cols-2 gap-2">
+        <label class="block"><span class="block text-base text-stone-700 mb-1">血糖（mg/dL）</span><input id="glValue" type="number" inputmode="numeric" min="20" max="600" class="field field-xl tabular-nums" placeholder="100" /></label>
+        <label class="block"><span class="block text-base text-stone-700 mb-1">幾點量的</span><input id="glTime" type="time" class="field text-lg" /></label>
+      </div>
+      <button type="button" id="glAddBtn" class="btn-primary btn-xl w-full">記下來</button>
+      <p id="glNote" class="hidden rounded-2xl whitespace-pre-line p-3 text-base leading-relaxed"></p>
+      <div><div class="scr-label"><span id="glDayLabel">今天</span>量的</div><div id="glList" class="space-y-2"></div></div>
+      <p class="text-sm text-stone-500 leading-relaxed">只記錄、不判斷；目標請照醫生說的。低血糖、很高的血糖會提醒你。</p>
+    </div>
+    <div class="scr-foot"><button type="button" data-back class="btn-primary btn-xl w-full">完成</button></div>
   </div>
 
   <!-- 運動 -->

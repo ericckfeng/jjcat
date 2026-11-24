@@ -16,7 +16,7 @@ test('設定首頁列出六項，副標題顯示目前的狀態與版本', async
   await expect(page.locator('#setProfileSub')).toContainText('王小明・男');
   await expect(page.locator('#setProfileSub')).toContainText('181 公分');
   await expect(page.locator('#setTargetsSub')).toHaveText('每天 1,500 kcal・有每餐份數');
-  await expect(page.locator('#setFeaturesSub')).toHaveText('字體 特大・角色 小芽、小貓、營養師・熱量銀行 開');
+  await expect(page.locator('#setFeaturesSub')).toHaveText('字體 特大・角色 小芽、小貓、營養師・熱量銀行 開・首頁記錄 6/8 項');
   await expect(page.locator('#setAboutSub')).toContainText('（Rev. ');
   await page.click('#scr-settings [data-screen=scr-about]');
   await expect(page.locator('#appVersionText')).toHaveText(/^版本 \d{4}\.\d{2}\.\d{2}-\d+（Rev\. \d+）$/);

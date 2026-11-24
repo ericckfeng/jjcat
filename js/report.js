@@ -5,6 +5,7 @@ import { waterGoal } from './targets.js';
 import { nightSummary } from './meals.js';
 import { buildHighlights } from './highlights.js';
 import { adviceStats } from './advice.js';
+import { vitalsSummary, bpText, glucoseText } from './vitals.js';
 const EXTRA_MEASURES = MEASURES.filter(m => m.key !== 'weight' && m.key !== 'waist');
 
 const WEEK = '日一二三四五六';
@@ -251,6 +252,19 @@ export async function buildReportHTML(ctx, opts) {
   h += '</tr></tbody></table></div>';
   h += '<div class="muted" style="margin-top:4px">紅字＝超過目標 10% 以上；橘字＝蔬菜／水果／乳品低於目標；* ＝當天有暫估待修的記錄（熱量欄）或含補眠（睡眠欄）。昨晚的睡眠記在起床那天（含當天補眠），橘字＝不到 6 小時。營養素與份數只計入有填的記錄。' + (night.days ? '夜間＝晚上 10 點到早上 7 點吃的（不含早餐與事後補記），只記錄供參考。' : '') + '</div>';
 
+  // 血壓、血糖（有記才列）
+  const vt = vitalsSummary(days, dates);
+  if (vt.bp || vt.glucose.length) {
+    h += '<h2>🩺 血壓・血糖</h2><ul class="qs">';
+    if (vt.bp) h += `<li>血壓平均 <b>${vt.bp.sys}/${vt.bp.dia}</b>（量了 ${vt.bp.n} 次），最高 ${vt.bp.max.sys}/${vt.bp.max.dia}</li>`;
+    vt.glucose.forEach(g => { h += `<li>血糖・${esc(g.label)}：平均 <b>${g.avg}</b> mg/dL（${g.n} 次，${g.min}～${g.max}）</li>`; });
+    h += '</ul><ul class="qs">';
+    dates.filter(d => days[d] && ((days[d].bp || []).length || (days[d].glucose || []).length)).forEach(d => {
+      h += `<li><b>${dw(d)}</b>　${esc([bpText(days[d].bp), glucoseText(days[d].glucose)].filter(Boolean).join('；'))}</li>`;
+    });
+    h += '</ul>';
+  }
+
   // 營養師的叮嚀：這段期間每一條做到幾天
   const adv = adviceStats(state.advice, days, dates);
   if (adv.length) {
@@ -381,6 +395,9 @@ export function buildReportText(ctx, opts) {
   if (sl.length) extra.push('平均睡眠 ' + r1(sl.reduce((a, r) => a + r.total, 0) / sl.length / 60) + ' 小時（不到 6 小時 ' + sl.filter(r => r.total < 360).length + ' 天）');
   if (extra.length) lines.push(extra.join('｜'));
   if (s.pending) lines.push('⚠ 有 ' + s.pending + ' 筆是暫估、還沒修正');
+  const vt = vitalsSummary(state.days, dates);
+  if (vt.bp) lines.push('血壓平均 ' + vt.bp.sys + '/' + vt.bp.dia + '（' + vt.bp.n + ' 次），最高 ' + vt.bp.max.sys + '/' + vt.bp.max.dia);
+  if (vt.glucose.length) lines.push('血糖：' + vt.glucose.map(g => g.label + '平均 ' + g.avg + '（' + g.n + ' 次）').join('、') + '（mg/dL）');
   const adv = adviceStats(state.advice, state.days, dates);
   if (adv.length) {
     lines.push('');

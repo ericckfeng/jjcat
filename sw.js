@@ -34,6 +34,8 @@ const CORE = [
   './js/eatout.js',
   './js/photowall.js',
   './js/advice.js',
+  './js/vitals.js',
+  './js/features.js',
   './js/characters.js',
   './js/version.js',
   './tfda_foods.json',

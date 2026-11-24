@@ -132,9 +132,11 @@ export function buildMascotMessages(ctx) {
       add(40, 'calm', '今天吃得有點少，記得要吃飽、吃均衡喔');
     }
   }
-  if (ctx.exercise) add(45, 'happy', `有運動（${ctx.exercise}），給你一個讚 👍`);
-  const sl = ctx.lastNight;
-  if (ctx.isToday && sl && sl.night) {
+  // 設定裡關掉的功能（睡眠、喝水、運動…）不提醒
+  const on = (k) => !(ctx.off || []).includes(k);
+  if (on('exercise') && ctx.exercise) add(45, 'happy', `有運動（${ctx.exercise}），給你一個讚 👍`);
+  const sl = on('sleep') ? ctx.lastNight : null;
+  if (!on('sleep')) { /* 關掉睡眠：不問、不誇 */ } else if (ctx.isToday && sl && sl.night) {
     const h = Math.round(sl.night / 6) / 10;
     if (sl.night >= 420) add(42, 'happy', `昨晚睡了 ${h} 小時，睡飽了食慾比較好控制 😴`, 'slept-well');
     // 睡不到 6 小時的提醒在 insights.js
@@ -143,12 +145,12 @@ export function buildMascotMessages(ctx) {
   }
   // 有設喝水目標就看目標，沒設就用 1500 ml
   const wg = ctx.waterGoal || 1500;
-  if (ctx.isToday && ctx.water >= wg) add(35, 'happy', ctx.waterGoal ? '今天的喝水目標達成了，身體會謝謝你 💧' : '水喝得很夠，身體會謝謝你 💧', 'water-goal');
+  if (!on('water')) { /* 關掉喝水 */ } else if (ctx.isToday && ctx.water >= wg) add(35, 'happy', ctx.waterGoal ? '今天的喝水目標達成了，身體會謝謝你 💧' : '水喝得很夠，身體會謝謝你 💧', 'water-goal');
   else if (ctx.isToday && ctx.hour >= 15 && (ctx.water || 0) < Math.round(wg * 2 / 3)) add(30, 'calm', '記得多喝水喔，按「喝水」記一下 💧');
   if (ctx.proteinTarget && ctx.protein >= ctx.proteinTarget) {
     add(34, 'happy', `${ctx.isToday ? '今天' : '這天'}蛋白質吃到 ${Math.round(ctx.protein)} 克，達標了，肌肉會謝謝你 💪`, 'protein-goal');
   }
-  if (ctx.stepsTarget && ctx.steps >= ctx.stepsTarget) add(34, 'happy', `${ctx.isToday ? '今天' : '這天'}走了 ${ctx.steps.toLocaleString()} 步，達到目標了 🚶`, 'steps-goal');
+  if (!on('exercise')) { /* 關掉運動・步數 */ } else if (ctx.stepsTarget && ctx.steps >= ctx.stepsTarget) add(34, 'happy', `${ctx.isToday ? '今天' : '這天'}走了 ${ctx.steps.toLocaleString()} 步，達到目標了 🚶`, 'steps-goal');
   else if (ctx.isToday && ctx.stepsTarget && ctx.steps > 0 && ctx.hour >= 17) add(31, 'calm', `今天走了 ${ctx.steps.toLocaleString()} 步，離 ${ctx.stepsTarget.toLocaleString()} 步還差 ${(ctx.stepsTarget - ctx.steps).toLocaleString()} 步，飯後散步一下 🚶`, 'steps-short');
   else if (ctx.isToday && ctx.stepsTarget && ctx.steps == null && ctx.hour >= 19) add(29, 'hello', '睡前看一下手機的步數，按「運動」記下來 🚶', 'steps-ask');
   if (ctx.bmi != null && ctx.bmi >= 18.5 && ctx.bmi < 24) add(33, 'happy', `BMI ${ctx.bmi}，在健康範圍內，維持得很好`);

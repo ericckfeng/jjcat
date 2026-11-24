@@ -28,6 +28,8 @@ import { mealPastePrompt, LABEL_PASTE_PROMPT, mealFromPaste, labelFromPaste, foo
 import { brandsOf, mealBudget, suggestMeals } from './eatout.js';
 import { wallDays, wallPhotoCount } from './photowall.js';
 import { splitAdvice, activeAdvice, todaysAdvice, toggleDone } from './advice.js';
+import { FEATURES, featureOn, featuresOff, BADGE_FEATURE } from './features.js';
+import { GLUCOSE_KINDS, glucoseKindLabel, bpReading, glucoseReading, bpAlert, glucoseAlert, bpText, glucoseText } from './vitals.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
@@ -944,6 +946,8 @@ function openScreen(id) {
   if (id === 'scr-data') { renderCloud(); renderBackupInfo(); }   // 關掉自動同步的人也要看得到雲端區塊
   if (id === 'scr-weekly') renderWeekly();
   if (id === 'scr-badges') renderBadges();
+  if (id === 'scr-bp') { ['bpSys', 'bpDia', 'bpPulse'].forEach(x => { $(x).value = ''; }); $('bpTime').value = ui.date === todayStr() ? nowTime() : ''; setBox('bpNote', null, ''); renderBp(); }
+  if (id === 'scr-glucose') { $('glValue').value = ''; $('glTime').value = ui.date === todayStr() ? nowTime() : ''; setBox('glNote', null, ''); renderGlucose(); }
   if (id === 'scr-advice') { $('advicePaste').value = ''; $('adviceDate').value = todayStr(); $('adviceFrom').value = state.meta.adviceFrom || ''; adviceDraft = []; renderAdviceDraft(); setBox('adviceNote', null, ''); renderAdviceScreen(); }
   if (id === 'scr-photowall') { wallMonday = weekOf(ui.date)[0]; renderPhotoWall(); }
   if (id === 'scr-exercise') renderStepsGoal();
@@ -982,7 +986,24 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// 功能開關：關掉的格子不顯示；「記錄身體」全部關掉就整區不出現
+function renderFeatureTiles() {
+  let any = false;
+  document.querySelectorAll('[data-feature]').forEach(el => {
+    const on = featureOn(state.profile, el.getAttribute('data-feature'));
+    el.classList.toggle('hidden', !on);
+    if (on) any = true;
+  });
+  $('bodySection').classList.toggle('hidden', !any);
+  const d = getDay(ui.date, false);
+  const bp = Array.isArray(d.bp) ? d.bp : [];
+  const gl = Array.isArray(d.glucose) ? d.glucose : [];
+  const lastBp = bp[bp.length - 1], lastGl = gl[gl.length - 1];
+  $('tileBp').textContent = lastBp ? lastBp.sys + '/' + lastBp.dia + (bp.length > 1 ? '（量了 ' + bp.length + ' 次）' : '') : '還沒量';
+  $('tileGlucose').textContent = lastGl ? glucoseKindLabel(lastGl.kind) + ' ' + lastGl.v + (gl.length > 1 ? '（' + gl.length + ' 次）' : '') : '還沒量';
+}
 function renderTiles() {
+  renderFeatureTiles();
   const d = getDay(ui.date, false);
   const ts = daySleep(d);
   const parts = [];
@@ -1944,7 +1965,10 @@ function currentBadges() {
       walk: num(d.steps) > 0 && num(d.steps) >= (state.targets.steps || 1) };
   });
   const weights = dates.filter(date => num((state.days[date] || {}).weight) != null).map(date => ({ date, kg: num(state.days[date].weight) }));
-  return computeBadges({ facts, weights, dir: weightDir(), today });
+  const res = computeBadges({ facts, weights, dir: weightDir(), today });
+  // 關掉的功能（喝水、睡眠…）不列那一組
+  const off = new Set(featuresOff(state.profile));
+  return { ...res, badges: res.badges.filter(b => !off.has(BADGE_FEATURE[b.group])) };
 }
 // 這台裝置還沒慶祝過的新成就；第一次用這個功能時，以前得到的全部當成看過（不要一次放一堆彩帶）
 function freshBadges(badges) {
@@ -2540,7 +2564,7 @@ function renderMascot() {
     protein: t.macroItems ? t.p : 0, proteinTarget: num(state.targets.p),
     lastNight: daySleep(getDay(ui.date, false)),
     exercise: d.exercise || (d.exMin ? d.exMin + ' 分鐘' : ''),
-    insights
+    insights, off: featuresOff(state.profile)
   }), { ...pals, isToday, docSeen: docSeenToday() });
   // 只勾營養師時，營養師沒說到的提醒照樣放在「小提醒」卡片
   const said = new Set(mascotMsgs.map(m => m.key));
@@ -3105,6 +3129,70 @@ $('lightboxEditEntryBtn').addEventListener('click', () => {
   // 從照片牆看別天的：修改頁只看「現在顯示的那天」，先切過去
   if (lightboxDate && lightboxDate !== ui.date) { ui.date = lightboxDate; renderAll(); }
   openEditModal(lightboxItemId);
+});
+
+/* ---------------- 血壓、血糖（js/vitals.js；⚙️ 功能開關打開才出現） ---------------- */
+// 每日欄位 bp、glucose：一天好幾次，整個陣列一起換（setDayField 記修改時間）
+const dayLabelText = () => (ui.date === todayStr() ? '今天' : fmtMD(ui.date));
+function readingRows(list, text, attr) {
+  return list.length ? list.map(r => `<div class="flex items-center gap-2 bg-white rounded-xl border border-stone-200 p-3">
+      <span class="min-w-0 flex-1 text-lg font-semibold text-stone-900 tabular-nums">${esc(text(r))}</span>
+      <button type="button" ${attr}="${esc(r.id)}" class="chip-btn chip-lg shrink-0" aria-label="刪除這次">✕</button></div>`).join('')
+    : '<p class="text-base text-stone-500">還沒有</p>';
+}
+function renderBp() {
+  $('bpDayLabel').textContent = dayLabelText();
+  const list = getDay(ui.date).bp || [];
+  $('bpList').innerHTML = readingRows(list, r => bpText([r]), 'data-bp-del');
+}
+$('bpAddBtn').addEventListener('click', () => {
+  const { reading, error } = bpReading({ sys: $('bpSys').value, dia: $('bpDia').value, pulse: $('bpPulse').value, t: $('bpTime').value }, uid('bp'));
+  if (error) { setBox('bpNote', 'err', error); return; }
+  setDayField('bp', [...(getDay(ui.date).bp || []), reading].sort((a, b) => String(a.t).localeCompare(String(b.t))));
+  const alert = bpAlert(reading);
+  setBox('bpNote', alert ? (alert.level === 'urgent' ? 'err' : 'info') : 'ok', '記下來了：' + reading.sys + '/' + reading.dia + (alert ? '\n' + alert.text : ''));
+  ['bpSys', 'bpDia', 'bpPulse'].forEach(x => { $(x).value = ''; });
+  renderBp();
+  renderFeatureTiles();
+});
+$('bpList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-bp-del]');
+  if (!b) return;
+  const next = (getDay(ui.date).bp || []).filter(r => r.id !== b.getAttribute('data-bp-del'));
+  setDayField('bp', next.length ? next : null);
+  renderBp();
+  renderFeatureTiles();
+});
+let glKind = 'fasting';
+function renderGlucose() {
+  $('glKinds').innerHTML = GLUCOSE_KINDS.map(([k, l]) => `<button type="button" data-gl-kind="${k}" class="toggle-btn ${k === glKind ? 'is-active' : ''}">${l}</button>`).join('');
+  $('glDayLabel').textContent = dayLabelText();
+  const list = getDay(ui.date).glucose || [];
+  $('glList').innerHTML = readingRows(list, r => glucoseText([r]), 'data-gl-del');
+}
+$('glKinds').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-gl-kind]');
+  if (!b) return;
+  glKind = b.getAttribute('data-gl-kind');
+  renderGlucose();
+});
+$('glAddBtn').addEventListener('click', () => {
+  const { reading, error } = glucoseReading({ kind: glKind, v: $('glValue').value, t: $('glTime').value }, uid('gl'));
+  if (error) { setBox('glNote', 'err', error); return; }
+  setDayField('glucose', [...(getDay(ui.date).glucose || []), reading].sort((a, b) => String(a.t).localeCompare(String(b.t))));
+  const alert = glucoseAlert(reading);
+  setBox('glNote', alert ? 'err' : 'ok', '記下來了：' + glucoseKindLabel(reading.kind) + ' ' + reading.v + (alert ? '\n' + alert.text : ''));
+  $('glValue').value = '';
+  renderGlucose();
+  renderFeatureTiles();
+});
+$('glList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-gl-del]');
+  if (!b) return;
+  const next = (getDay(ui.date).glucose || []).filter(r => r.id !== b.getAttribute('data-gl-del'));
+  setDayField('glucose', next.length ? next : null);
+  renderGlucose();
+  renderFeatureTiles();
 });
 
 /* ---------------- 營養師的叮嚀（js/advice.js） ---------------- */
@@ -4188,7 +4276,8 @@ function renderSettings() {
   const t = state.targets;
   $('setTargetsSub').textContent = '每天 ' + (t.kcal || 1800).toLocaleString() + ' kcal' + (t.steps ? '・走 ' + t.steps.toLocaleString() + ' 步' : '') + (t.mealEx ? '・有每餐份數' : '') + (t.calc ? '・依體重試算' : '');
   $('setFeaturesSub').textContent = '字體 ' + FONT_SIZES[FONT_SIZES[state.meta.fontSize] ? state.meta.fontSize : 'l'].label
-    + '・角色 ' + (Object.entries({ sprout: '小芽', cat: '小貓', doc: '營養師' }).filter(([k]) => palsOn()[k]).map(([, v]) => v).join('、') || '關') + '・熱量銀行 ' + (t.bank ? '開' : '關');
+    + '・角色 ' + (Object.entries({ sprout: '小芽', cat: '小貓', doc: '營養師' }).filter(([k]) => palsOn()[k]).map(([, v]) => v).join('、') || '關') + '・熱量銀行 ' + (t.bank ? '開' : '關')
+    + (() => { const on = FEATURES.filter(f => featureOn(state.profile, f.key)).length; return '・首頁記錄 ' + on + '/' + FEATURES.length + ' 項'; })();
   const c = state.meta.cloud;
   $('setDataSub').textContent = cloud.isConfigured() && c.linked ? '雲端同步：已連結' + (c.email ? '（' + c.email + '）' : '') : '雲端同步、下載備份、匯入、匯出 CSV';
   $('setAboutSub').textContent = '版本 ' + APP_VERSION + '・隱私權政策・資料來源';
@@ -4242,7 +4331,17 @@ function renderFeatures() {
   $('catToggle').checked = pals.cat;
   $('docToggle').checked = pals.doc;
   $('bankToggle').checked = Boolean(state.targets.bank);
+  $('featureToggles').innerHTML = FEATURES.map(f => `<label class="flex items-start gap-3 py-1"><input type="checkbox" data-feature-toggle="${f.key}" class="big-check mt-1" ${featureOn(state.profile, f.key) ? 'checked' : ''} /><span>${esc(f.label)}</span></label>`).join('');
 }
+// 功能開關存在基本資料（profile.features），跟著同步到自己的其他裝置
+$('featureToggles').addEventListener('change', (e) => {
+  const c = e.target.closest('[data-feature-toggle]');
+  if (!c) return;
+  state.profile = { ...state.profile, features: { ...(state.profile.features || {}), [c.getAttribute('data-feature-toggle')]: c.checked } };
+  state.profileAt = now();
+  persist();
+  renderAll();
+});
 $('fontSizeGroup').addEventListener('click', (e) => {
   const b = e.target.closest('[data-font]');
   if (!b) return;
@@ -4820,12 +4919,12 @@ $('exportCsvBtn').addEventListener('click', () => {
 });
 $('exportDaysCsvBtn').addEventListener('click', () => {
   const dates = Array.from(new Set([...Object.keys(state.logs), ...Object.keys(state.days)])).sort();
-  const rows = [['日期', '總熱量', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '體重(kg)', 'BMI', '腰圍(cm)', '臀圍(cm)', '上臂圍(cm)', '大腿圍(cm)', '胸圍(cm)', '體脂率(%)', '喝水(ml)', '運動', '運動分鐘', '上床', '起床', '夜間睡眠(分)', '補眠(分)', '總睡眠(小時)', '睡眠品質(1-5)', '飢餓感(1-5)', '心情(1-5)', '排便', '備註', '想問營養師', '體脂機基礎代謝(kcal)', '骨骼肌(kg)', '內臟脂肪等級', '相位角(°)', '細胞外水分比', '內臟脂肪面積(cm²)', '四肢肌肉量(kg)', 'SMI(kg/m²)', '步數']];
+  const rows = [['日期', '總熱量', '蛋白質(g)', '碳水(g)', '脂肪(g)', ...EX_KEYS.map(k => EX_META[k].short + '(份)'), '體重(kg)', 'BMI', '腰圍(cm)', '臀圍(cm)', '上臂圍(cm)', '大腿圍(cm)', '胸圍(cm)', '體脂率(%)', '喝水(ml)', '運動', '運動分鐘', '上床', '起床', '夜間睡眠(分)', '補眠(分)', '總睡眠(小時)', '睡眠品質(1-5)', '飢餓感(1-5)', '心情(1-5)', '排便', '備註', '想問營養師', '體脂機基礎代謝(kcal)', '骨骼肌(kg)', '內臟脂肪等級', '相位角(°)', '細胞外水分比', '內臟脂肪面積(cm²)', '四肢肌肉量(kg)', 'SMI(kg/m²)', '步數', '血壓', '血糖']];
   dates.forEach(date => {
     const t = dayTotals(date);
     const d = state.days[date] || {};
     rows.push([date, t.kcal, t.macroItems ? t.p : '', t.macroItems ? t.c : '', t.macroItems ? t.f : '', ...EX_KEYS.map(k => (t.exItems ? t.ex[k] : '')),
-      d.weight, calcBmi(d.weight, state.profile.height), d.waist, d.hip, d.arm, d.thigh, d.chest, d.bodyFat, d.water, d.exercise, d.exMin, d.sleepBed, d.sleepWake, d.sleepMin, daySleep(d).nap || '', daySleep(d).total ? r1(daySleep(d).total / 60) : '', d.sleepQ, d.hunger, d.mood, d.bowel != null ? BOWEL_LABELS[d.bowel] : '', d.note, d.question, d.bmr, d.smm, d.vfl, d.pa, d.ecw, d.vfa, d.asm, calcSmi(d.asm, state.profile.height), d.steps]);
+      d.weight, calcBmi(d.weight, state.profile.height), d.waist, d.hip, d.arm, d.thigh, d.chest, d.bodyFat, d.water, d.exercise, d.exMin, d.sleepBed, d.sleepWake, d.sleepMin, daySleep(d).nap || '', daySleep(d).total ? r1(daySleep(d).total / 60) : '', d.sleepQ, d.hunger, d.mood, d.bowel != null ? BOWEL_LABELS[d.bowel] : '', d.note, d.question, d.bmr, d.smm, d.vfl, d.pa, d.ecw, d.vfa, d.asm, calcSmi(d.asm, state.profile.height), d.steps, bpText(d.bp), glucoseText(d.glucose)]);
   });
   downloadBlob('每日身體與備註_' + todayStr() + '.csv', toCSV(rows), 'text/csv;charset=utf-8');
   showToast('已匯出每日 CSV');

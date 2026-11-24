@@ -67,7 +67,8 @@
 | `targets.mealEx` | （v29 起）營養師給的每餐份數：`{ breakfast: { grain, prot, veg, fruit, dairy, oil }, lunch, dinner, snack }`，只存有填的餐別和類別。用來顯示「這一餐還差什麼」。沒有＝沒設（不顯示）。舊版 App 存目標時會把它弄掉 |
 | `targets.bank` | （v22 起）`true`＝開啟熱量銀行（一週總量控管）。沒有＝關閉（預設）。舊版 App 存目標時會把它弄掉，結果是關閉 |
 | `profile.birthYear` | 出生年（西元），用來算年齡 |
-| `profile.sugarCare` | （v31 起）`true`＝「我在控制血糖」：選到糯米類食物時提醒。沒有＝關 |
+| `profile.sugarCare` | （v31 起）`true`＝「我在控制血糖」：選到糯米類食物時提醒。沒有＝關。Rev. 59 起也讓「血糖」功能預設打開 |
+| `profile.features` | （Rev. 59 起）功能開關 `{ weight, water, exercise, sleep, note, bodycomp, bp, glucose: true｜false }`，只存使用者動過的。沒設過照預設：血壓、血糖關（控制血糖的人血糖開），其他開（`js/features.js`）。關掉只是首頁不顯示、小芽不提醒、小成就不列那一組，資料都在 |
 | `profile.activity` | 活動量 `low`／`light`／`active`（係數 1.2／1.375／1.55） |
 
 舊版 App 存「每日目標」會重建整個 `targets`，`water`、`calc` 會不見：結果是「沒有喝水目標、手動設定」，不會出錯。
@@ -122,7 +123,10 @@
 | `vfa` | （v25 起）內臟脂肪面積（cm²）。較早的 InBody 機型給面積不給等級，兩者單位不同，分開記 |
 | `water` | ml |
 | `exercise` | 文字；`exMin` 分鐘 |
-| `steps` | （2026-11-22 起）這天走了幾步（整數，使用者看手機健康 App、手環自己填）。每日 CSV 最後一欄 |
+| `steps` | （2026-11-22 起）這天走了幾步（整數，使用者看手機健康 App、手環自己填）。每日 CSV 欄「步數」 |
+| `bp` | （Rev. 59 起）血壓，一天好幾次：`[{ id, t: 'HH:MM', sys, dia, pulse? }]`（整數 mmHg、次／分），整個陣列一起換。每日 CSV 欄「血壓」（`07:30 135/85 脈搏72；…`） |
+| `glucose` | （Rev. 59 起）血糖：`[{ id, t, kind, v }]`，`kind`：`fasting` 空腹／`before` 飯前／`after` 飯後 2 小時／`bedtime` 睡前／`other`；`v` 是 mg/dL 整數。每日 CSV 欄「血糖」 |
+| `adviceDone` | （Rev. 59 起）那天按了「今天做到了」的營養師叮嚀 id 陣列 |
 | `hunger` `mood` | 1–5 |
 | `bowel` | 0／1／2（無／1 次／2 次以上） |
 | `note` `question` | 文字（question＝想問營養師） |
@@ -242,7 +246,7 @@
 | v3（Rev. 45，第 1 步） | 2026-11-21 | 最上層新增 `customFoods`（我的食物），「常吃的」`quickItems` 停用（不顯示、不新增，資料保留）。記錄新增 `customFoodId`、`servings`、`fiber`。`tfda_foods.json` 加回 `fiber`。**發佈時用 `python3 scripts/bump.py --min-rev`**，把 `DATA_MIN_REV` 調成這一版：還沒更新的 App 會暫停同步、提示更新。 |
 | v3（Rev. 47，第 3 步） | 2026-11-21 | 最上層新增 `combos`（套餐），記錄新增選填 `comboId`。**沒有調 `DATA_MIN_REV`**：Rev. 39 起的 App 都會原樣保留、照規則合併看不懂的最上層清單，`DATA_MIN_REV` 已經是 45。樣本：`backup-v3-combos.json`。 |
 | v3（Rev. 47，第 4 步） | 2026-11-21 | 最上層新增 `foodPacks`（食物資料庫）；記錄新增選填 `src`、`srcName`、`packFoodId`；套餐的品項可以有 `src`＋`packFoodId`。沒有調 `DATA_MIN_REV`（理由同套餐）。樣本：`backup-v3-foodpacks.json`。 |
-| v3（Rev. 59） | 2026-11-24 | 最上層新增 `advice`（營養師的叮嚀）；每日欄位新增 `adviceDone`；`meta.adviceFrom`。舊版會原樣保留，沒有調 `DATA_MIN_REV`（已經是 58）。樣本：`backup-v3-advice.json`。 |
+| v3（Rev. 59） | 2026-11-24 | 最上層新增 `advice`（營養師的叮嚀）；每日欄位新增 `adviceDone`、`bp`（血壓）、`glucose`（血糖）；`profile.features`（功能開關）；`meta.adviceFrom`；每日 CSV 最後加兩欄「血壓」「血糖」。舊版會原樣保留，沒有調 `DATA_MIN_REV`（已經是 58）。樣本：`backup-v3-advice.json`。 |
 | v3（Rev. 58） | 2026-11-24 | 我的食物新增選填 `packId`、`brand`、`base`、`variant`、`replaces`（自己加到資料庫的、改過資料庫原本的）；可以自己新建空的資料庫（`foods: []`）。**發佈時用 `python3 scripts/bump.py --min-rev`**（使用者決定）：舊版會把這些食物列在我的食物清單裡、看起來亂，所以讓還沒更新的裝置暫停同步、提示更新。樣本：`backup-v3-pack-additions.json`。 |
 | v3（Rev. 52） | 2026-11-22 | 每日欄位新增 `steps`（走路步數）、`targets.steps`（每天步數下限）；每日 CSV 最後加一欄「步數」。`meta.badgesSeen`（小成就）。都是舊版會原樣保留的欄位，沒有調 `DATA_MIN_REV`。 |
 | v3（App v23） | 2026-11-19 | 每日欄位新增 `smm`（骨骼肌）；`targets.bodyFat`（目標體脂率）；`targets.calc.bmrSource` 可為 `ffm`。每日 CSV 最後再加一欄骨骼肌。 |

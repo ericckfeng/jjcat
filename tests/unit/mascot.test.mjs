@@ -84,3 +84,16 @@ test('步數：達到下限稱讚；傍晚還差說還差幾步；晚上還沒�
   assert.ok(has({ steps: null, stepsTarget: 6000, hour: 20 }, 'steps-ask'));
   assert.equal(has({ steps: 4800, stepsTarget: null }, 'steps-short'), undefined);
 });
+
+test('設定裡關掉的功能：小芽不問睡眠、不提醒喝水、不說步數和運動', () => {
+  const ctx = {
+    isToday: true, hour: 19, count: 2, kcal: 1500, targetKcal: 1800, meals: 2, streak: { n: 0 }, weight: null,
+    water: 0, waterGoal: 2000, lastNight: { night: 480 }, exercise: '散步 30 分鐘', steps: null, stepsTarget: 6000, insights: []
+  };
+  const all = buildMascotMessages(ctx).map(m => m.text).join('｜');
+  assert.match(all, /多喝水/);
+  assert.match(all, /運動/);
+  assert.match(all, /步數/);
+  const off = buildMascotMessages({ ...ctx, off: ['water', 'sleep', 'exercise'] }).map(m => m.text).join('｜');
+  assert.doesNotMatch(off, /喝水|睡|步|運動/);
+});

@@ -2,14 +2,65 @@
   "app": "diet-tracker",
   "version": 3,
   "exportedAt": "2026-11-28T12:00:00.000Z",
-  "targets": { "kcal": 1800 },
+  "targets": {
+    "kcal": 1800
+  },
   "logs": {},
   "days": {
-    "2026-11-27": { "adviceDone": ["ad_veg"], "_t": { "adviceDone": 1764200000000 } }
+    "2026-11-27": {
+      "adviceDone": [
+        "ad_veg"
+      ],
+      "_t": {
+        "adviceDone": 1764200000000,
+        "bp": 1764200000000,
+        "glucose": 1764200000000
+      },
+      "bp": [
+        {
+          "id": "bp_1",
+          "t": "07:30",
+          "sys": 135,
+          "dia": 85,
+          "pulse": 72
+        }
+      ],
+      "glucose": [
+        {
+          "id": "gl_1",
+          "t": "06:30",
+          "kind": "fasting",
+          "v": 108
+        }
+      ]
+    }
   },
   "quickItems": [],
   "advice": [
-    { "id": "ad_veg", "text": "午餐便當多一份青菜", "from": "王營養師", "date": "2026-11-25", "active": true, "updatedAt": 1764100000000, "futureField": 3 },
-    { "id": "ad_old", "text": "睡前不吃宵夜", "from": null, "date": "2026-11-01", "active": false, "updatedAt": 1764100000000 }
-  ]
+    {
+      "id": "ad_veg",
+      "text": "午餐便當多一份青菜",
+      "from": "王營養師",
+      "date": "2026-11-25",
+      "active": true,
+      "updatedAt": 1764100000000,
+      "futureField": 3
+    },
+    {
+      "id": "ad_old",
+      "text": "睡前不吃宵夜",
+      "from": null,
+      "date": "2026-11-01",
+      "active": false,
+      "updatedAt": 1764100000000
+    }
+  ],
+  "profile": {
+    "features": {
+      "sleep": false,
+      "bp": true,
+      "glucose": true
+    }
+  },
+  "profileAt": 1764200000000
 }

@@ -31,6 +31,7 @@ const CORE = [
   './js/packs.js',
   './js/barcode.js',
   './js/achievements.js',
+  './js/eatout.js',
   './js/characters.js',
   './js/version.js',
   './tfda_foods.json',

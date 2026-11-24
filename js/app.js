@@ -25,6 +25,7 @@ import { partyTemplate, startCounts, partyEntries, partyTotals } from './party.j
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros } from './bank.js';
 import { mealPastePrompt, LABEL_PASTE_PROMPT, mealFromPaste, labelFromPaste, foodDiaryLines, weekReviewPrompt } from './ai.js';
+import { brandsOf, mealBudget, suggestMeals } from './eatout.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
 
 const STORAGE_KEY = 'diet_tracker_v2';
@@ -916,7 +917,8 @@ function openScreen(id) {
   el.querySelector('.scr-body').scrollTop = 0;
   renderMealSelector();
   renderDayPanel();
-  if (id === 'scr-food') { foodFilter = ''; $('foodSearch').value = ''; $('foodTitle').textContent = foodMode === 'mine' ? '⭐ 我的食物' : '🔍 查食物'; renderFoodResults(); renderFoodCart(); }
+  if (id === 'scr-food') { foodFilter = ''; $('foodSearch').value = ''; $('foodTitle').textContent = foodMode === 'mine' ? '⭐ 我的食物' : '🔍 查食物'; $('eatoutOpenBtn').classList.toggle('hidden', !brandsOf(foodPacks()).length); renderFoodResults(); renderFoodCart(); }
+  if (id === 'scr-eatout') openEatout();
   if (id === 'scr-grams') renderGrams();
   if (id === 'scr-est') renderEst();
   if (id === 'scr-weight') renderWeightHint();
@@ -3598,6 +3600,91 @@ async function pickCombo(combo) {
   renderFoodCart();
   showToast('已放入「' + combo.name + '」' + items.length + ' 樣，可以改克數或拿掉');
 }
+/* ---------------- 外食點餐小幫手（js/eatout.js） ---------------- */
+// 從查食物頁點進來：選店家 → 這一餐還能吃多少 → 3 組點法 → 「就點這個」放進購物車，回查食物頁記到這一餐
+const eo = { brand: '', adj: 0, list: [] };
+function openEatout() {
+  eo.adj = 0;
+  $('eoSearch').value = '';
+  showEatoutPick(!eo.brand || !brandsOf(foodPacks()).some(b => b.brand === eo.brand));
+}
+function showEatoutPick(pick) {
+  $('eoPick').classList.toggle('hidden', !pick);
+  $('eoPlan').classList.toggle('hidden', pick);
+  if (pick) renderEatoutBrands(); else renderEatoutPlan();
+}
+function renderEatoutBrands() {
+  const q = $('eoSearch').value.trim().toLowerCase();
+  const recent = state.meta.eatoutRecent || [];
+  let list = brandsOf(foodPacks());
+  if (q) list = list.filter(b => b.brand.toLowerCase().includes(q));
+  // 最近去過的排前面
+  list.sort((a, b) => (recent.includes(a.brand) ? recent.indexOf(a.brand) : 99) - (recent.includes(b.brand) ? recent.indexOf(b.brand) : 99));
+  $('eoBrands').innerHTML = list.length ? list.map(b => `<button type="button" data-eo-brand="${esc(b.brand)}" class="pick-row">
+    <span class="min-w-0 flex-1 text-left"><span class="block text-lg font-semibold text-stone-900 break-words">${esc(b.brand)}</span>
+    <span class="block text-base text-stone-500">${b.count} 樣${recent.includes(b.brand) ? '・最近去過' : ''}</span></span>
+    <span class="pick-add">選擇 ›</span></button>`).join('')
+    : '<p class="text-base text-stone-500">找不到這家店。店家要先整理進食物資料庫（我的食物 → 匯入食物資料庫）。</p>';
+}
+function eatoutFoods() {
+  const out = [];
+  foodPacks().forEach(pk => (pk.foods || []).forEach(f => { if (f.brand === eo.brand) { foodPack.set(f, pk); out.push(f); } }));
+  return out;
+}
+function eatoutBudget() {
+  const bank = bankFor(ui.date);
+  const target = bank ? bank.todayTarget : state.targets.kcal > 0 ? state.targets.kcal : 1800;
+  // 已經記的＋購物車裡還沒記的
+  const eaten = dayTotals(ui.date).kcal + foodCart.reduce((a, c) => a + (c.entry.kcal || 0), 0);
+  const b = mealBudget({ target, eaten, meal: ui.meal });
+  return { ...b, target, eaten: Math.round(eaten), budget: Math.max(0, b.budget + eo.adj) };
+}
+function renderEatoutPlan() {
+  const b = eatoutBudget();
+  const label = MEAL_META[ui.meal].label;
+  $('eoBrand').textContent = eo.brand;
+  $('eoBudgetText').textContent = b.budget > 0
+    ? label + '建議 ' + b.budget + ' 大卡以內（今天目標 ' + b.target + '，已經吃了 ' + b.eaten + '）'
+    : '今天的熱量差不多用完了（目標 ' + b.target + '，已經吃了 ' + b.eaten + '）。真的餓，選無糖飲料或清淡的，也可以按「多 50 大卡」看看。';
+  eo.list = b.budget > 0 ? suggestMeals(eatoutFoods(), b.budget) : [];
+  const line = (t) => [['蛋白質', t.p], ['碳水', t.c], ['脂肪', t.f]].filter(x => x[1] != null).map(x => x[0] + ' ' + x[1] + ' 克').join('・');
+  $('eoList').innerHTML = eo.list.length ? eo.list.map((c, i) => `<div class="rounded-2xl border border-stone-200 bg-white p-3 space-y-2">
+      <div class="text-lg font-bold text-stone-900">第 ${i + 1} 組・<span class="tabular-nums">${c.total.kcal}</span> 大卡</div>
+      <ul class="space-y-1">${c.items.map(it => `<li class="text-lg text-stone-800 leading-snug break-words">・${esc(it.food.name)}${it.byServing ? '' : ' ' + it.amount + 'g'}</li>`).join('')}</ul>
+      <div class="text-sm text-stone-600">${line(c.total)}</div>
+      ${c.notes.map(n => `<div class="text-base ${/偏/.test(n) ? 'text-amber-800' : 'text-emerald-800'}">${/偏/.test(n) ? '！' : '✓'} ${esc(n)}</div>`).join('')}
+      <button type="button" data-eo-use="${i}" class="btn-primary w-full">就點這個，放進${label}</button>
+    </div>`).join('')
+    : (b.budget > 0 ? '<p class="text-base text-stone-600 leading-relaxed">這家店的東西都超過 ' + b.budget + ' 大卡。可以按「多 50 大卡」，或點一份、和別人分著吃。</p>' : '');
+}
+$('eoSearch').addEventListener('input', renderEatoutBrands);
+$('eoChange').addEventListener('click', () => { $('eoSearch').value = ''; showEatoutPick(true); });
+$('scr-eatout').addEventListener('click', (e) => {
+  const br = e.target.closest('[data-eo-brand]');
+  if (br) {
+    eo.brand = br.getAttribute('data-eo-brand');
+    eo.adj = 0;
+    state.meta.eatoutRecent = [eo.brand, ...(state.meta.eatoutRecent || []).filter(x => x !== eo.brand)].slice(0, 5);
+    persistLocal();
+    showEatoutPick(false);
+    return;
+  }
+  const adj = e.target.closest('[data-eo-adj]');
+  if (adj) { eo.adj += Number(adj.getAttribute('data-eo-adj')); renderEatoutPlan(); return; }
+  const use = e.target.closest('[data-eo-use]');
+  if (use) {
+    const c = eo.list[Number(use.getAttribute('data-eo-use'))];
+    if (!c) return;
+    c.items.forEach(({ food, amount }) => {
+      const { weighed, entry } = cartEntryFor(food, amount, 'asis');
+      foodCart.push({ key: uid('c'), food, grams: amount, weighed, entry });
+    });
+    renderFoodCart();
+    closeScreen();
+    showToast('已放進 ' + c.items.length + ' 樣。可以改份數或拿掉，再按「記到' + MEAL_META[ui.meal].label + '」');
+  }
+});
+
 // 存成套餐（editId＝null，從購物車）或修改套餐（從我的食物分頁）
 const comboDraft = { editId: null, items: [] };
 function openCombo(editId) {

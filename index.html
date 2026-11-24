@@ -401,6 +401,7 @@
       <div id="foodCart" class="hidden rounded-2xl bg-emerald-50 border border-emerald-200 p-3 space-y-2"></div>
       <input id="foodSearch" type="search" class="field text-lg" placeholder="輸入食物，例如：雞胸肉、地瓜" autocomplete="off" />
       <button type="button" id="scanOpenBtn" class="btn-secondary w-full">📷 掃商品條碼</button>
+      <button type="button" id="eatoutOpenBtn" data-screen="scr-eatout" class="btn-secondary w-full hidden">🍔 在外面吃，幫我配</button>
       <div id="foodFilter" class="flex flex-wrap gap-2"></div>
       <div id="foodMine" class="space-y-2"></div>
       <div id="foodPacks" class="space-y-2"></div>
@@ -410,6 +411,33 @@
     <div class="scr-foot">
       <button type="button" id="foodDoneBtn" data-back class="btn-primary btn-xl w-full">完成</button>
       <button type="button" id="foodCartSaveBtn" class="hidden btn-primary btn-xl w-full"></button>
+    </div>
+  </div>
+
+  <!-- 外食點餐小幫手（從查食物點進來）：選店家 → 這一餐還能吃多少 → 3 組點法 → 放進購物車 -->
+  <div id="scr-eatout" class="screen hidden" role="dialog" aria-label="外食怎麼點">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>🍔 外食怎麼點</h2></div>
+    <div class="scr-body">
+      <div id="eoPick" class="space-y-2">
+        <div class="scr-label">在哪一家？</div>
+        <input id="eoSearch" type="search" class="field text-lg" placeholder="打店名，例如：麥當勞" autocomplete="off" />
+        <div id="eoBrands" class="space-y-2"></div>
+      </div>
+      <div id="eoPlan" class="hidden space-y-3">
+        <div class="flex items-center gap-2">
+          <div id="eoBrand" class="min-w-0 flex-1 text-xl font-bold text-stone-900 break-words"></div>
+          <button type="button" id="eoChange" class="chip-btn chip-lg shrink-0">換一家</button>
+        </div>
+        <div class="rounded-2xl bg-sky-50 border border-sky-200 p-3 space-y-2">
+          <p id="eoBudgetText" class="text-lg font-semibold text-sky-900 leading-relaxed"></p>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" data-eo-adj="-50" class="chip-btn chip-lg">少 50 大卡</button>
+            <button type="button" data-eo-adj="50" class="chip-btn chip-lg">多 50 大卡</button>
+          </div>
+        </div>
+        <div id="eoList" class="space-y-3"></div>
+        <p class="text-sm text-stone-500 leading-relaxed">數字來自你匯入的食物資料庫。按「就點這個」之後，還可以改份數、拿掉，再記到這一餐。</p>
+      </div>
     </div>
   </div>
 

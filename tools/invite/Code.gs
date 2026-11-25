@@ -405,3 +405,21 @@ function admin_(req) {
   }
   return { ok: false, reason: 'bad' };
 }
+
+// 在 Apps Script 編輯器選這個函式按「執行」：一步一步試發佈要用到的東西，跳出結果（測試檔案會丟到垃圾桶）
+function diagnose() {
+  const log = [];
+  const step = (name, fn) => {
+    try { const v = fn(); log.push('✅ ' + name + (typeof v === 'string' ? '：' + v : '')); return v; } catch (e) { log.push('❌ ' + name + '：' + (e && e.message || e)); return null; }
+  };
+  step('程式版本', () => VERSION);
+  step('發佈密碼', () => PropertiesService.getScriptProperties().getProperty('ADMIN_KEY') ? '已設定' : '還沒設定');
+  step('鎖', () => { const l = LockService.getScriptLock(); l.waitLock(5000); l.releaseLock(); return '正常'; });
+  const folder = step('雲端硬碟資料夾「' + SHARED_FOLDER + '」', () => { const it = DriveApp.getFoldersByName(SHARED_FOLDER); return it.hasNext() ? it.next() : DriveApp.createFolder(SHARED_FOLDER); });
+  const f = folder && step('建立測試檔', () => folder.createFile('diagnose.json', '{"ok":true}', 'application/json'));
+  if (f) step('改測試檔內容', () => { f.setContent('{"ok":2}'); return '正常'; });
+  if (f) step('丟掉測試檔', () => { f.setTrashed(true); return '正常'; });
+  step('「共用資料庫」分頁', () => sharedSheet_().getName());
+  step('「外食圖書館總表」分頁', () => { const sh = SpreadsheetApp.getActive().getSheetByName(MASTER); return sh ? (sh.getLastRow() - 1) + ' 列' : '沒有'; });
+  SpreadsheetApp.getUi().alert('診斷結果\n\n' + log.join('\n'));
+}

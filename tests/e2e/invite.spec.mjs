@@ -430,3 +430,53 @@ test('外食圖書館：預設全部勾選；取消一家查不到、整類全�
   expect((await appState(page)).libraryOff.brands).toEqual(['50嵐']);
   expect(errors).toEqual([]);
 });
+
+// ---- 投稿：我的食物推薦給外食圖書館（一定要附照片）----
+test('投稿：我的食物 → 推薦給外食圖書館 → 沒照片不能送 → 附照片、店家 → 送出（只送這些）', async ({ page }) => {
+  const errors = [];
+  const sheet = { codes: { 'JJ-4821': { issued: true, name: '王美華' } } };
+  await fakeSheet(page, sheet);
+  const contribs = [];
+  await page.route(URL_, async (r) => {
+    const req = JSON.parse(r.request().postData() || '{}');
+    if (req.action !== 'contrib') return r.fallback();
+    contribs.push(req);
+    return r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ ok: true }) });
+  });
+  await seed(page, { ...member, customFoods: [{ id: 'cf_g', name: '韭菜鍋貼', serving: { label: '10 顆' }, perServing: { kcal: 520, p: 20, f: 25, c: 50 }, updatedAt: 1 }] });
+  await openApp(page, { errors, inviteUrl: URL_ });
+  await page.click('.mobile-nav-tab[data-tab=library]');
+  await page.click('[data-mf-edit=cf_g]');
+  await page.click('#mf-contrib');
+  await expect(page.locator('#scr-contrib')).toBeVisible();
+  await expect(page.locator('#ctSummary')).toContainText('熱量 520 大卡');
+  await page.click('#ctSendBtn');
+  await expect(page.locator('#ctNote')).toContainText('請填店家');
+  await page.fill('#ctBrand', '八方雲集');
+  await page.click('#ctSendBtn');
+  await expect(page.locator('#ctNote')).toContainText('至少附 1 張照片');
+  await page.setInputFiles('#ctPhotoInput', new URL('../fixtures/label.jpg', import.meta.url).pathname);
+  await expect(page.locator('#ctPhotos img')).toHaveCount(1);
+  await page.fill('#ctWhere', '店家官網');
+  await page.click('#ctSendBtn');
+  await expect(page.locator('#toastMsg')).toContainText('已經送給管理者');
+  const c = contribs[0];
+  expect(Object.keys(c).sort()).toEqual(['action', 'brand', 'code', 'deviceId', 'deviceName', 'food', 'group', 'photos', 'ver', 'where']);
+  expect(c).toMatchObject({ brand: '八方雲集', where: '店家官網', food: { name: '韭菜鍋貼', serving: '10 顆', kcal: 520, p: 20 } });
+  expect(c.photos).toHaveLength(1);
+  expect(c.photos[0]).toMatch(/^data:image\/jpeg;base64,/);
+  expect((await appState(page)).meta.contribs.cf_g).toBeGreaterThan(0);
+  await expect(page.locator('#scr-myfood')).toBeVisible();   // 回到這樣食物的頁面
+  await expect(page.locator('#mf-contrib')).toContainText('已推薦過');
+  expect(errors).toEqual([]);
+});
+
+test('投稿：沒有邀請碼的舊用戶看不到推薦按鈕', async ({ page }) => {
+  await fakeSheet(page, { codes: {} });
+  await seed(page, { logs: { '2026-11-20': [{ id: 'a', name: '便當', kcal: 700, meal: 'lunch', updatedAt: 1 }] }, meta: { welcomed: true, invite: { legacy: true, at: 1, rev: 63 } },
+    customFoods: [{ id: 'cf_g', name: '韭菜鍋貼', serving: { label: '10 顆' }, perServing: { kcal: 520 }, updatedAt: 1 }] });
+  await openApp(page, { inviteUrl: URL_ });
+  await page.click('.mobile-nav-tab[data-tab=library]');
+  await page.click('[data-mf-edit=cf_g]');
+  await expect(page.locator('#mf-contrib')).toBeHidden();
+});

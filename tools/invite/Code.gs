@@ -4,6 +4,8 @@
  * App 第一次打開時輸入邀請碼 → 這裡檢查「已發出、可用、裝置還沒滿」→ 請對方填姓名 → 記到「裝置」分頁。
  * 同一台重新安裝（裝置 ID 換了）：同號碼＋同裝置名稱＋同姓名就改寫原本那一筆，不多算一台。
  * 共用資料庫（action: packs／pack）：「共用資料庫」分頁打勾發佈的資料庫檔，登記過的裝置自動下載更新。
+ * 投稿（action: contrib）：登記過的裝置推薦一樣食物，一定要附 1～3 張 JPEG 照片（存到雲端硬碟「飲控隨身記 投稿照片」），
+ *   寫到「投稿」分頁；管理者看照片打勾「通過」→ 選單「整理通過的投稿」→ 複製到外食圖書館試算表 → 打勾「已併入」。
  * 意見回饋（action: feedback）：登記過的裝置送文字到「回饋」分頁（第一次會自動建立），一台一天最多 5 則。
  * App 每天第一次連網打開時再問一次：號碼被改成「停用」的，那台就要重新輸入邀請碼（記錄不會刪）。
  *
@@ -20,12 +22,19 @@ const FEEDBACK = '回饋';
 const FEEDBACK_PER_DAY = 5;      // 一台裝置一天最多送幾則
 const FEEDBACK_MAX = 500;        // 一則最多幾個字
 const KINDS = { bug: '哪裡怪怪的', wish: '希望增加', other: '其他' };
+const CONTRIB = '投稿';
+const CONTRIB_PER_DAY = 10;      // 一台裝置一天最多推薦幾樣
+const PHOTO_FOLDER = '飲控隨身記 投稿照片';   // 管理者雲端硬碟裡的資料夾（不公開）
+const APPROVED = '通過的投稿（複製到外食圖書館）';
+// 和外食圖書館試算表一樣的欄位：「整理通過的投稿」排好，複製貼上就好
+const LIB_HEAD = ['提供者(餐廳店家)', '店家分類', '餐點分類', '品項名稱', '份量規格', '熱量(kcal)', '蛋白質(g)', '脂肪(g)', '飽和脂肪(g)', '反式脂肪(g)', '碳水化合物(g)', '糖(g)', '鈉(mg)', '資料來源說明'];
 const SHARED = '共用資料庫';     // A 資料庫檔網址、B 發佈（打勾）、C 名稱、D 樣數、E 檔案更新時間、F 檢查結果、G 備註
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('公測邀請碼')
     .addItem('產生 20 組號碼', 'generate20')
     .addItem('檢查共用資料庫', 'checkShared')
+    .addItem('整理通過的投稿', 'exportApproved')
     .addToUi();
 }
 
@@ -116,7 +125,7 @@ function doPost(e) {
   try { req = JSON.parse(e.postData.contents || '{}'); } catch (err) { return out_({ ok: false, reason: 'bad' }); }
   try { return out_(handle_(req)); } catch (err) { return out_({ ok: false, reason: 'error' }); }
 }
-const VERSION = '2026-11-25c';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
+const VERSION = '2026-11-25d';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
 function doGet() { return out_({ ok: true, app: 'jjcat-invite', version: VERSION }); }
 function out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
 
@@ -173,6 +182,7 @@ function handle_(req) {
     return { ok: true, name, known: Boolean(here) };
   }
   if (req.action === 'feedback') return feedback_(req, code, name, here);
+  if (req.action === 'contrib') return contrib_(req, code, name, here);
   if (req.action === 'packs' || req.action === 'pack') {
     if (!here) return { ok: false, reason: 'device' };
     const live = sharedRows_();
@@ -243,4 +253,79 @@ function feedback_(req, code, name, here) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ---- 投稿：推薦一樣食物給外食圖書館（一定要有照片，管理者人工審核）----
+const CONTRIB_HEAD = ['時間', '邀請碼', '姓名', '裝置名稱', '版本', '店家', '店家分類', '品名', '份量', '熱量(kcal)', '蛋白質(g)', '脂肪(g)', '飽和脂肪(g)', '反式脂肪(g)', '碳水(g)', '糖(g)', '鈉(mg)', '膳食纖維(g)', '在哪裡看到的', '照片', '通過', '已併入', '備註', '裝置ID'];
+function num_(v) {
+  if (v === '' || v == null) return '';
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 && n < 100000 ? Math.round(n * 10) / 10 : '';
+}
+// 只收 JPEG（App 縮好的照片）：data URL 格式對、檔頭是 FF D8 FF、不超過 3 MB
+function jpeg_(p) {
+  const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(p || ''));
+  if (!m) return null;
+  let bytes;
+  try { bytes = Utilities.base64Decode(m[1]); } catch (err) { return null; }
+  if (bytes.length < 100 || bytes.length > 3e6 || bytes[0] !== -1 || bytes[1] !== -40 || bytes[2] !== -1) return null;
+  return bytes;
+}
+function contrib_(req, code, name, here) {
+  if (!here) return { ok: false, reason: 'device' };
+  const f = req.food || {};
+  const fname = plain_(f.name, 60);
+  const kcal = num_(f.kcal);
+  if (!fname || kcal === '') return { ok: false, reason: 'bad' };
+  const brand = plain_(req.brand, 40);
+  if (!brand) return { ok: false, reason: 'brand' };
+  const photos = Array.isArray(req.photos) ? req.photos.slice(0, 3) : [];
+  if (!photos.length) return { ok: false, reason: 'photo' };
+  const imgs = photos.map(jpeg_);
+  if (imgs.some(b => !b)) return { ok: false, reason: 'photo' };
+  const ss = SpreadsheetApp.getActive();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    let sh = ss.getSheetByName(CONTRIB);
+    if (!sh) {
+      sh = ss.insertSheet(CONTRIB);
+      sh.appendRow(CONTRIB_HEAD);
+      sh.setFrozenRows(1);
+      sh.setColumnWidth(20, 260);
+    }
+    const now = new Date();
+    const today = Utilities.formatDate(now, 'Asia/Taipei', 'yyyy-MM-dd');
+    const n = sh.getLastRow() - 1;
+    const rows = n > 0 ? sh.getRange(2, 1, n, CONTRIB_HEAD.length).getValues() : [];
+    const sent = rows.filter(r => String(r[23]) === here.id && r[0] instanceof Date && Utilities.formatDate(r[0], 'Asia/Taipei', 'yyyy-MM-dd') === today).length;
+    if (sent >= CONTRIB_PER_DAY) return { ok: false, reason: 'limit' };
+    const it = DriveApp.getFoldersByName(PHOTO_FOLDER);
+    const folder = it.hasNext() ? it.next() : DriveApp.createFolder(PHOTO_FOLDER);
+    const safe = (brand + '_' + fname).replace(/^'/, '').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 60);
+    const urls = imgs.map((b, i) => folder.createFile(Utilities.newBlob(b, 'image/jpeg', today + '_' + safe + '_' + (i + 1) + '.jpg')).getUrl());
+    sh.appendRow([now, code, plain_(name || here.who, 30), here.dev, plain_(req.ver, 40), brand, plain_(req.group, 30), fname, plain_(f.serving, 40),
+      kcal, num_(f.p), num_(f.f), num_(f.sfa), num_(f.tfa), num_(f.c), num_(f.sugar), num_(f.na), num_(f.fiber), plain_(req.where, 60), urls.join('\n'), false, false, '', here.id]);
+    sh.getRange(sh.getLastRow(), 21, 1, 2).insertCheckboxes();
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+// 選單「整理通過的投稿」：打勾「通過」、還沒「已併入」的，排成外食圖書館試算表的欄位
+function exportApproved() {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName(CONTRIB);
+  const n = sh ? sh.getLastRow() - 1 : 0;
+  const rows = n > 0 ? sh.getRange(2, 1, n, CONTRIB_HEAD.length).getValues() : [];
+  const out = rows.filter(r => r[20] === true && r[21] !== true).map(r =>
+    [r[5], r[6], '', r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14], r[15], r[16], '使用者投稿' + (r[18] ? '：' + r[18] : '')]);
+  let ex = ss.getSheetByName(APPROVED);
+  if (!ex) ex = ss.insertSheet(APPROVED);
+  ex.clear();
+  ex.appendRow(LIB_HEAD);
+  ex.setFrozenRows(1);
+  if (out.length) ex.getRange(2, 1, out.length, LIB_HEAD.length).setValues(out);
+  ss.setActiveSheet(ex);
+  ss.toast(out.length ? '整理好 ' + out.length + ' 樣：複製第 2 列以下，貼到外食圖書館試算表最下面，出新版後回「投稿」分頁打勾「已併入」。' : '沒有「通過」又還沒「已併入」的投稿。');
 }

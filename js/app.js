@@ -32,6 +32,7 @@ import { FEATURES, featureOn, featuresOff, BADGE_FEATURE } from './features.js';
 import { backupReminder, backupText, SNOOZE_DAYS } from './backup.js';
 import { normalizeInvite, gateState, cloudInviteFor, needCheck, waitSeconds, addFail, inviteMessage, FEEDBACK_MAX, canSendFeedback, feedbackInfo, feedbackMessage } from './invite.js';
 import { INVITE_URL } from './config.js';
+import { CONTRIB_PHOTOS, contribFood, contribProblem, contribMessage } from './contrib.js';
 import { GLUCOSE_KINDS, glucoseKindLabel, bpReading, glucoseReading, bpAlert, glucoseAlert, bpText, glucoseText, vitalsSummary, dailyVitals } from './vitals.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
 
@@ -3519,6 +3520,9 @@ function openMyFood(food, name = '', prefill = null, pack = null) {
   }
   $('myFoodTitle').textContent = pk ? (food || mfPack.replaces ? '🏪 修改資料庫的食物' : '🏪 新增到「' + pk.name + '」') : food ? '⭐ 修改我的食物' : '⭐ 新增我的食物';
   $('mf-delete').classList.toggle('hidden', !food);
+  $('mf-contrib').classList.toggle('hidden', !(food && !food.replaces && INVITE_URL && canSendFeedback(state.meta.invite)));
+  const sent = food && state.meta.contribs && state.meta.contribs[food.id];
+  $('mf-contrib').textContent = sent ? '📮 已推薦過（' + fmtTime(sent) + '），再推薦一次' : '📮 推薦給外食圖書館（讓大家都查得到）';
   $('mf-delete').textContent = food && food.replaces && pk ? '不要我改的，恢復原本的' : '刪除這樣食物';
   setBox('mf-note', prefill ? 'info' : null, prefill ? (prefill.source === 'off' ? '數字來自 Open Food Facts（大家一起建的國際資料庫），請對照包裝上的營養標示，不對就改掉再存。' : '照包裝上的營養標示填，存好之後下次掃這個條碼就找得到。') : '');
   openScreen('scr-myfood');
@@ -5357,10 +5361,10 @@ function openFromUrl() {
 
 /* ---------------- 公測邀請碼（js/invite.js；管理者的試算表 tools/invite/Code.gs） ---------------- */
 // 送到管理者的 Apps Script：只送邀請碼、姓名、這台的裝置 ID 和名稱（不送飲食記錄）
-async function callInvite(payload) {
+async function callInvite(payload, timeout = 15000) {
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const timer = setTimeout(() => ctrl.abort(), timeout);
     const r = await fetch(INVITE_URL, { method: 'POST', body: JSON.stringify(payload), signal: ctrl.signal });   // text/plain：不用預檢
     clearTimeout(timer);
     return await r.json();
@@ -5575,6 +5579,73 @@ async function checkSharedPacks(force = false) {
     sharedBusy = false;
   }
 }
+
+/* ---------------- 📮 投稿：我的食物推薦給外食圖書館（js/contrib.js；試算表「投稿」分頁，管理者人工審核） ---------------- */
+let ctFood = null;
+let ctPhotos = [];   // JPEG data URL
+$('mf-contrib').addEventListener('click', () => {
+  const food = customFoods().find(f => f.id === mfEditing);
+  if (!food) return;
+  ctFood = food;
+  ctPhotos = [];
+  const row = contribFood(food);
+  const nutr = [['熱量', row.kcal, '大卡'], ['蛋白質', row.p, '克'], ['脂肪', row.f, '克'], ['碳水', row.c, '克'], ['糖', row.sugar, '克'], ['鈉', row.na, '毫克']]
+    .filter(x => x[1] != null).map(x => x[0] + ' ' + x[1] + ' ' + x[2]).join('・');
+  $('ctSummary').innerHTML = `<div class="text-xl font-bold text-stone-900 break-words">${esc(row.name)}</div>
+    <div class="text-base text-stone-600">一份：${esc(row.serving)}</div>
+    <div class="text-lg text-emerald-800 font-semibold tabular-nums">${esc(nutr)}</div>
+    <div class="text-sm text-stone-500">數字不對的話，先回上一頁改好、儲存，再推薦。</div>`;
+  $('ctBrand').value = food.brand || '';
+  const groups = libraryShops(sharedPacks);
+  $('ctBrandList').innerHTML = groups.flatMap(g => g.shops).map(x => `<option value="${esc(x.brand)}"></option>`).join('');
+  const myGroup = (groups.find(g => g.shops.some(x => x.brand === food.brand)) || {}).group || '';
+  $('ctGroup').innerHTML = ['', ...groups.map(g => g.group).filter(g => g !== '其他')].map(g => `<option value="${esc(g)}"${g === myGroup ? ' selected' : ''}>${esc(g || '不知道（讓管理者分）')}</option>`).join('');
+  $('ctWhere').value = '';
+  $('ctWhat').textContent = '按「送出推薦」會把這樣食物的名稱和數字、店家、照片、在哪裡看到的，連同版本、裝置名稱、邀請碼和姓名，送到公測管理者的 Google 試算表和雲端硬碟。不會送出你的飲食記錄。照片裡請不要拍到人臉或個人資料。';
+  setBox('ctNote', null, '');
+  renderCtPhotos();
+  openScreen('scr-contrib');
+});
+function renderCtPhotos() {
+  $('ctPhotos').innerHTML = ctPhotos.map((src, i) => `<div class="relative"><img src="${src}" alt="照片 ${i + 1}" class="w-full aspect-square object-cover rounded-xl border border-stone-200" />
+    <button type="button" data-ct-del="${i}" class="absolute top-1 right-1 bg-white/90 rounded-full w-9 h-9 text-lg" aria-label="拿掉照片 ${i + 1}">✕</button></div>`).join('');
+  $('ctAddPhoto').classList.toggle('hidden', ctPhotos.length >= CONTRIB_PHOTOS);
+}
+$('ctAddPhoto').addEventListener('click', () => $('ctPhotoInput').click());
+$('ctPhotoInput').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try { ctPhotos.push(await compressImage(file, 1600)); } catch (err) { setBox('ctNote', 'err', '這張照片讀不到，請換一張'); return; }
+  setBox('ctNote', null, '');
+  renderCtPhotos();
+});
+$('ctPhotos').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ct-del]');
+  if (!b) return;
+  ctPhotos.splice(Number(b.getAttribute('data-ct-del')), 1);
+  renderCtPhotos();
+});
+$('ctSendBtn').addEventListener('click', async () => {
+  if (!ctFood) return;
+  const food = contribFood(ctFood);
+  const brand = $('ctBrand').value.trim();
+  const problem = contribProblem({ food, brand, photos: ctPhotos });
+  if (problem) { setBox('ctNote', 'err', problem); return; }
+  const btn = $('ctSendBtn');
+  btn.disabled = true; btn.textContent = '送出中，照片比較久…';
+  const r = await callInvite({ action: 'contrib', code: state.meta.invite.code, deviceId: state.meta.deviceId, deviceName: myDeviceName(), ver: APP_LABEL,
+    brand, group: $('ctGroup').value, where: $('ctWhere').value.trim(), food, photos: ctPhotos }, 90000);
+  btn.disabled = false; btn.textContent = '送出推薦';
+  if (!r.ok) { setBox('ctNote', 'err', contribMessage(r.reason)); return; }
+  if (!state.meta.contribs) state.meta.contribs = {};
+  state.meta.contribs[ctFood.id] = now();
+  persistLocal();
+  $('mf-contrib').textContent = '📮 已推薦過（' + fmtTime(now()) + '），再推薦一次';
+  ctPhotos = [];
+  closeScreen();
+  showToast('謝謝你！已經送給管理者，看過照片就會加進外食圖書館');
+});
 
 /* ---------------- 📚 外食圖書館：勾自己會去的店 ---------------- */
 function libraryCount() {

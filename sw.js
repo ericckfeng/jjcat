@@ -37,6 +37,7 @@ const CORE = [
   './js/vitals.js',
   './js/backup.js',
   './js/invite.js',
+  './js/contrib.js',
   './js/features.js',
   './js/characters.js',
   './js/version.js',

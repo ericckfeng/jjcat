@@ -421,6 +421,7 @@
         </details>
       </div>
       <p id="mf-note" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
+      <button type="button" id="mf-contrib" class="hidden btn-secondary w-full">📮 推薦給外食圖書館（讓大家都查得到）</button>
       <button type="button" id="mf-unpack" class="hidden btn-secondary w-full">移回「我的食物」</button>
       <button type="button" id="mf-delete" class="hidden text-base text-rose-600 underline self-start py-2">刪除這樣食物</button>
     </div>
@@ -982,6 +983,29 @@
       <a href="privacy.html" class="btn-secondary block w-full text-center">隱私權政策</a>
     </div>
     <div class="scr-foot"><button type="button" data-back class="btn-primary btn-xl w-full">完成</button></div>
+  </div>
+
+  <!-- 📮 投稿（js/contrib.js）：我的食物推薦給外食圖書館，一定要附照片，管理者人工審核 -->
+  <div id="scr-contrib" class="screen hidden" role="dialog" aria-label="推薦給外食圖書館">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>📮 推薦給外食圖書館</h2></div>
+    <div class="scr-body">
+      <p class="text-lg text-stone-700 leading-relaxed">管理者看過照片、確認數字沒問題，就會加進外食圖書館，讓大家都查得到。</p>
+      <div id="ctSummary" class="rounded-2xl bg-white border border-stone-200 p-4 space-y-1"></div>
+      <label class="block"><span class="scr-label">店家</span><input id="ctBrand" type="text" list="ctBrandList" autocomplete="off" maxlength="40" class="field text-lg" placeholder="例如：八方雲集" /></label>
+      <datalist id="ctBrandList"></datalist>
+      <label class="block"><span class="scr-label">店家分類</span><select id="ctGroup" class="field text-lg"></select></label>
+      <div class="rounded-2xl bg-amber-50 border border-amber-200 p-4 space-y-3">
+        <div class="text-xl font-bold text-stone-900">照片（1～3 張，一定要有）</div>
+        <p class="text-base text-stone-700 leading-relaxed">拍<b>包裝上的營養標示</b>，或店家公布營養資訊的照片／截圖（官網、菜單、店內海報）。要看得清楚數字。</p>
+        <div id="ctPhotos" class="grid grid-cols-3 gap-2"></div>
+        <button type="button" id="ctAddPhoto" class="btn-secondary btn-xl w-full">📷 拍照或選照片</button>
+        <input id="ctPhotoInput" type="file" accept="image/*" class="hidden" />
+      </div>
+      <label class="block"><span class="scr-label">在哪裡看到的（可不填）</span><input id="ctWhere" type="text" maxlength="60" class="field text-lg" placeholder="例如：包裝背面、店家官網" /></label>
+      <p id="ctWhat" class="text-base text-stone-600 leading-relaxed"></p>
+      <p id="ctNote" class="hidden rounded-2xl whitespace-pre-line p-3 text-base leading-relaxed"></p>
+    </div>
+    <div class="scr-foot"><button type="button" id="ctSendBtn" class="btn-primary btn-xl w-full">送出推薦</button></div>
   </div>
 
   <!-- 📚 外食圖書館（js/packs.js 的 libraryShops）：勾自己會去的店，查食物和外食小幫手只列勾的；同步到自己的其他裝置 -->

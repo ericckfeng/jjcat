@@ -27,6 +27,22 @@
       <p class="text-base text-stone-600 leading-relaxed">把試算表（例如連鎖店外食營養表、營養師給的份量表）整理成「飲控隨身記」用的資料庫檔：對好欄位、合併重複的、標出要確認的數字，再到 App「我的食物 → 匯入食物資料庫」。表格只在這台電腦的瀏覽器裡處理，不會上傳到任何地方。</p>
     </header>
 
+    <!-- 管理者：外食圖書館的總表放在公測試算表，讀進來檢查好直接發佈（不用下載、上傳）。要發佈密碼（試算表選單「設定發佈密碼」） -->
+    <details id="adminBox" class="step">
+      <summary class="font-bold text-lg cursor-pointer">🔑 管理者：外食圖書館（從試算表讀、直接發佈）</summary>
+      <div class="space-y-3 mt-3">
+        <p class="text-base text-stone-600 leading-relaxed">總表在公測試算表的「外食圖書館總表」分頁。讀進來 → 下面檢查 → 第 5 步按「發佈給大家」，大家的 App 半天內自動更新。</p>
+        <label class="block"><span class="scr-label">發佈密碼（試算表選單「公測邀請碼 → 設定發佈密碼」）</span>
+          <input id="adminKey" type="password" autocomplete="off" class="field" placeholder="輸入一次，這台電腦會記住" /></label>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="adminLoadBtn" class="btn-primary px-4">📥 從試算表讀總表</button>
+          <button type="button" id="adminSaveBtn" class="btn-secondary px-4">💾 把目前讀入的表存成試算表總表</button>
+          <button type="button" id="adminForgetBtn" class="btn-secondary px-4">這台電腦不要記住密碼</button>
+        </div>
+        <p id="adminNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
+      </div>
+    </details>
+
     <div id="resumeBox" class="hidden step space-y-2 border-emerald-300 bg-emerald-50">
       <p id="resumeText" class="text-base"></p>
       <div class="flex flex-wrap gap-2">
@@ -106,6 +122,7 @@
         <button type="button" id="dlJson" class="btn-primary btn-xl">下載資料庫檔（給 App 匯入）</button>
         <button type="button" id="dlCsv" class="btn-secondary btn-xl">下載 CSV（給人看、給營養師）</button>
       </div>
+      <button type="button" id="publishBtn" class="hidden btn-primary btn-xl w-full">🚀 發佈給大家（外食圖書館，App 自動更新）</button>
       <p id="outNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
       <p id="saveNote" class="text-sm muted"></p>
     </section>

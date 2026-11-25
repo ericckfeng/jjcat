@@ -4,6 +4,7 @@
  * App 第一次打開時輸入邀請碼 → 這裡檢查「已發出、可用、裝置還沒滿」→ 請對方填姓名 → 記到「裝置」分頁。
  * 同一台重新安裝（裝置 ID 換了）：同號碼＋同裝置名稱＋同姓名就改寫原本那一筆，不多算一台。
  * 共用資料庫（action: packs／pack）：「共用資料庫」分頁打勾發佈的資料庫檔，登記過的裝置自動下載更新。
+ * 管理者（action: adminRows／adminSaveRows／adminPublish，要發佈密碼）：整理工具讀寫「外食圖書館總表」、直接發佈資料庫檔（不用下載上傳）。
  * 投稿（action: contrib）：登記過的裝置推薦一樣食物，一定要附 1～3 張 JPEG 照片（存到雲端硬碟「飲控隨身記 投稿照片」），
  *   寫到「投稿」分頁；管理者看照片打勾「通過」→ 選單「整理通過的投稿」→ 複製到外食圖書館試算表 → 打勾「已併入」。
  * 意見回饋（action: feedback）：登記過的裝置送文字到「回饋」分頁（第一次會自動建立），一台一天最多 5 則。
@@ -25,7 +26,8 @@ const KINDS = { bug: '哪裡怪怪的', wish: '希望增加', other: '其他' };
 const CONTRIB = '投稿';
 const CONTRIB_PER_DAY = 10;      // 一台裝置一天最多推薦幾樣
 const PHOTO_FOLDER = '飲控隨身記 投稿照片';   // 管理者雲端硬碟裡的資料夾（不公開）
-const APPROVED = '通過的投稿（複製到外食圖書館）';
+const MASTER = '外食圖書館總表';   // 外食圖書館的原始資料（一列一樣食物）：整理工具「從試算表讀總表」→ 檢查 →「發佈給大家」
+const SHARED_FOLDER = '飲控隨身記 共用資料庫';   // 發佈的資料庫檔放這裡（不公開，程式自己管）
 // 和外食圖書館試算表一樣的欄位：「整理通過的投稿」排好，複製貼上就好
 const LIB_HEAD = ['提供者(餐廳店家)', '店家分類', '餐點分類', '品項名稱', '份量規格', '熱量(kcal)', '蛋白質(g)', '脂肪(g)', '飽和脂肪(g)', '反式脂肪(g)', '碳水化合物(g)', '糖(g)', '鈉(mg)', '資料來源說明'];
 const SHARED = '共用資料庫';     // A 資料庫檔網址、B 發佈（打勾）、C 名稱、D 樣數、E 檔案更新時間、F 檢查結果、G 備註
@@ -34,7 +36,8 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('公測邀請碼')
     .addItem('產生 20 組號碼', 'generate20')
     .addItem('檢查共用資料庫', 'checkShared')
-    .addItem('整理通過的投稿', 'exportApproved')
+    .addItem('併入通過的投稿', 'mergeApproved')
+    .addItem('設定發佈密碼', 'setAdminKey')
     .addToUi();
 }
 
@@ -125,7 +128,7 @@ function doPost(e) {
   try { req = JSON.parse(e.postData.contents || '{}'); } catch (err) { return out_({ ok: false, reason: 'bad' }); }
   try { return out_(handle_(req)); } catch (err) { return out_({ ok: false, reason: 'error' }); }
 }
-const VERSION = '2026-11-25d';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
+const VERSION = '2026-11-25e';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
 function doGet() { return out_({ ok: true, app: 'jjcat-invite', version: VERSION }); }
 function out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
 
@@ -155,6 +158,7 @@ function sameName_(a, b) {
 }
 
 function handle_(req) {
+  if (/^admin/.test(String(req.action || ''))) return admin_(req);
   const code = normCode_(req.code);
   const deviceId = String(req.deviceId || '').slice(0, 64);
   if (tooManyFails_()) return { ok: false, reason: 'busy' };
@@ -312,20 +316,88 @@ function contrib_(req, code, name, here) {
     lock.releaseLock();
   }
 }
-// 選單「整理通過的投稿」：打勾「通過」、還沒「已併入」的，排成外食圖書館試算表的欄位
-function exportApproved() {
+// 選單「併入通過的投稿」：打勾「通過」、還沒「已併入」的，加到「外食圖書館總表」最下面，並打勾「已併入」
+function mergeApproved() {
   const ss = SpreadsheetApp.getActive();
+  const master = ss.getSheetByName(MASTER);
+  if (!master) { ss.toast('還沒有「' + MASTER + '」分頁：先在整理工具讀入外食圖書館的表，按「存成試算表總表」。'); return; }
   const sh = ss.getSheetByName(CONTRIB);
   const n = sh ? sh.getLastRow() - 1 : 0;
   const rows = n > 0 ? sh.getRange(2, 1, n, CONTRIB_HEAD.length).getValues() : [];
-  const out = rows.filter(r => r[20] === true && r[21] !== true).map(r =>
-    [r[5], r[6], '', r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14], r[15], r[16], '使用者投稿' + (r[18] ? '：' + r[18] : '')]);
-  let ex = ss.getSheetByName(APPROVED);
-  if (!ex) ex = ss.insertSheet(APPROVED);
-  ex.clear();
-  ex.appendRow(LIB_HEAD);
-  ex.setFrozenRows(1);
-  if (out.length) ex.getRange(2, 1, out.length, LIB_HEAD.length).setValues(out);
-  ss.setActiveSheet(ex);
-  ss.toast(out.length ? '整理好 ' + out.length + ' 樣：複製第 2 列以下，貼到外食圖書館試算表最下面，出新版後回「投稿」分頁打勾「已併入」。' : '沒有「通過」又還沒「已併入」的投稿。');
+  const head = master.getRange(1, 1, 1, master.getLastColumn()).getDisplayValues()[0];
+  const picked = rows.map((r, i) => [r, i + 2]).filter(([r]) => r[20] === true && r[21] !== true);
+  if (!picked.length) { ss.toast('沒有「通過」又還沒「已併入」的投稿。'); return; }
+  const out = picked.map(([r]) => {
+    const lib = [r[5], r[6], '', r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14], r[15], r[16], '使用者投稿' + (r[18] ? '：' + r[18] : '')];
+    return head.map(h => { const k = LIB_HEAD.indexOf(h); return k < 0 ? '' : lib[k]; });
+  });
+  master.getRange(master.getLastRow() + 1, 1, out.length, head.length).setValues(out);
+  picked.forEach(([, row]) => sh.getRange(row, 22).setValue(true));
+  ss.toast('已把 ' + out.length + ' 樣加到「' + MASTER + '」最下面。到整理工具「從試算表讀總表」→ 檢查 →「發佈給大家」。');
+}
+
+// ---- 管理者：整理工具（公開網頁）用發佈密碼讀寫總表、發佈資料庫檔 ----
+// 選單「設定發佈密碼」：產生一組新的（舊的立刻失效），只顯示給管理者看
+function setAdminKey() {
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  let key = '';
+  for (let i = 0; i < 12; i++) key += abc.charAt(Math.floor(Math.random() * abc.length));
+  PropertiesService.getScriptProperties().setProperty('ADMIN_KEY', key);
+  SpreadsheetApp.getUi().alert('發佈密碼：' + key + '\n\n在整理工具「管理者」區塊輸入一次，那台電腦就會記住。不要給別人；重新設定會讓舊的失效。');
+}
+function admin_(req) {
+  const key = PropertiesService.getScriptProperties().getProperty('ADMIN_KEY');
+  if (!key) return { ok: false, reason: 'nokey' };
+  if (tooManyFails_()) return { ok: false, reason: 'busy' };
+  if (String(req.key || '') !== key) { addFail_(); return { ok: false, reason: 'key' }; }
+  const ss = SpreadsheetApp.getActive();
+  if (req.action === 'adminRows') {
+    const sh = ss.getSheetByName(MASTER);
+    if (!sh || sh.getLastRow() < 2) return { ok: false, reason: 'nomaster' };
+    return { ok: true, rows: sh.getDataRange().getDisplayValues() };
+  }
+  if (req.action === 'adminSaveRows') {
+    const rows = Array.isArray(req.rows) ? req.rows : [];
+    const w = rows.length ? rows[0].length : 0;
+    if (rows.length < 2 || rows.length > 20000 || !w || w > 40 || rows.some(r => !Array.isArray(r) || r.length !== w)) return { ok: false, reason: 'bad' };
+    // 開頭是 = + @ 的當文字（不會變成公式）；負號開頭的數字照常
+    const clean = rows.map(r => r.map(c => { const t = String(c == null ? '' : c).slice(0, 500); return /^[=+@]/.test(t) ? "'" + t : t; }));
+    const sh = ss.getSheetByName(MASTER) || ss.insertSheet(MASTER);
+    sh.clear();
+    sh.getRange(1, 1, clean.length, w).setValues(clean);
+    sh.setFrozenRows(1);
+    return { ok: true, n: clean.length - 1 };
+  }
+  if (req.action === 'adminPublish') {
+    const data = req.file;
+    if (!data || data.app !== 'diet-tracker-foods' || !data.pack || !data.pack.id || !data.pack.name || !Array.isArray(data.foods) || !data.foods.length) return { ok: false, reason: 'bad' };
+    const json = JSON.stringify(data);
+    if (json.length > 20e6) return { ok: false, reason: 'big' };
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      const it = DriveApp.getFoldersByName(SHARED_FOLDER);
+      const folder = it.hasNext() ? it.next() : DriveApp.createFolder(SHARED_FOLDER);
+      const fname = String(data.pack.id).replace(/[^\w-]/g, '') + '.json';
+      const found = folder.getFilesByName(fname);
+      let file;
+      if (found.hasNext()) { file = found.next(); file.setContent(json); } else file = folder.createFile(fname, json, 'application/json');
+      // 「共用資料庫」分頁：同一個檔案就更新那一列，沒有就加一列並打勾發佈
+      const sh = sharedSheet_();
+      const n = sh.getLastRow() - 1;
+      const urls = n > 0 ? sh.getRange(2, 1, n, 1).getValues().map(r => fileIdOf_(r[0])) : [];
+      let row = urls.indexOf(file.getId()) + 2;
+      const isNew = row < 2;
+      if (isNew) {
+        row = sh.getLastRow() + 1;
+        sh.getRange(row, 1).setValue(file.getUrl());
+        sh.getRange(row, 2).insertCheckboxes().setValue(true);
+      }
+      sh.getRange(row, 3, 1, 4).setValues([[data.pack.name, data.foods.length, new Date(), sh.getRange(row, 2).getValue() === true ? 'OK，發佈中（整理工具發佈）' : 'OK（還沒打勾發佈）']]);
+      return { ok: true, name: data.pack.name, n: data.foods.length, isNew, on: sh.getRange(row, 2).getValue() === true };
+    } finally {
+      lock.releaseLock();
+    }
+  }
+  return { ok: false, reason: 'bad' };
 }

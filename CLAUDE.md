@@ -55,7 +55,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/myfoods.js` | **純函式**：我的食物（`customFoods`）：新增頁表單 ↔ 每 100 g／每份、以份計的換算、搜尋、依常用排序（有單元測試） |
 | `js/combos.js` | **純函式**：套餐（`combos`）：購物車 → 套餐（每樣存 `snapshot`）、選套餐時找回現在的食物（找不到用 snapshot）、合計、搜尋、排序（有單元測試） |
 | `js/packs.js` | **純函式**：食物資料庫（`foodPacks`）：試算表欄位對照、份量／規格拆解、表格 → 食物、找重複、資料庫檔與標準 CSV、查食物的搜尋與「同一個品項收成一組」；自己加到資料庫的（我的食物的 `packId`）合進畫面用的資料庫 `packsWithMine`、我的食物清單 `looseMine`、分享 `packFileWithMine`（整理工具和 App 共用，有單元測試） |
-| `tools/foodpack.html`、`tools/foodpack.js` | 食物資料庫整理工具（獨立頁面，不碰 App 的 localStorage）：試算表 → 資料庫檔，App「我的食物 → 匯入食物資料庫」讀進來 |
+| `tools/foodpack.html`、`tools/foodpack.js` | 食物資料庫整理工具（獨立頁面，不碰 App 的 localStorage）：試算表 → 資料庫檔，App「我的食物 → 匯入食物資料庫」讀進來。「🔑 管理者」區塊用發佈密碼（Apps Script `adminRows`／`adminSaveRows`／`adminPublish`）讀寫公測試算表的「外食圖書館總表」、直接發佈外食圖書館（名稱「外食圖書館」、整理者「飲控隨身記」固定） |
 | `js/barcode.js` | **純函式**：條碼：號碼整理、檢查碼、UPC／EAN 比對、在我的食物和食物資料庫找條碼、Open Food Facts 回應 → 我的食物表單（有單元測試）。拍照辨識（BarcodeDetector／ZXing）在 `app.js` |
 | `js/foodbook.js` | **純函式**：AI 建檔小工具的提示詞與回傳格式、整理 AI 回傳、驗算提醒（熱量／公克、三大營養素、長條圖估讀）、匯出成資料庫檔（有單元測試） |
 | `tools/foodbook.html`、`tools/foodbook.js` | AI 建檔小工具（獨立頁面）：書頁照片／掃描 PDF（pdf.js）→ Gemini 讀數字，或「用你自己的 AI」（複製提示詞 → 貼回答）→ 對照照片校對 → 資料庫檔；進度存 IndexedDB `foodbook-tool` |
@@ -67,7 +67,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/vitals.js` | **純函式**：血壓、血糖（每日 `bp`、`glucose`，一天好幾次）：檢查數字、只提醒明顯危險的（很高的血壓、低血糖）、期間摘要、CSV 寫法（有單元測試）。畫面 `scr-bp`、`scr-glucose` |
 | `js/backup.js` | **純函式**：首頁的備份提醒：沒連雲端 7 天沒備份、連了雲端但 7 天沒同步成功、登入過期、要先更新；「晚點」3 天（`meta.backupSnoozeUntil`）（有單元測試） |
 | `js/invite.js`、`tools/invite/Code.gs` | **公測邀請碼**：管理者的 Google 試算表「飲控隨身記 公測邀請碼」＋綁在上面的 Apps Script（網頁應用程式，`js/config.js` 的 `INVITE_URL`；留空＝不用邀請碼）。新裝置先選「用 Google 帳號登入」或「只用這台裝置」，要輸入 JJ-4 位數字、填姓名才能用；邀請碼也存進同步資料最上層 `betaInvite`，重裝／換裝置用 Google 登入取回就自動登記、不用再輸入（雲端有記錄但沒邀請碼＝舊用戶放行）；有記錄的舊裝置直接放行（`meta.invite.legacy`）；只連了雲端不算；同號碼＋同裝置名稱＋同姓名在試算表算同一台；每天問一次，號碼改成「停用」就要重新輸入。一組最多 3 台。意見回饋（`scr-feedback`，設定 → 關於）也走同一個 Apps Script（`action: 'feedback'`，只收登記過的裝置、一天 5 則、寫到「回饋」分頁）；截圖和沒邀請碼的舊用戶用分享選單（不限 LINE）。**共用資料庫**（`action: 'packs'`／`'pack'`）：管理者把資料庫檔放自己的雲端硬碟、網址貼到「共用資料庫」分頁打勾發佈；登記過的裝置每 12 小時檢查、自動下載，存 IndexedDB `diet-tracker-shared`（不同步），畫面一律用 `allPacks()`（共用＋自己匯入，同 id 用共用的），要改、要同步的才用 `foodPacks()`；查食物、外食小幫手用 `pickedPacks()`（外食圖書館 `scr-library` 沒勾的店不列，同步資料 `libraryOff`）。改 `Code.gs` 要改 `VERSION`，部署後打開網址確認。`invite.js` 是純函式（有單元測試）；e2e 預設把 `INVITE_URL` 換成空的（`tests/e2e/helpers.mjs` 的 `stubInviteUrl`）。部署見 `docs/INVITE.md` |
-| `js/contrib.js` | **純函式**：投稿（我的食物 →「📮 推薦給外食圖書館」`scr-contrib`）：一份的數字、送出前檢查（店家、至少 1 張照片）。送到 Apps Script `action: 'contrib'`（照片只收 JPEG、存管理者雲端硬碟，寫「投稿」分頁，管理者人工審核；選單「整理通過的投稿」排成外食圖書館欄位）（有單元測試） |
+| `js/contrib.js` | **純函式**：投稿（我的食物 →「📮 推薦給外食圖書館」`scr-contrib`）：一份的數字、送出前檢查（店家、至少 1 張照片）。送到 Apps Script `action: 'contrib'`（照片只收 JPEG、存管理者雲端硬碟，寫「投稿」分頁，管理者人工審核；選單「併入通過的投稿」加到試算表「外食圖書館總表」分頁）（有單元測試） |
 | `js/photowall.js` | **純函式**：餐點照片牆：一週每天有照片的記錄（照餐別、時間排）和當天合計（有單元測試）。畫面 `scr-photowall` 從報告分頁進去，點照片用共用的 `openLightbox(date, id)` 看大圖、修正（會切到那天） |
 | `js/version.js` | **純函式**：版本號（由 `scripts/bump.py` 改）、有沒有新版、雲端要求的最低版本 `DATA_MIN_REV`、「我的裝置」清單（有單元測試） |
 | `js/nutrition.js` | 餐別、營養素、六大類代換表、預設快選 |

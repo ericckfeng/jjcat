@@ -297,3 +297,50 @@ test('整理工具：用自己的 AI → 貼上回答（含說明文字、分兩
   await page.click('#pasteLoadBtn');
   await expect(page.locator('#loadNote')).toContainText('讀不到表格');
 });
+
+// 管理者：外食圖書館的總表在公測試算表，整理工具用發佈密碼讀進來、檢查、直接發佈（不用下載上傳）
+test('整理工具（管理者）：沒密碼會提醒；讀入 Excel 存成總表 → 從試算表讀總表 → 發佈給大家（名稱、整理者固定）', async ({ page }) => {
+  const { stubInviteUrl } = await import('./helpers.mjs');
+  const URL_ = 'https://invite.test/exec';
+  const sheet = { key: 'K3y-abc', rows: null, published: null, calls: [] };
+  await makePack(page);
+  await stubInviteUrl(page, URL_);
+  await page.route(URL_, async (r) => {
+    const req = JSON.parse(r.request().postData() || '{}');
+    sheet.calls.push(req.action);
+    let res;
+    if (req.key !== sheet.key) res = { ok: false, reason: 'key' };
+    else if (req.action === 'adminSaveRows') { sheet.rows = req.rows; res = { ok: true, n: req.rows.length - 1 }; }
+    else if (req.action === 'adminRows') res = sheet.rows ? { ok: true, rows: sheet.rows } : { ok: false, reason: 'nomaster' };
+    else if (req.action === 'adminPublish') { sheet.published = req.file; res = { ok: true, name: req.file.pack.name, n: req.file.foods.length, isNew: true, on: true }; }
+    return r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(res) });
+  });
+  await page.reload();   // 換掉 config.js 後重新載入整理工具
+  page.on('dialog', d => d.accept());
+  await page.click('#adminBox summary');
+  await expect(page.locator('#publishBtn')).toBeHidden();
+  await page.click('#adminLoadBtn');
+  await expect(page.locator('#adminNote')).toContainText('請先輸入發佈密碼');
+  await page.fill('#adminKey', 'wrong');
+  await page.click('#adminLoadBtn');
+  await expect(page.locator('#adminNote')).toContainText('發佈密碼不對');
+  await page.fill('#adminKey', sheet.key);
+  await page.click('#adminLoadBtn');
+  await expect(page.locator('#adminNote')).toContainText('還沒有「外食圖書館總表」');
+  await page.setInputFiles('#fileInput', { name: '外食表.csv', mimeType: 'text/csv', buffer: Buffer.from('﻿' + CSV) });
+  await page.click('#adminSaveBtn');
+  await expect(page.locator('#adminNote')).toContainText('已存成試算表總表（9 列）');
+  await page.click('#adminLoadBtn');
+  await expect(page.locator('#adminNote')).toContainText('讀到總表 9 列');
+  await expect(page.locator('#pkName')).toHaveValue('外食圖書館');
+  await expect(page.locator('#pkOrg')).toHaveValue('飲控隨身記');
+  await page.click('#publishBtn');
+  await expect(page.locator('#outNote')).toContainText('已發佈「外食圖書館」（8 樣）');
+  expect(sheet.published).toMatchObject({ app: 'diet-tracker-foods', pack: { name: '外食圖書館', org: '飲控隨身記' } });
+  // 密碼記在這台電腦；可以要它忘掉
+  await page.reload();
+  await expect(page.locator('#adminKey')).toHaveValue(sheet.key);
+  await page.click('#adminForgetBtn');
+  await page.reload();
+  await expect(page.locator('#adminKey')).toHaveValue('');
+});

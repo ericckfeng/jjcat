@@ -2,6 +2,7 @@
 // 獨立頁面，不碰 App 的 localStorage；兩邊靠檔案交接。
 import { PACK_FIELDS, FIELD_LABEL, guessMapping, rowsToFoods, findDuplicates, mergeExact, buildPack, packRows, tfdaOverlap, packPrompt, parsePastedTable, appendPasted } from '../js/packs.js';
 import { parseCsv, toCsv } from '../js/lookup.js';
+import { INVITE_URL } from '../js/config.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -270,4 +271,73 @@ $('dlJson').addEventListener('click', () => {
 $('dlCsv').addEventListener('click', () => {
   if (!st.file) return;
   download(baseFile() + '.csv', '﻿' + toCsv(packRows(st.file)), 'text/csv');
+});
+
+/* ---------------- 管理者：外食圖書館（公測試算表 tools/invite/Code.gs 的 adminRows／adminSaveRows／adminPublish） ---------------- */
+const ADMIN_KEY = 'foodpack_admin_key';
+const LIB = { name: '外食圖書館', org: '飲控隨身記' };   // 名稱和整理者不能改：App 用這兩個認是不是同一份
+const readKey = () => { try { return localStorage.getItem(ADMIN_KEY) || ''; } catch (e) { return ''; } };
+$('adminKey').value = readKey();
+if (readKey()) $('adminBox').open = true;
+const adminMsg = {
+  nokey: '試算表還沒設定發佈密碼：打開試算表，選單「公測邀請碼 → 設定發佈密碼」。',
+  key: '發佈密碼不對。請到試算表選單「設定發佈密碼」產生新的，再貼過來。',
+  busy: '錯太多次了，請 10 分鐘後再試。',
+  nomaster: '試算表還沒有「外食圖書館總表」：先讀入 Excel 表，按「把目前讀入的表存成試算表總表」。',
+  bad: '資料格式不對，請重新讀入再試。',
+  network: '連不上公測試算表，請確認網路再試一次。'
+};
+async function callAdmin(payload) {
+  const key = $('adminKey').value.trim();
+  if (!key) return { ok: false, reason: 'nokey', msg: '請先輸入發佈密碼。' };
+  if (!INVITE_URL) return { ok: false, reason: 'network' };
+  try { localStorage.setItem(ADMIN_KEY, key); } catch (e) { /* 記不住也沒關係 */ }
+  try {
+    const r = await fetch(INVITE_URL, { method: 'POST', body: JSON.stringify({ ...payload, key }) });
+    return await r.json();
+  } catch (e) { return { ok: false, reason: 'network' }; }
+}
+const showAdmin = (id, r) => note(id, 'err', r.msg || adminMsg[r.reason] || '出了點問題（' + (r.reason || '') + '），請再試一次。');
+function renderPublish() { $('publishBtn').classList.toggle('hidden', !$('adminKey').value.trim()); }
+$('adminKey').addEventListener('input', renderPublish);
+renderPublish();
+$('adminForgetBtn').addEventListener('click', () => {
+  try { localStorage.removeItem(ADMIN_KEY); } catch (e) { /* ignore */ }
+  $('adminKey').value = '';
+  renderPublish();
+  note('adminNote', 'ok', '這台電腦不會再記住發佈密碼。');
+});
+$('adminLoadBtn').addEventListener('click', async () => {
+  note('adminNote', 'info', '讀取中…');
+  const r = await callAdmin({ action: 'adminRows' });
+  if (!r.ok) { showAdmin('adminNote', r); return; }
+  st.fileName = '外食圖書館總表';
+  st.sheets = null;
+  $('sheetPickWrap').classList.add('hidden');
+  useRows(r.rows, '外食圖書館總表');
+  $('pkName').value = LIB.name;
+  $('pkOrg').value = LIB.org;
+  $('pkEdition').value = new Date().toISOString().slice(0, 10);
+  update();
+  note('adminNote', 'ok', '讀到總表 ' + (r.rows.length - 1) + ' 列。往下看第 4 步的檢查，沒問題就到第 5 步按「發佈給大家」。');
+  renderPublish();
+});
+$('adminSaveBtn').addEventListener('click', async () => {
+  if (!st.rows.length) { note('adminNote', 'err', '先在第 1 步讀入表格（例如外食圖書館的 Excel）。'); return; }
+  if (!confirm('要把目前讀入的表（' + st.rows.length + ' 列）存成試算表的「外食圖書館總表」嗎？總表原本的內容會被換掉。')) return;
+  note('adminNote', 'info', '存檔中…');
+  const r = await callAdmin({ action: 'adminSaveRows', rows: [st.head, ...st.rows] });
+  if (!r.ok) { showAdmin('adminNote', r); return; }
+  note('adminNote', 'ok', '已存成試算表總表（' + r.n + ' 列）。以後直接按「從試算表讀總表」就好。');
+});
+$('publishBtn').addEventListener('click', async () => {
+  if (!st.file) { note('outNote', 'err', '還沒有可以發佈的資料，請看上面的提示。'); return; }
+  if (st.file.pack.name !== LIB.name || st.file.pack.org !== LIB.org) {
+    if (!confirm('名稱是「' + st.file.pack.name + '」、整理者是「' + (st.file.pack.org || '') + '」，不是「' + LIB.name + '／' + LIB.org + '」。\n這樣會發佈成另一份共用資料庫，確定嗎？')) return;
+  }
+  if (!confirm('要把「' + st.file.pack.name + '」（' + st.file.foods.length + ' 樣）發佈給所有公測的人嗎？')) return;
+  note('outNote', 'info', '發佈中…');
+  const r = await callAdmin({ action: 'adminPublish', file: st.file });
+  if (!r.ok) { showAdmin('outNote', r); return; }
+  note('outNote', 'ok', (r.isNew ? '已發佈「' : '已更新「') + r.name + '」（' + r.n + ' 樣）。' + (r.on ? '大家的 App 半天內會自動更新（剛打開 App 的人可以關掉再開）。' : '試算表「共用資料庫」分頁那一列還沒打勾「發佈」，打勾後才會給大家。'));
 });

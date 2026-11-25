@@ -25,13 +25,12 @@ test('投稿帶條碼（包裝食品）', () => {
   assert.equal(contribFood({ name: '鍋貼', perServing: { kcal: 1 } }).barcode, undefined);
 });
 
-test('感謝名單的名字：中文中間遮起來、英文留第一個字和字首', async () => {
-  const { maskName } = await import('../../js/contrib.js');
-  assert.equal(maskName('王美華'), '王○華');
-  assert.equal(maskName('歐陽美華'), '歐○○華');
-  assert.equal(maskName('王華'), '王○');
-  assert.equal(maskName('Jian Kai FENG'), 'Jian K. F.');
-  assert.equal(maskName(''), '');
+test('暱稱不能是登記的真名（不管空白、大小寫）', async () => {
+  const { looksLikeRealName } = await import('../../js/contrib.js');
+  assert.equal(looksLikeRealName('王美華', '王美華'), true);
+  assert.equal(looksLikeRealName('jian kai feng', 'Jian Kai FENG'), true);
+  assert.equal(looksLikeRealName('愛吃鍋貼的阿美', '王美華'), false);
+  assert.equal(looksLikeRealName('', '王美華'), false);
 });
 
 test('外食圖書館的感謝名單、熱心貢獻者小成就', async () => {

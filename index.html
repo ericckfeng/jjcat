@@ -1001,8 +1001,8 @@
         <button type="button" id="ctAddPhoto" class="btn-secondary btn-xl w-full">📷 拍照或選照片</button>
         <input id="ctPhotoInput" type="file" accept="image/*" class="hidden" />
       </div>
-      <label class="block"><span class="scr-label">感謝名單上的名字</span><input id="ctCredit" type="text" maxlength="20" class="field text-lg" placeholder="留空就寫「熱心的朋友」" /></label>
-      <p class="text-sm text-stone-500 -mt-2">採用後，外食圖書館的感謝名單會列這個名字。可以改成暱稱。</p>
+      <label class="block"><span class="scr-label">暱稱（感謝名單上顯示）</span><input id="ctCredit" type="text" maxlength="20" autocomplete="off" class="field text-lg" placeholder="例如：愛吃鍋貼的阿美" /></label>
+      <p class="text-sm text-stone-500 -mt-2">採用後，外食圖書館的感謝名單會列這個暱稱。<b>請用暱稱，不要用真名</b>；留空就寫「熱心的朋友」。</p>
       <label class="block"><span class="scr-label">在哪裡看到的（可不填）</span><input id="ctWhere" type="text" maxlength="60" class="field text-lg" placeholder="例如：包裝背面、店家官網" /></label>
       <p id="ctWhat" class="text-base text-stone-600 leading-relaxed"></p>
       <p id="ctNote" class="hidden rounded-2xl whitespace-pre-line p-3 text-base leading-relaxed"></p>

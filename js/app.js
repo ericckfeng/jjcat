@@ -32,7 +32,7 @@ import { FEATURES, featureOn, featuresOff, BADGE_FEATURE } from './features.js';
 import { backupReminder, backupText, SNOOZE_DAYS } from './backup.js';
 import { normalizeInvite, gateState, cloudInviteFor, needCheck, waitSeconds, addFail, inviteMessage, FEEDBACK_MAX, canSendFeedback, feedbackInfo, feedbackMessage } from './invite.js';
 import { INVITE_URL } from './config.js';
-import { CONTRIB_PHOTOS, contribFood, contribProblem, contribMessage, maskName, ANON } from './contrib.js';
+import { CONTRIB_PHOTOS, contribFood, contribProblem, contribMessage, looksLikeRealName, ANON } from './contrib.js';
 import { GLUCOSE_KINDS, glucoseKindLabel, bpReading, glucoseReading, bpAlert, glucoseAlert, bpText, glucoseText, vitalsSummary, dailyVitals } from './vitals.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
 
@@ -5665,8 +5665,7 @@ $('mf-contrib').addEventListener('click', () => {
   const myGroup = (groups.find(g => g.shops.some(x => x.brand === food.brand)) || {}).group || '';
   $('ctGroup').innerHTML = ['', ...new Set([...LIBRARY_GROUPS, ...groups.map(g => g.group)].filter(g => g !== OTHER_GROUP))].map(g => `<option value="${esc(g)}"${g === myGroup ? ' selected' : ''}>${esc(g || '不知道（讓管理者分）')}</option>`).join('');
   $('ctWhere').value = '';
-  if (state.meta.creditName == null) state.meta.creditName = maskName(state.meta.invite && state.meta.invite.name);
-  $('ctCredit').value = state.meta.creditName;
+  $('ctCredit').value = state.meta.creditName || '';
   $('ctWhat').textContent = '按「送出推薦」會把這樣食物的名稱和數字、店家、照片、在哪裡看到的，連同版本、裝置名稱、邀請碼和姓名，送到公測管理者的 Google 試算表和雲端硬碟。不會送出你的飲食記錄。照片裡請不要拍到人臉或個人資料。';
   setBox('ctNote', null, '');
   renderCtPhotos();
@@ -5698,6 +5697,11 @@ $('ctSendBtn').addEventListener('click', async () => {
   const brand = $('ctBrand').value.trim();
   const problem = contribProblem({ food, brand, photos: ctPhotos });
   if (problem) { setBox('ctNote', 'err', problem); return; }
+  if (looksLikeRealName($('ctCredit').value, state.meta.invite && state.meta.invite.name)) {
+    setBox('ctNote', 'err', '「' + $('ctCredit').value.trim() + '」是你登記的姓名。感謝名單大家都看得到，請換成暱稱（例如：愛吃鍋貼的阿美），或留空。');
+    $('ctCredit').focus();
+    return;
+  }
   const btn = $('ctSendBtn');
   btn.disabled = true; btn.textContent = '送出中，照片比較久…';
   const r = await callInvite({ action: 'contrib', code: state.meta.invite.code, deviceId: state.meta.deviceId, deviceName: myDeviceName(), ver: APP_LABEL,

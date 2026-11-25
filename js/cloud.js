@@ -65,14 +65,14 @@ export function consumeRedirect() {
   let pending = null;
   try { pending = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null'); } catch (e) { /* ignore */ }
   localStorage.removeItem(PENDING_KEY);
-  if (!pending || h.get('state') !== pending.state) return { error: '登入狀態不符，請再試一次' };
+  if (!pending || h.get('state') !== pending.state) return { error: '登入狀態不符，請再試一次', action: pending && pending.action };
   if (h.get('error')) {
     if (pending.silent) return { error: 'need_interactive', silent: true, action: pending.action };
-    return { error: h.get('error') === 'access_denied' ? '已取消 Google 授權' : 'Google 授權失敗：' + h.get('error') };
+    return { error: h.get('error') === 'access_denied' ? '已取消 Google 授權' : 'Google 授權失敗：' + h.get('error'), action: pending.action };
   }
   const granted = h.get('scope') || '';
   if (!granted.includes('drive.file')) {
-    return { error: '需要勾選「Google 雲端硬碟」權限才能備份，請再試一次' };
+    return { error: '需要勾選「Google 雲端硬碟」權限才能備份，請再試一次', action: pending.action };
   }
   localStorage.setItem(TOKEN_KEY, JSON.stringify({
     token: h.get('access_token'),

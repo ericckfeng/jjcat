@@ -30,7 +30,7 @@ import { wallDays, wallPhotoCount } from './photowall.js';
 import { splitAdvice, activeAdvice, todaysAdvice, toggleDone } from './advice.js';
 import { FEATURES, featureOn, featuresOff, BADGE_FEATURE } from './features.js';
 import { backupReminder, backupText, SNOOZE_DAYS } from './backup.js';
-import { normalizeInvite, gateState, needCheck, waitSeconds, addFail, inviteMessage } from './invite.js';
+import { normalizeInvite, gateState, cloudInviteFor, needCheck, waitSeconds, addFail, inviteMessage } from './invite.js';
 import { INVITE_URL } from './config.js';
 import { GLUCOSE_KINDS, glucoseKindLabel, bpReading, glucoseReading, bpAlert, glucoseAlert, bpText, glucoseText, vitalsSummary, dailyVitals } from './vitals.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
@@ -5353,26 +5353,102 @@ async function callInvite(payload) {
   }
 }
 let invitePending = null;   // 號碼對了、等填姓名：{ code }
-function showInviteGate(reason) {
+const canGoogle = () => cloud.isConfigured();
+function showInviteStep(step) {
+  ['Choice', 'Code', 'Name'].forEach(k => $('inviteStep' + k).classList.toggle('hidden', k !== step));
+  $('inviteToChoiceBtn').classList.toggle('hidden', !canGoogle() || Boolean(state.meta.cloud.linked));
+}
+// reason：號碼被停用等原因要重新輸入；lead：換掉上面的說明（例如已連好 Google、雲端沒有邀請碼）
+function showInviteGate(reason, lead) {
   $('inviteGate').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
-  $('inviteStepCode').classList.remove('hidden');
-  $('inviteStepName').classList.add('hidden');
-  $('inviteLead').textContent = reason ? '你的邀請碼要重新確認。' : '現在是公測期間，請輸入邀請你的人給你的邀請碼。';
+  invitePending = null;
+  // 第一次：先選用 Google 帳號或只用這台；要重新確認、或已經連好 Google 的，直接輸入邀請碼
+  showInviteStep(!reason && !lead && canGoogle() && !state.meta.cloud.linked ? 'Choice' : 'Code');
+  $('inviteLead').textContent = lead || (reason ? '你的邀請碼要重新確認。' : '現在是公測期間，請選一種方式開始。');
+  if (!canGoogle() && !reason && !lead) $('inviteLead').textContent = '現在是公測期間，請輸入邀請你的人給你的邀請碼。';
   setBox('inviteNote', reason ? 'err' : null, reason ? inviteMessage(reason) : '');
 }
 function hideInviteGate() {
   $('inviteGate').classList.add('hidden');
   if (!screenStack.length) document.body.style.overflow = '';
 }
-// 開 App 時：沒設網址就不管；舊裝置記成放行；新裝置、被停用的要輸入；其他的每天問一次有沒有被停用
+const inviteNow = () => gateState({ url: INVITE_URL, invite: state.meta.invite, hasData: hasLocalData(), cloudInvite: state.betaInvite });
+// 這台的邀請碼也存進同步資料（連了雲端才會上傳），重裝後用 Google 登入就能取回
+function saveCloudInvite() {
+  const v = cloudInviteFor(state.meta.invite, state.betaInvite, now());
+  if (!v) return;
+  state.betaInvite = v;
+  persist();
+}
+// 開 App 時：沒設網址就不管；舊用戶記成放行；雲端有邀請碼的用它登記；新裝置、被停用的要輸入；其他的每天問一次有沒有被停用
 function initInviteGate() {
-  const g = gateState({ url: INVITE_URL, invite: state.meta.invite, hasData: hasLocalData(), linked: Boolean(state.meta.cloud.linked) });
+  const g = inviteNow();
   if (g === 'off') return;
-  if (g === 'legacy') { state.meta.invite = { legacy: true, at: now(), rev: APP_REV }; persistLocal(); return; }
+  if (g === 'legacy') { state.meta.invite = { legacy: true, at: now(), rev: APP_REV }; persistLocal(); saveCloudInvite(); return; }
+  if (g === 'restore') { restoreInvite(); return; }
   if (g === 'new' || g === 'locked') { showInviteGate(g === 'locked' ? state.meta.invite.reason : null); return; }
+  saveCloudInvite();
   if (needCheck(state.meta.invite, now()) && navigator.onLine !== false) checkInviteAgain();
 }
+// 雲端記著的邀請碼：用它登記這台（同號碼＋同裝置名稱＋同姓名，試算表不會多算一台）
+async function restoreInvite() {
+  const ci = state.betaInvite;
+  $('inviteGate').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  ['Choice', 'Code', 'Name'].forEach(k => $('inviteStep' + k).classList.add('hidden'));
+  $('inviteLead').textContent = '找到你的邀請碼了，確認中…';
+  setBox('inviteNote', null, '');
+  const r = await callInvite({ action: 'register', code: ci.code, deviceId: state.meta.deviceId, deviceName: myDeviceName(), name: ci.name || '' });
+  // 連不上：先讓他用，下次打開再確認（lastCheck 0）
+  if (!r.ok && r.reason !== 'network' && r.reason !== 'busy') {
+    showInviteGate(r.reason === 'unknown' ? 'disabled' : r.reason);
+    return;
+  }
+  state.meta.invite = { code: ci.code, name: ci.name || r.name || '', at: now(), rev: APP_REV, lastCheck: r.ok ? now() : 0 };
+  persistLocal();
+  hideInviteGate();
+  showToast('歡迎回來' + (state.meta.invite.name ? '，' + state.meta.invite.name : '') + '！');
+}
+// 在邀請碼畫面按「用 Google 帳號登入」：登入回來（或本來就有登入）→ 連好雲端、取回記錄 → 看雲端有沒有邀請碼
+async function inviteGoogle() {
+  if (cloud.isBlockedInAppBrowser()) {
+    setBox('inviteNote', 'err', '你現在是用 LINE／Facebook 等 App 裡的瀏覽器開啟，Google 不允許在這裡登入。請點右上角選單，選「用 Safari／Chrome 開啟」，再按一次。');
+    return;
+  }
+  state.meta.welcomed = true;
+  persistLocal();
+  if (!cloud.getToken()) { setBox('inviteNote', 'info', '前往 Google 登入…'); startSignIn('gate'); return; }
+  await afterInviteGoogle();
+}
+async function afterInviteGoogle() {
+  $('inviteGate').classList.remove('hidden');
+  ['Choice', 'Code', 'Name'].forEach(k => $('inviteStep' + k).classList.add('hidden'));
+  $('inviteLead').textContent = '已登入 Google，正在讀取雲端的記錄…';
+  setBox('inviteNote', null, '');
+  const before = state.meta.cloud.lastSync || 0;
+  await cloudRun('connect');
+  if (!state.meta.cloud.linked || (state.meta.cloud.lastSync || 0) === before) {
+    showInviteGate(null);
+    setBox('inviteNote', 'err', '沒有連上 Google 雲端，請再試一次；或選「只用這台裝置」輸入邀請碼。');
+    return;
+  }
+  const g = inviteNow();
+  if (g === 'restore') { restoreInvite(); return; }
+  if (g === 'legacy') {
+    state.meta.invite = { legacy: true, at: now(), rev: APP_REV };
+    persistLocal();
+    saveCloudInvite();
+    hideInviteGate();
+    showToast('歡迎回來！記錄已經取回');
+    return;
+  }
+  if (g === 'open') { hideInviteGate(); return; }
+  showInviteGate(null, '已連好 Google 雲端。第一次使用，請輸入邀請你的人給你的邀請碼（只要輸入這一次）。');
+}
+$('inviteGoogleBtn').addEventListener('click', inviteGoogle);
+$('inviteLocalBtn').addEventListener('click', () => { showInviteStep('Code'); setBox('inviteNote', null, ''); $('inviteCode').focus(); });
+$('inviteToChoiceBtn').addEventListener('click', () => showInviteGate(null));
 async function checkInviteAgain() {
   const inv = state.meta.invite;
   const r = await callInvite({ action: 'ping', code: inv.code, deviceId: state.meta.deviceId, deviceName: myDeviceName() });
@@ -5409,7 +5485,7 @@ $('inviteCodeBtn').addEventListener('click', async () => {
   $('inviteStepName').classList.remove('hidden');
   setBox('inviteNote', 'ok', r.name ? '邀請碼正確。這組邀請碼登記的是「' + r.name + '」，是你的話直接按「開始使用」。' : '邀請碼正確！請填你的姓名。');
 });
-$('inviteBackBtn').addEventListener('click', () => { invitePending = null; showInviteGate(null); });
+$('inviteBackBtn').addEventListener('click', () => { invitePending = null; showInviteStep('Code'); setBox('inviteNote', null, ''); });
 $('inviteNameBtn').addEventListener('click', async () => {
   if (!invitePending) return;
   const name = $('inviteName').value.trim();
@@ -5422,7 +5498,7 @@ $('inviteNameBtn').addEventListener('click', async () => {
   state.meta.invite = { code: invitePending.code, name, at: now(), rev: APP_REV, lastCheck: now() };
   invitePending = null;
   persistLocal();
-  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ }   // 請瀏覽器別自動清掉本機資料
+  saveCloudInvite();
   hideInviteGate();
   showToast('歡迎加入公測，' + name + '！');
 });
@@ -5439,6 +5515,10 @@ $('inviteNameBtn').addEventListener('click', async () => {
     if (redirect.silent && redirect.error) {
       try { localStorage.setItem(SILENT_FAIL, String(Date.now())); } catch (e) { /* ignore */ }
       state.meta.cloud.needAuth = true; persistLocal(); renderBanners(); renderSyncChip();
+    } else if (redirect.action === 'gate') {
+      // 從邀請碼畫面去登入 Google 回來
+      if (redirect.error) setBox('inviteNote', 'err', redirect.error + '。也可以選「只用這台裝置」輸入邀請碼。');
+      else afterInviteGoogle();
     } else if (redirect.error) {
       goToCloudSection(); setCloudStatus(redirect.error, 'err');
     } else {

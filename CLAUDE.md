@@ -66,7 +66,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/features.js` | **純函式**：功能開關（`profile.features`）：不是記飲食的功能（體重、喝水、運動、睡眠、心情、體脂機、血壓、血糖）可以各自關掉，首頁格子加 `data-feature`；小芽（`off`）、小成就（`BADGE_FEATURE`）跟著不提醒（有單元測試） |
 | `js/vitals.js` | **純函式**：血壓、血糖（每日 `bp`、`glucose`，一天好幾次）：檢查數字、只提醒明顯危險的（很高的血壓、低血糖）、期間摘要、CSV 寫法（有單元測試）。畫面 `scr-bp`、`scr-glucose` |
 | `js/backup.js` | **純函式**：首頁的備份提醒：沒連雲端 7 天沒備份、連了雲端但 7 天沒同步成功、登入過期、要先更新；「晚點」3 天（`meta.backupSnoozeUntil`）（有單元測試） |
-| `js/invite.js`、`tools/invite/Code.gs` | **公測邀請碼**：管理者的 Google 試算表「飲控隨身記 公測邀請碼」＋綁在上面的 Apps Script（網頁應用程式，`js/config.js` 的 `INVITE_URL`；留空＝不用邀請碼）。新裝置要輸入 JJ-4 位數字、填姓名才能用；有記錄或連了雲端的舊裝置直接放行（`meta.invite.legacy`）；每天問一次，號碼改成「停用」就要重新輸入。一組最多 3 台。`invite.js` 是純函式（有單元測試）；e2e 預設把 `INVITE_URL` 換成空的（`tests/e2e/helpers.mjs` 的 `stubInviteUrl`）。部署見 `docs/INVITE.md` |
+| `js/invite.js`、`tools/invite/Code.gs` | **公測邀請碼**：管理者的 Google 試算表「飲控隨身記 公測邀請碼」＋綁在上面的 Apps Script（網頁應用程式，`js/config.js` 的 `INVITE_URL`；留空＝不用邀請碼）。新裝置先選「用 Google 帳號登入」或「只用這台裝置」，要輸入 JJ-4 位數字、填姓名才能用；邀請碼也存進同步資料最上層 `betaInvite`，重裝／換裝置用 Google 登入取回就自動登記、不用再輸入（雲端有記錄但沒邀請碼＝舊用戶放行）；有記錄的舊裝置直接放行（`meta.invite.legacy`）；只連了雲端不算；同號碼＋同裝置名稱＋同姓名在試算表算同一台；每天問一次，號碼改成「停用」就要重新輸入。一組最多 3 台。`invite.js` 是純函式（有單元測試）；e2e 預設把 `INVITE_URL` 換成空的（`tests/e2e/helpers.mjs` 的 `stubInviteUrl`）。部署見 `docs/INVITE.md` |
 | `js/photowall.js` | **純函式**：餐點照片牆：一週每天有照片的記錄（照餐別、時間排）和當天合計（有單元測試）。畫面 `scr-photowall` 從報告分頁進去，點照片用共用的 `openLightbox(date, id)` 看大圖、修正（會切到那天） |
 | `js/version.js` | **純函式**：版本號（由 `scripts/bump.py` 改）、有沒有新版、雲端要求的最低版本 `DATA_MIN_REV`、「我的裝置」清單（有單元測試） |
 | `js/nutrition.js` | 餐別、營養素、六大類代換表、預設快選 |

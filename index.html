@@ -1058,12 +1058,24 @@
         <h2 class="text-2xl font-bold text-stone-900">飲控隨身記・公測</h2>
         <p id="inviteLead" class="text-lg text-stone-700 leading-relaxed">現在是公測期間，請輸入邀請你的人給你的邀請碼。</p>
       </div>
+      <!-- 第一步：用 Google 帳號（取回記錄、邀請碼跟著存雲端）或只用這台（輸入邀請碼） -->
+      <div id="inviteStepChoice" class="hidden space-y-3">
+        <button type="button" id="inviteGoogleBtn" class="tile tile-wide text-left w-full">
+          <span class="tile-ic">☁️</span>
+          <span><span class="tile-t block">用 Google 帳號登入（建議）</span><span class="tile-s block">記錄會備份到你的 Google 雲端。以前用過、或刪掉 App 重裝的，登入就取回記錄，不用再找邀請碼</span></span>
+        </button>
+        <button type="button" id="inviteLocalBtn" class="tile tile-wide text-left w-full">
+          <span class="tile-ic">📱</span>
+          <span><span class="tile-t block">只用這台裝置</span><span class="tile-s block">不連雲端，輸入邀請碼就能用。刪掉 App 記錄會跟著不見，要再輸入一次邀請碼</span></span>
+        </button>
+      </div>
       <div id="inviteStepCode" class="space-y-3">
         <label class="block"><span class="scr-label">邀請碼</span>
           <span class="invite-code"><span aria-hidden="true">JJ-</span><input id="inviteCode" type="text" inputmode="numeric" autocomplete="off" maxlength="8" class="field field-xl tabular-nums" placeholder="4 個數字" /></span>
         </label>
         <button type="button" id="inviteCodeBtn" class="btn-primary btn-xl w-full">確認</button>
         <p class="text-base text-stone-600 leading-relaxed">同一台裝置重新安裝、或從 Safari 和主畫面各開一次，要再輸入一次；填同樣的姓名就不會多算一台。</p>
+        <button type="button" id="inviteToChoiceBtn" class="hidden block w-full text-base text-stone-600 underline py-1">改用 Google 帳號登入</button>
       </div>
       <div id="inviteStepName" class="hidden space-y-3">
         <label class="block"><span class="scr-label">你的姓名</span><input id="inviteName" type="text" maxlength="30" autocomplete="name" class="field text-lg" placeholder="例如：王美華" /></label>

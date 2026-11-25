@@ -128,7 +128,7 @@ async function shot(page, name, { el = null, full = false } = {}) {
 const scrollTo = (page, sel) => page.locator(sel).first().evaluate(el => el.scrollIntoView({ block: 'start' }));
 
 // 1. 第一次打開：邀請碼（公測期間）、歡迎畫面
-{ const { ctx, page } = await fresh({ state: null, invite: true }); await page.fill('#inviteCode', '4821'); await shot(page, '00-invite'); await ctx.close(); }
+{ const { ctx, page } = await fresh({ state: null, invite: true }); await shot(page, '00-invite'); await ctx.close(); }
 { const { ctx, page } = await fresh({ state: null }); await shot(page, '01-welcome'); await ctx.close(); }
 // 加入主畫面的提示（安裝那一段用）
 { const st = demoState(); st.meta.installHintDismissed = false;

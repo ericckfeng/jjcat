@@ -126,9 +126,12 @@ function checkShared() {
 function doPost(e) {
   let req = {};
   try { req = JSON.parse(e.postData.contents || '{}'); } catch (err) { return out_({ ok: false, reason: 'bad' }); }
-  try { return out_(handle_(req)); } catch (err) { return out_({ ok: false, reason: 'error' }); }
+  try { return out_(handle_(req)); } catch (err) {
+    // 管理者（整理工具）看得到錯誤原因，方便知道是不是要授權雲端硬碟；一般使用者只回 error
+    return out_({ ok: false, reason: 'error', detail: /^admin/.test(String(req.action || '')) ? String(err && err.message || err).slice(0, 300) : undefined });
+  }
 }
-const VERSION = '2026-11-25e';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
+const VERSION = '2026-11-25f';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
 function doGet() { return out_({ ok: true, app: 'jjcat-invite', version: VERSION }); }
 function out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
 
@@ -389,7 +392,8 @@ function admin_(req) {
       let row = urls.indexOf(file.getId()) + 2;
       const isNew = row < 2;
       if (isNew) {
-        row = sh.getLastRow() + 1;
+        const empty = urls.indexOf('');   // 預先放了勾選框的空白列：用第一個空的，不要加到最下面
+        row = empty >= 0 ? empty + 2 : sh.getLastRow() + 1;
         sh.getRange(row, 1).setValue(file.getUrl());
         sh.getRange(row, 2).insertCheckboxes().setValue(true);
       }

@@ -297,7 +297,8 @@ async function callAdmin(payload) {
     return await r.json();
   } catch (e) { return { ok: false, reason: 'network' }; }
 }
-const showAdmin = (id, r) => note(id, 'err', r.msg || adminMsg[r.reason] || '出了點問題（' + (r.reason || '') + '），請再試一次。');
+const showAdmin = (id, r) => note(id, 'err', r.msg || adminMsg[r.reason] ||
+  ('出了點問題（' + (r.reason || '') + (r.detail ? '：' + r.detail : '') + '），請再試一次。' + (/權限|permission|authoriz/i.test(r.detail || '') ? '\n看起來是試算表程式還沒取得雲端硬碟權限：到 Apps Script 編輯器選函式 checkShared 按「執行」，照畫面授權。' : '')));
 function renderPublish() { $('publishBtn').classList.toggle('hidden', !$('adminKey').value.trim()); }
 $('adminKey').addEventListener('input', renderPublish);
 renderPublish();

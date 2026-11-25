@@ -30,7 +30,7 @@ import { wallDays, wallPhotoCount } from './photowall.js';
 import { splitAdvice, activeAdvice, todaysAdvice, toggleDone } from './advice.js';
 import { FEATURES, featureOn, featuresOff, BADGE_FEATURE } from './features.js';
 import { backupReminder, backupText, SNOOZE_DAYS } from './backup.js';
-import { normalizeInvite, gateState, cloudInviteFor, needCheck, waitSeconds, addFail, inviteMessage } from './invite.js';
+import { normalizeInvite, gateState, cloudInviteFor, needCheck, waitSeconds, addFail, inviteMessage, FEEDBACK_MAX, canSendFeedback, feedbackInfo, feedbackMessage } from './invite.js';
 import { INVITE_URL } from './config.js';
 import { GLUCOSE_KINDS, glucoseKindLabel, bpReading, glucoseReading, bpAlert, glucoseAlert, bpText, glucoseText, vitalsSummary, dailyVitals } from './vitals.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
@@ -946,6 +946,7 @@ function openScreen(id) {
   if (id === 'scr-targets') fillTargetFields();
   if (id === 'scr-features') renderFeatures();
   if (id === 'scr-about') { renderAbout(); checkLatest(true); }
+  if (id === 'scr-feedback') renderFeedback();
   if (id === 'scr-data') { renderCloud(); renderBackupInfo(); }   // 關掉自動同步的人也要看得到雲端區塊
   if (id === 'scr-weekly') renderWeekly();
   if (id === 'scr-badges') renderBadges();
@@ -5501,6 +5502,59 @@ $('inviteNameBtn').addEventListener('click', async () => {
   saveCloudInvite();
   hideInviteGate();
   showToast('歡迎加入公測，' + name + '！');
+});
+
+/* ---------------- 💬 意見回饋（設定 → 關於）---------------- */
+let fbKind = '';
+function renderFeedback() {
+  const inv = state.meta.invite;
+  const can = Boolean(INVITE_URL) && canSendFeedback(inv);
+  $('fbForm').classList.toggle('hidden', !can);
+  $('fbChatTitle').textContent = can ? '有截圖要給我們？' : '用聊天 App 告訴我們';
+  if (can) {
+    $('fbWhat').textContent = '按「送出」會把你寫的內容，和版本（' + APP_LABEL + '）、裝置名稱（' + myDeviceName() + '）、邀請碼和姓名，送到公測管理者的 Google 試算表。不會送出你的飲食記錄。請不要寫身分證字號、電話、地址。';
+  }
+  setBox('fbNote', null, '');
+  renderFbKind();
+  renderFbCount();
+}
+function renderFbKind() {
+  document.querySelectorAll('[data-fb-kind]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fbKind === fbKind)));
+}
+function renderFbCount() {
+  $('fbCount').textContent = $('fbText').value.length + '／' + FEEDBACK_MAX + ' 字';
+}
+document.querySelectorAll('[data-fb-kind]').forEach(b => b.addEventListener('click', () => { fbKind = b.dataset.fbKind; renderFbKind(); }));
+$('fbText').addEventListener('input', renderFbCount);
+$('fbSendBtn').addEventListener('click', async () => {
+  const text = $('fbText').value.trim();
+  if (!text) { setBox('fbNote', 'err', feedbackMessage('empty')); $('fbText').focus(); return; }
+  if (text.length > FEEDBACK_MAX) { setBox('fbNote', 'err', feedbackMessage('long')); return; }
+  const inv = state.meta.invite;
+  const btn = $('fbSendBtn');
+  btn.disabled = true; btn.textContent = '送出中…';
+  const r = await callInvite({ action: 'feedback', code: inv.code, deviceId: state.meta.deviceId, deviceName: myDeviceName(), ver: APP_LABEL, kind: fbKind || 'other', text });
+  btn.disabled = false; btn.textContent = '送出';
+  if (!r.ok) { setBox('fbNote', 'err', feedbackMessage(r.reason)); return; }
+  $('fbText').value = '';
+  fbKind = '';
+  renderFbKind();
+  renderFbCount();
+  setBox('fbNote', 'ok', '謝謝你！已經送給公測管理者了。');
+});
+// 分享選單（手機）：列出這台有的 App，選常用的那個；不能分享的（電腦）複製起來，貼到任何聊天 App
+$('fbShareBtn').addEventListener('click', async () => {
+  const typed = $('fbText').value.trim();
+  const text = feedbackInfo({ label: APP_LABEL, device: myDeviceName(), invite: state.meta.invite }) + (typed ? '\n' + typed : '\n');
+  if (navigator.share) {
+    try { await navigator.share({ text }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('已複製版本資訊，貼到 LINE、Messenger、Teams 或 Email 都可以');
+  } catch (e) {
+    showError('沒辦法自動複製。請直接用你常用的聊天 App 告訴邀請你的人，並說明版本是「' + APP_LABEL + '」。');
+  }
 });
 
 (async function init() {

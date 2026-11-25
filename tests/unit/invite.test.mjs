@@ -60,3 +60,18 @@ test('寫進同步資料的邀請碼：新的才寫，雲端比較新的不蓋�
   assert.equal(cloudInviteFor({ code: 'JJ-4821', locked: true }, undefined, now), null);
   assert.equal(cloudInviteFor(null, undefined, now), null);
 });
+
+test('意見回饋：有邀請碼（沒停用）才能直接送；聊天 App 的開頭帶版本、裝置、邀請碼', async () => {
+  const { canSendFeedback, feedbackInfo, feedbackMessage } = await import('../../js/invite.js');
+  assert.equal(canSendFeedback({ code: 'JJ-4821' }), true);
+  assert.equal(canSendFeedback({ code: 'JJ-4821', locked: true }), false);
+  assert.equal(canSendFeedback({ legacy: true }), false);
+  assert.equal(canSendFeedback(null), false);
+  const t = feedbackInfo({ label: '2026.11.25-3（Rev. 67）', device: 'iPad', invite: { code: 'JJ-4821', name: '王美華' } });
+  assert.match(t, /版本：2026\.11\.25-3（Rev\. 67）/);
+  assert.match(t, /裝置：iPad/);
+  assert.match(t, /邀請碼：JJ-4821（王美華）/);
+  assert.doesNotMatch(feedbackInfo({ label: 'x', device: 'iPad', invite: { legacy: true } }), /邀請碼/);
+  assert.match(feedbackMessage('limit'), /聊天 App/);
+  assert.match(feedbackMessage('whatever'), /稍後再試/);
+});

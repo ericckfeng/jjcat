@@ -3,6 +3,7 @@
  *
  * App 第一次打開時輸入邀請碼 → 這裡檢查「已發出、可用、裝置還沒滿」→ 請對方填姓名 → 記到「裝置」分頁。
  * 同一台重新安裝（裝置 ID 換了）：同號碼＋同裝置名稱＋同姓名就改寫原本那一筆，不多算一台。
+ * 意見回饋（action: feedback）：登記過的裝置送文字到「回饋」分頁（第一次會自動建立），一台一天最多 5 則。
  * App 每天第一次連網打開時再問一次：號碼被改成「停用」的，那台就要重新輸入邀請碼（記錄不會刪）。
  *
  * 部署：擴充功能 → Apps Script → 貼上這個檔案 → 部署 → 新增部署作業 → 網頁應用程式
@@ -14,6 +15,10 @@ const MAX_DEVICES = 3;           // 一組號碼最多幾台裝置
 const CODES = '邀請碼';
 const DEVICES = '裝置';
 const FAIL_LIMIT = 30;           // 10 分鐘內錯幾次就暫停（防止有人一組一組猜）
+const FEEDBACK = '回饋';
+const FEEDBACK_PER_DAY = 5;      // 一台裝置一天最多送幾則
+const FEEDBACK_MAX = 500;        // 一則最多幾個字
+const KINDS = { bug: '哪裡怪怪的', wish: '希望增加', other: '其他' };
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('公測邀請碼')
@@ -55,9 +60,15 @@ function doPost(e) {
   try { req = JSON.parse(e.postData.contents || '{}'); } catch (err) { return out_({ ok: false, reason: 'bad' }); }
   try { return out_(handle_(req)); } catch (err) { return out_({ ok: false, reason: 'error' }); }
 }
-const VERSION = '2026-11-25';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
+const VERSION = '2026-11-25b';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
 function doGet() { return out_({ ok: true, app: 'jjcat-invite', version: VERSION }); }
 function out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
+
+// 使用者打的字寫進試算表前：去掉控制字元、限制長度；開頭是 = + - @ 的加 ' 當成純文字（不會被當成公式執行）
+function plain_(v, max) {
+  const t = String(v == null ? '' : v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim().slice(0, max);
+  return /^[=+\-@]/.test(t) ? "'" + t : t;
+}
 
 function normCode_(code) {
   const d = String(code || '').replace(/\D/g, '');
@@ -98,20 +109,21 @@ function handle_(req) {
   const here = deviceId && mine.find(r => r.id === deviceId);
   // 同一台重新安裝（iPhone／iPad 刪掉 App、或 Safari 和主畫面各開一次）本機資料是空的，裝置 ID 會換新的：
   // 同一組號碼、同樣的裝置名稱、同樣的姓名，就當成同一台，改寫那一筆，不多算一台
-  const devName = String(req.deviceName || '').slice(0, 40);
+  const devName = plain_(req.deviceName, 40);
   const sameKind = mine.filter(r => devName && r.dev === devName);
 
   if (req.action === 'check') {
     if (!here && mine.length >= MAX_DEVICES && !sameKind.length) return { ok: false, reason: 'full' };
     return { ok: true, name, known: Boolean(here) };
   }
+  if (req.action === 'feedback') return feedback_(req, code, name, here);
   if (req.action === 'register' || req.action === 'ping') {
     if (!deviceId) return { ok: false, reason: 'bad' };
     const lock = LockService.getScriptLock();
     lock.waitLock(10000);
     try {
       const now = new Date();
-      const who = String(req.name || name || '').trim().slice(0, 30);
+      const who = plain_(req.name || name, 30);
       const again = !here && sameKind.find(r => sameName_(r.who, who));
       if (here) {
         devs.getRange(here.row, 5).setValue(now);
@@ -132,4 +144,35 @@ function handle_(req) {
     }
   }
   return { ok: false, reason: 'bad' };
+}
+
+// 意見回饋：只收這組號碼登記過的裝置（陌生人不能灌），一台一天最多 FEEDBACK_PER_DAY 則，只收文字
+function feedback_(req, code, name, here) {
+  if (!here) return { ok: false, reason: 'device' };
+  const text = plain_(req.text, FEEDBACK_MAX);
+  if (!text) return { ok: false, reason: 'empty' };
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(FEEDBACK);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    if (!sh) {
+      sh = ss.insertSheet(FEEDBACK);
+      sh.appendRow(['時間', '邀請碼', '姓名', '裝置名稱', '版本', '類型', '內容', '處理了', '備註', '裝置ID']);
+      sh.setFrozenRows(1);
+      sh.getRange('G:G').setWrap(true);
+      sh.setColumnWidth(7, 420);
+    }
+    const now = new Date();
+    const today = Utilities.formatDate(now, 'Asia/Taipei', 'yyyy-MM-dd');
+    const n = sh.getLastRow() - 1;
+    const rows = n > 0 ? sh.getRange(2, 1, n, 10).getValues() : [];
+    const sent = rows.filter(r => String(r[9]) === here.id && r[0] instanceof Date && Utilities.formatDate(r[0], 'Asia/Taipei', 'yyyy-MM-dd') === today).length;
+    if (sent >= FEEDBACK_PER_DAY) return { ok: false, reason: 'limit' };
+    sh.appendRow([now, code, plain_(name || here.who, 30), here.dev, plain_(req.ver, 40), KINDS[req.kind] || '其他', text, false, '', here.id]);
+    sh.getRange(sh.getLastRow(), 8).insertCheckboxes();
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
 }

@@ -62,3 +62,35 @@ export function inviteMessage(reason) {
     network: '連不上，請確認有網路（Wi-Fi 或行動網路）再試一次。'
   }[reason] || '出了點問題，請稍後再試一次。';
 }
+
+// ---- 意見回饋（設定 → 關於 → 💬 意見回饋）----
+// 用邀請碼登記過的裝置，文字送到管理者試算表的「回饋」分頁（tools/invite/Code.gs 的 feedback）；
+// 有截圖、或沒有邀請碼的舊用戶，用分享選單從自己常用的聊天 App 傳（LINE、Messenger、Teams、Email 都可以）
+export const FEEDBACK_MAX = 500;
+export const FEEDBACK_KINDS = [
+  { key: 'bug', label: '🐞 哪裡怪怪的', sheet: '哪裡怪怪的' },
+  { key: 'wish', label: '💡 希望增加', sheet: '希望增加' },
+  { key: 'other', label: '💬 其他', sheet: '其他' }
+];
+export const canSendFeedback = (invite) => Boolean(invite && invite.code && !invite.locked);
+
+// 貼到聊天 App 的開頭：讓管理者知道是哪一版、哪台
+export function feedbackInfo({ label, device, invite }) {
+  const lines = ['【飲控隨身記 意見回饋】', '版本：' + label, '裝置：' + device];
+  if (invite && invite.code) lines.push('邀請碼：' + invite.code + (invite.name ? '（' + invite.name + '）' : ''));
+  lines.push('想說的話：');
+  return lines.join('\n');
+}
+
+export function feedbackMessage(reason) {
+  return {
+    empty: '請先寫下想說的話。',
+    long: '最多 ' + FEEDBACK_MAX + ' 個字，請分兩次送。',
+    limit: '今天已經送了很多則，明天再送；或用下面的按鈕，從你常用的聊天 App 告訴我們。',
+    device: '這台裝置沒有在公測名單裡，請用下面的按鈕，從你常用的聊天 App 告訴我們。',
+    disabled: '你的邀請碼已經停用，請用下面的按鈕，從你常用的聊天 App 告訴我們。',
+    unknown: '你的邀請碼已經停用，請用下面的按鈕，從你常用的聊天 App 告訴我們。',
+    busy: '現在太多人在送，請 10 分鐘後再試。',
+    network: '連不上，請確認有網路（Wi-Fi 或行動網路）再試一次。'
+  }[reason] || '出了點問題，請稍後再試一次；或用下面的按鈕，從你常用的聊天 App 告訴我們。';
+}

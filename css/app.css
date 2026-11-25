@@ -337,3 +337,7 @@ button.mascot-chip { cursor: pointer; }
 .invite-card { max-width: 26rem; margin: 0 auto; background: #fff; border: 1px solid var(--stone-200); border-radius: 1.5rem; padding: 1.5rem 1.25rem; }
 .invite-code { display: flex; align-items: center; gap: .5rem; font-size: 1.75rem; font-weight: 700; color: var(--stone-700); }
 .invite-code .field { flex: 1; min-width: 0; letter-spacing: .3em; }
+
+/* 意見回饋的類型：大按鈕，選到的有綠框 */
+.fb-kind { display: block; width: 100%; text-align: left; padding: .85rem 1rem; font-size: 1.125rem; font-weight: 600; border: 2px solid var(--stone-200, #e7e5e4); border-radius: 1rem; background: #fff; color: #1c1917; }
+.fb-kind[aria-pressed="true"] { border-color: #059669; background: #ecfdf5; color: #064e3b; }

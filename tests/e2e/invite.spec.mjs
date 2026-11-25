@@ -1,7 +1,7 @@
 // 公測邀請碼：新裝置要輸入（錯了會說明、錯太多要等）→ 填姓名 → 開始用；舊裝置直接放行；
 // 號碼被停用：每天檢查時發現 → 要重新輸入（記錄還在）；連不上不擋人；同一組的第二台帶出姓名
 import { test, expect } from '@playwright/test';
-import { openApp, appState } from './helpers.mjs';
+import { openApp, appState, openSettings } from './helpers.mjs';
 
 const URL_ = 'https://invite.test/exec';
 // 模擬管理者的試算表（tools/invite/Code.gs 的回應）
@@ -16,6 +16,7 @@ async function fakeSheet(page, sheet) {
     if (!row || !row.issued) res = { ok: false, reason: 'unknown' };
     else if (row.disabled) res = { ok: false, reason: 'disabled' };
     else if (req.action === 'check') res = { ok: true, name: row.name || '' };
+    else if (req.action === 'feedback') { (sheet.feedback = sheet.feedback || []).push(req); res = sheet.fbReason ? { ok: false, reason: sheet.fbReason } : { ok: true }; }
     else if (row.full) res = { ok: false, reason: 'full' };
     else { if (!row.name) row.name = req.name; (row.devices = row.devices || []).push(req.deviceId); res = { ok: true, name: row.name }; }
     return r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(res) });
@@ -256,4 +257,57 @@ test('Rev. 63～65 加入的裝置：打開時把邀請碼補存進同步資料'
   await openApp(page, { inviteUrl: URL_ });
   await expect(page.locator('#inviteGate')).toBeHidden();
   expect((await appState(page)).betaInvite).toMatchObject({ code: 'JJ-4821', name: '王美華' });
+});
+
+// ---- 意見回饋（設定 → 關於 → 💬 意見回饋）----
+async function openFeedback(page) {
+  await openSettings(page, '[data-screen="scr-about"]');
+  await page.click('#scr-about [data-screen="scr-feedback"]');
+  await expect(page.locator('#scr-feedback')).toBeVisible();
+}
+
+test('意見回饋：選類型、寫字 → 送到試算表（附版本、裝置，不附記錄）；沒寫字會提醒；一天太多則會說明', async ({ page }) => {
+  const errors = [];
+  const sheet = { codes: { 'JJ-4821': { issued: true, name: '王美華' } } };
+  await fakeSheet(page, sheet);
+  await seed(page, { logs: { '2026-11-20': [{ id: 'a', name: '便當', kcal: 700, meal: 'lunch', updatedAt: 1 }] }, meta: { welcomed: true, invite: { code: 'JJ-4821', name: '王美華', at: 1, rev: 66, lastCheck: Date.now() } } });
+  await openApp(page, { errors, inviteUrl: URL_ });
+  await openFeedback(page);
+  await expect(page.locator('#fbForm')).toBeVisible();
+  await expect(page.locator('#fbWhat')).toContainText('不會送出你的飲食記錄');
+  await page.click('#fbSendBtn');
+  await expect(page.locator('#fbNote')).toContainText('請先寫下想說的話');
+  await page.click('[data-fb-kind="wish"]');
+  await expect(page.locator('[data-fb-kind="wish"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.fill('#fbText', '希望可以記咖啡');
+  await expect(page.locator('#fbCount')).toContainText('7／500');
+  await page.click('#fbSendBtn');
+  await expect(page.locator('#fbNote')).toContainText('謝謝你');
+  await expect(page.locator('#fbText')).toHaveValue('');
+  const sent = sheet.feedback[0];
+  expect(sent).toMatchObject({ action: 'feedback', code: 'JJ-4821', kind: 'wish', text: '希望可以記咖啡' });
+  expect(sent.ver).toMatch(/Rev\. \d+/);
+  expect(Object.keys(sent).sort()).toEqual(['action', 'code', 'deviceId', 'deviceName', 'kind', 'text', 'ver']);   // 只送這些
+  sheet.fbReason = 'limit';
+  await page.fill('#fbText', '再一則');
+  await page.click('#fbSendBtn');
+  await expect(page.locator('#fbNote')).toContainText('明天再送');
+  await expect(page.locator('#fbText')).toHaveValue('再一則');   // 沒送出去的字留著
+  expect(errors).toEqual([]);
+});
+
+test('意見回饋：沒有邀請碼的舊用戶只看到「用聊天 App 告訴我們」；分享的文字帶版本和裝置', async ({ page }) => {
+  await fakeSheet(page, { codes: {} });
+  await seed(page, { logs: { '2026-11-20': [{ id: 'a', name: '便當', kcal: 700, meal: 'lunch', updatedAt: 1 }] }, meta: { welcomed: true, invite: { legacy: true, at: 1, rev: 63 } } });
+  await page.addInitScript(() => { window.__shared = []; navigator.share = async (d) => { window.__shared.push(d); }; });
+  await openApp(page, { inviteUrl: URL_ });
+  await openFeedback(page);
+  await expect(page.locator('#fbForm')).toBeHidden();
+  await expect(page.locator('#fbChatTitle')).toContainText('用聊天 App 告訴我們');
+  await expect(page.locator('#fbChatText')).toContainText('LINE、Messenger、Teams、Email 都可以');
+  await page.click('#fbShareBtn');
+  const shared = await page.evaluate(() => window.__shared);
+  expect(shared[0].text).toMatch(/版本：.*Rev\. \d+/);
+  expect(shared[0].text).toContain('裝置：');
+  expect(shared[0].text).not.toContain('邀請碼');
 });

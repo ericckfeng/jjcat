@@ -971,6 +971,7 @@
         <div class="text-sm text-stone-500 leading-relaxed">連網打開 App 就會自動檢查。更新不會影響已經記的資料。</div>
       </div>
       <a href="guide.html" target="_blank" rel="noopener" class="btn-secondary btn-xl w-full block text-center">📖 使用說明（每個功能的畫面和例子）</a>
+      <button type="button" data-screen="scr-feedback" class="btn-secondary btn-xl w-full">💬 意見回饋（哪裡不好用、希望增加什麼）</button>
       <div class="rounded-2xl bg-white border border-stone-200 p-4 space-y-3">
         <div class="text-xl font-bold text-stone-900">我的裝置</div>
         <p id="devicesNote" class="text-base text-stone-600 leading-relaxed"></p>
@@ -979,6 +980,33 @@
       </div>
       <button type="button" data-open-sources class="btn-secondary w-full">熱量與份數的資料來源</button>
       <a href="privacy.html" class="btn-secondary block w-full text-center">隱私權政策</a>
+    </div>
+    <div class="scr-foot"><button type="button" data-back class="btn-primary btn-xl w-full">完成</button></div>
+  </div>
+
+  <!-- 💬 意見回饋（js/invite.js）：有邀請碼的送文字到管理者的試算表；截圖、沒有邀請碼的用分享選單從聊天 App 傳 -->
+  <div id="scr-feedback" class="screen hidden" role="dialog" aria-label="意見回饋">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>💬 意見回饋</h2></div>
+    <div class="scr-body">
+      <p class="text-lg text-stone-700 leading-relaxed">用起來哪裡不方便、看不懂，或希望多什麼功能，都歡迎告訴我們。</p>
+      <div id="fbForm" class="space-y-3">
+        <div class="scr-label">是哪一種？</div>
+        <div class="grid gap-2">
+          <button type="button" data-fb-kind="bug" class="fb-kind" aria-pressed="false">🐞 哪裡怪怪的</button>
+          <button type="button" data-fb-kind="wish" class="fb-kind" aria-pressed="false">💡 希望增加</button>
+          <button type="button" data-fb-kind="other" class="fb-kind" aria-pressed="false">💬 其他</button>
+        </div>
+        <label class="block"><span class="scr-label">想說的話</span><textarea id="fbText" rows="6" maxlength="500" class="field text-lg leading-relaxed" placeholder="例如：記早餐的時候，找不到我常吃的燕麥奶"></textarea></label>
+        <div id="fbCount" class="text-sm text-stone-500 text-right tabular-nums">0／500 字</div>
+        <p id="fbWhat" class="text-base text-stone-600 leading-relaxed"></p>
+        <button type="button" id="fbSendBtn" class="btn-primary btn-xl w-full">送出</button>
+      </div>
+      <p id="fbNote" class="hidden rounded-2xl whitespace-pre-line p-3 text-base leading-relaxed"></p>
+      <div class="rounded-2xl bg-white border border-stone-200 p-4 space-y-3">
+        <div id="fbChatTitle" class="text-xl font-bold text-stone-900">有截圖要給我們？</div>
+        <p id="fbChatText" class="text-base text-stone-700 leading-relaxed">先在手機截圖，再按下面的按鈕，選你平常用的聊天 App，<b>LINE、Messenger、Teams、Email 都可以</b>，把版本資訊和截圖一起傳給邀請你的人。</p>
+        <button type="button" id="fbShareBtn" class="btn-secondary btn-xl w-full">📤 用聊天 App 傳給邀請我的人</button>
+      </div>
     </div>
     <div class="scr-foot"><button type="button" data-back class="btn-primary btn-xl w-full">完成</button></div>
   </div>

@@ -46,6 +46,10 @@ function onOpen() {
     .addItem('併入通過的投稿', 'mergeApproved')
     .addItem('更新分類選單', 'updateGroupMenus')
     .addItem('設定發佈密碼', 'setAdminKey')
+    .addSeparator()
+    .addItem('立刻備份這份試算表', 'backupNow')
+    .addItem('開啟每天自動備份', 'turnOnDailyBackup')
+    .addItem('下載備份到電腦（Excel）', 'downloadXlsx')
     .addToUi();
 }
 
@@ -139,7 +143,7 @@ function doPost(e) {
     return out_({ ok: false, reason: 'error', detail: /^admin/.test(String(req.action || '')) ? String(err && err.message || err).slice(0, 300) : undefined });
   }
 }
-const VERSION = '2026-11-25i';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
+const VERSION = '2026-11-25j';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
 function doGet() { return out_({ ok: true, app: 'jjcat-invite', version: VERSION }); }
 function out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
 
@@ -486,4 +490,42 @@ function myContribs_(code, here) {
   const mine = rows.filter(r => String(r[1]) === code);
   const day = (d) => d instanceof Date ? Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd') : String(d).slice(0, 10);
   return { ok: true, sent: mine.length, approved: mine.filter(r => r[20] === true).map(r => day(r[0])).sort() };
+}
+
+// ---- 備份：整份試算表複製到「飲控隨身記 試算表備份」資料夾，只留最近 KEEP_BACKUPS 份 ----
+// 另外有 Google 的「版本記錄」（改錯可以還原）；這裡防的是整份被刪、超過垃圾桶 30 天
+const BACKUP_FOLDER = '飲控隨身記 試算表備份';
+const KEEP_BACKUPS = 30;
+function backup_() {
+  const ss = SpreadsheetApp.getActive();
+  const it = DriveApp.getFoldersByName(BACKUP_FOLDER);
+  const folder = it.hasNext() ? it.next() : DriveApp.createFolder(BACKUP_FOLDER);
+  const stamp = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd HHmm');
+  DriveApp.getFileById(ss.getId()).makeCopy(ss.getName() + ' 備份 ' + stamp, folder);
+  const files = [];
+  const all = folder.getFiles();
+  while (all.hasNext()) files.push(all.next());
+  files.sort((a, b) => b.getDateCreated() - a.getDateCreated());
+  files.slice(KEEP_BACKUPS).forEach(f => f.setTrashed(true));
+  return { folder, n: Math.min(files.length, KEEP_BACKUPS) };
+}
+function backupNow() {
+  const r = backup_();
+  SpreadsheetApp.getActive().toast('已備份到雲端硬碟「' + BACKUP_FOLDER + '」（現在有 ' + r.n + ' 份，只留最近 ' + KEEP_BACKUPS + ' 份）。');
+}
+// 時間觸發：每天清晨 4～5 點自動備份（設一次就好；再按一次不會重複）
+function dailyBackup() { backup_(); }
+function turnOnDailyBackup() {
+  const has = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'dailyBackup');
+  if (!has) ScriptApp.newTrigger('dailyBackup').timeBased().everyDays(1).atHour(4).inTimezone('Asia/Taipei').create();
+  backup_();
+  SpreadsheetApp.getActive().toast((has ? '每天自動備份本來就開著。' : '已開啟每天清晨自動備份。') + '剛剛也先備份了一份，在雲端硬碟「' + BACKUP_FOLDER + '」。');
+}
+// 下載整份成 Excel 到這台電腦（防 Google 帳號本身出問題；建議每月一次）
+function downloadXlsx() {
+  const url = 'https://docs.google.com/spreadsheets/d/' + SpreadsheetApp.getActive().getId() + '/export?format=xlsx';
+  const html = HtmlService.createHtmlOutput(
+    '<div style="font:16px sans-serif;line-height:1.6"><p><a href="' + url + '" target="_blank" style="font-size:18px">👉 按這裡下載 Excel 檔</a></p>' +
+    '<p style="color:#666">存在電腦裡（例如「文件」）。建議每個月下載一次。</p></div>').setWidth(360).setHeight(130);
+  SpreadsheetApp.getUi().showModalDialog(html, '下載備份到電腦');
 }

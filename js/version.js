@@ -43,8 +43,9 @@ export function minRevToWrite(current, minRev = DATA_MIN_REV, now = Date.now()) 
 // 每台只在「版本變了、名字變了、或超過 20 小時」時更新自己那一筆，避免每次同步都改到資料、兩台來回上傳。
 export const DEVICE_REFRESH_MS = 20 * 3600 * 1000;
 
-export function deviceName(ua = '') {
-  if (/iPad/.test(ua) || (/Macintosh/.test(ua) && /Mobile/.test(ua))) return 'iPad';
+// iPad 的 Safari 預設用電腦版網頁，UA 和 Mac 一樣，要看觸控點數（Mac 是 0）
+export function deviceName(ua = '', touchPoints = 0) {
+  if (/iPad/.test(ua) || (/Macintosh/.test(ua) && (/Mobile/.test(ua) || touchPoints > 1))) return 'iPad';
   if (/iPhone|iPod/.test(ua)) return 'iPhone';
   if (/Android/.test(ua)) return /Mobile/.test(ua) ? 'Android 手機' : 'Android 平板';
   if (/Macintosh|Mac OS X/.test(ua)) return 'Mac 電腦';

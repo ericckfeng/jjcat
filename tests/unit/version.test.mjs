@@ -34,6 +34,8 @@ test('裝置名稱', () => {
   assert.equal(deviceName('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Mobile/15E148'), 'iPhone');
   assert.equal(deviceName('Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile Safari'), 'Android 手機');
   assert.equal(deviceName('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari'), 'Mac 電腦');
+  assert.equal(deviceName('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari', 5), 'iPad');   // iPad 的 Safari 電腦版網頁
+  assert.equal(deviceName('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari', 0), 'Mac 電腦');
   assert.equal(deviceName('Mozilla/5.0 (Windows NT 10.0; Win64; x64)'), 'Windows 電腦');
 });
 

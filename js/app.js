@@ -2472,7 +2472,7 @@ async function updateApp() {
 }
 document.addEventListener('click', (e) => { if (e.target.closest('[data-update-app]')) updateApp(); });
 
-const myDeviceName = () => state.meta.deviceName || deviceName(navigator.userAgent);
+const myDeviceName = () => state.meta.deviceName || deviceName(navigator.userAgent, navigator.maxTouchPoints || 0);
 // 雲端記錄這台的版本（同步時順便更新；版本、名字沒變就一天最多一次）
 function refreshDevice() {
   let changed = false;
@@ -5394,7 +5394,7 @@ $('inviteCodeBtn').addEventListener('click', async () => {
   if (!code) { setBox('inviteNote', 'err', '邀請碼是 4 個數字，例如 JJ-4821 就填 4821。'); return; }
   const btn = $('inviteCodeBtn');
   btn.disabled = true; btn.textContent = '確認中…';
-  const r = await callInvite({ action: 'check', code, deviceId: state.meta.deviceId });
+  const r = await callInvite({ action: 'check', code, deviceId: state.meta.deviceId, deviceName: myDeviceName() });
   btn.disabled = false; btn.textContent = '確認';
   if (!r.ok) {
     if (r.reason === 'unknown') { state.meta.inviteFails = addFail(state.meta.inviteFails, now()); persistLocal(); }
@@ -5422,6 +5422,7 @@ $('inviteNameBtn').addEventListener('click', async () => {
   state.meta.invite = { code: invitePending.code, name, at: now(), rev: APP_REV, lastCheck: now() };
   invitePending = null;
   persistLocal();
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ }   // 請瀏覽器別自動清掉本機資料
   hideInviteGate();
   showToast('歡迎加入公測，' + name + '！');
 });

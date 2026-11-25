@@ -2,6 +2,7 @@
  * 飲控隨身記 公測邀請碼（Google Apps Script，綁在「飲控隨身記 公測邀請碼」試算表上）
  *
  * App 第一次打開時輸入邀請碼 → 這裡檢查「已發出、可用、裝置還沒滿」→ 請對方填姓名 → 記到「裝置」分頁。
+ * 同一台重新安裝（裝置 ID 換了）：同號碼＋同裝置名稱＋同姓名就改寫原本那一筆，不多算一台。
  * App 每天第一次連網打開時再問一次：號碼被改成「停用」的，那台就要重新輸入邀請碼（記錄不會刪）。
  *
  * 部署：擴充功能 → Apps Script → 貼上這個檔案 → 部署 → 新增部署作業 → 網頁應用程式
@@ -70,6 +71,12 @@ function addFail_() {
   c.put('fails', String(Number(c.get('fails') || 0) + 1), 600);
 }
 
+// 「Jian Kai FENG」「jian kai feng」「JianKaiFeng」算同一個名字
+function sameName_(a, b) {
+  const k = s => String(s || '').replace(/\s+/g, '').toLowerCase();
+  return Boolean(k(a)) && k(a) === k(b);
+}
+
 function handle_(req) {
   const code = normCode_(req.code);
   const deviceId = String(req.deviceId || '').slice(0, 64);
@@ -85,12 +92,16 @@ function handle_(req) {
   if (String(rows[idx][3]) === '停用') return { ok: false, reason: 'disabled' };
   const name = String(rows[idx][4] || '');
   const dn = devs.getLastRow() - 1;
-  const drows = dn > 0 ? devs.getRange(2, 1, dn, 2).getValues() : [];
-  const mine = drows.map((r, i) => ({ code: String(r[0]), id: String(r[1]), row: i + 2 })).filter(r => r.code === code);
+  const drows = dn > 0 ? devs.getRange(2, 1, dn, 6).getValues() : [];
+  const mine = drows.map((r, i) => ({ code: String(r[0]), id: String(r[1]), dev: String(r[2]), who: String(r[5]), row: i + 2 })).filter(r => r.code === code);
   const here = deviceId && mine.find(r => r.id === deviceId);
+  // 同一台重新安裝（iPhone／iPad 刪掉 App、或 Safari 和主畫面各開一次）本機資料是空的，裝置 ID 會換新的：
+  // 同一組號碼、同樣的裝置名稱、同樣的姓名，就當成同一台，改寫那一筆，不多算一台
+  const devName = String(req.deviceName || '').slice(0, 40);
+  const sameKind = mine.filter(r => devName && r.dev === devName);
 
   if (req.action === 'check') {
-    if (!here && mine.length >= MAX_DEVICES) return { ok: false, reason: 'full' };
+    if (!here && mine.length >= MAX_DEVICES && !sameKind.length) return { ok: false, reason: 'full' };
     return { ok: true, name, known: Boolean(here) };
   }
   if (req.action === 'register' || req.action === 'ping') {
@@ -99,14 +110,19 @@ function handle_(req) {
     lock.waitLock(10000);
     try {
       const now = new Date();
+      const who = String(req.name || name || '').trim().slice(0, 30);
+      const again = !here && sameKind.find(r => sameName_(r.who, who));
       if (here) {
         devs.getRange(here.row, 5).setValue(now);
-        if (req.deviceName) devs.getRange(here.row, 3).setValue(String(req.deviceName).slice(0, 40));
+        if (devName) devs.getRange(here.row, 3).setValue(devName);
+      } else if (again) {
+        // 重新輸入的換成新的 ID；舊的那邊（例如 Safari 和主畫面兩邊都還在用）每天檢查時只更新時間
+        if (req.action === 'register') devs.getRange(again.row, 2).setValue(deviceId);
+        devs.getRange(again.row, 5).setValue(now);
       } else {
         if (mine.length >= MAX_DEVICES) return { ok: false, reason: 'full' };
-        const who = String(req.name || name || '').trim().slice(0, 30);
         if (req.action === 'register' && !who) return { ok: false, reason: 'name' };
-        devs.appendRow([code, deviceId, String(req.deviceName || '').slice(0, 40), now, now, who]);
+        devs.appendRow([code, deviceId, devName, now, now, who]);
         if (!name && who) codes.getRange(idx + 2, 5).setValue(who);
       }
       return { ok: true, name: name || String(req.name || '') };

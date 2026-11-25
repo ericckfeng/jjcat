@@ -480,3 +480,37 @@ test('投稿：沒有邀請碼的舊用戶看不到推薦按鈕', async ({ page 
   await page.click('[data-mf-edit=cf_g]');
   await expect(page.locator('#mf-contrib')).toBeHidden();
 });
+
+test('舊用戶裝置：雲端已經有同一個人的邀請碼 → 自動用它登記這台，下載外食圖書館', async ({ page }) => {
+  const sheet = { codes: { 'JJ-4821': { issued: true, name: '王美華' } } };
+  const calls = await fakeSheet(page, sheet);
+  await fakeShared(page, sheet, { list: [{ key: 'lib', version: 1, file: libraryFile() }] });
+  await seed(page, { logs: { '2026-11-20': [{ id: 'a', name: '便當', kcal: 700, meal: 'lunch', updatedAt: 1 }] },
+    betaInvite: { code: 'JJ-4821', name: '王美華', updatedAt: 5 }, meta: { welcomed: true, invite: { legacy: true, at: 1, rev: 63 } } });
+  await openApp(page, { inviteUrl: URL_ });
+  await expect(page.locator('#toastMsg')).toContainText('外食圖書館', { timeout: 10000 });
+  expect(calls.find(c => c.action === 'register')).toMatchObject({ code: 'JJ-4821', name: '王美華' });
+  expect((await appState(page)).meta.invite).toMatchObject({ code: 'JJ-4821', from: 'legacy' });
+});
+
+test('舊用戶裝置、沒有雲端的邀請碼：外食圖書館那裡按「我有邀請碼」→ 可以先不要 → 輸入後下載', async ({ page }) => {
+  const sheet = { codes: { 'JJ-4821': { issued: true, name: '王美華' } } };
+  await fakeSheet(page, sheet);
+  await fakeShared(page, sheet, { list: [{ key: 'lib', version: 1, file: libraryFile() }] });
+  await seed(page, { logs: { '2026-11-20': [{ id: 'a', name: '便當', kcal: 700, meal: 'lunch', updatedAt: 1 }] }, meta: { welcomed: true, invite: { legacy: true, at: 1, rev: 63 } } });
+  await openApp(page, { inviteUrl: URL_ });
+  await page.click('.mobile-nav-tab[data-tab=library]');
+  await expect(page.locator('#packList')).toContainText('還沒有邀請碼');
+  await page.click('[data-invite-join]');
+  await expect(page.locator('#inviteGate')).toBeVisible();
+  await page.click('#inviteCloseBtn');
+  await expect(page.locator('#inviteGate')).toBeHidden();
+  expect((await appState(page)).meta.invite).toMatchObject({ legacy: true });
+  await page.click('[data-invite-join]');
+  await page.fill('#inviteCode', '4821');
+  await page.click('#inviteCodeBtn');
+  await page.click('#inviteNameBtn');
+  await expect(page.locator('#inviteGate')).toBeHidden();
+  await expect(page.locator('#toastMsg')).toContainText('外食圖書館', { timeout: 10000 });
+  await expect(page.locator('#packList')).toContainText('已選 3／3 家');
+});

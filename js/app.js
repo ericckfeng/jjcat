@@ -3689,9 +3689,18 @@ $('pickList').addEventListener('click', (e) => {
 
 // 我的食物分頁：資料庫清單、匯入、刪除
 const minePacked = (packId) => customFoods().filter(f => f.packId === packId);
+function libraryJoinCard() {
+  if (!INVITE_URL || sharedPacks.length) return '';
+  const member = canSendFeedback(state.meta.invite);
+  return `<div class="bg-emerald-50 rounded-xl p-3 space-y-2">
+    <span class="block text-lg font-semibold text-stone-900">🌐 外食圖書館（大家共用、自動更新）</span>
+    <span class="block text-base text-stone-700 leading-relaxed">${member ? '連上網路後會自動下載。等不及可以按下面的按鈕。' : '這台是公測之前就在用的，還沒有邀請碼。輸入邀請碼就能下載。'}</span>
+    <button type="button" ${member ? 'data-library-now' : 'data-invite-join'} class="btn-primary w-full">${member ? '現在下載' : '我有邀請碼'}</button></div>`;
+}
 function renderPackList() {
   const packs = allPacks();
-  $('packList').innerHTML = packs.length ? packs.map(p => {
+  if (!packs.length && libraryJoinCard()) { $('packList').innerHTML = libraryJoinCard(); return; }
+  $('packList').innerHTML = libraryJoinCard() + (packs.length ? packs.map(p => {
     const mine = minePacked(p.id);
     const fixed = mine.filter(f => f.replaces).length;
     const info = [p.shared ? '共用・會自動更新' : p.org, p.edition, (p.foods || []).length + ' 樣', mine.length - fixed ? '我加了 ' + (mine.length - fixed) + ' 樣' : '', fixed ? '改過 ' + fixed + ' 樣' : ''].filter(Boolean).join('・');
@@ -3709,8 +3718,16 @@ function renderPackList() {
       <span class="shrink-0 flex flex-col gap-1"><button type="button" data-pack-share="${esc(p.id)}" class="chip-btn chip-lg">分享</button>
       <button type="button" data-pack-del="${esc(p.id)}" class="chip-btn chip-lg">刪除</button></span></div>`;
   }).join('')
-    : '<p class="rounded-2xl bg-stone-50 text-stone-600 p-4 text-base leading-relaxed">還沒有。用「整理工具」把試算表（例如連鎖店外食營養表）做成資料庫檔，再按「匯入」。</p>';
+    : '<p class="rounded-2xl bg-stone-50 text-stone-600 p-4 text-base leading-relaxed">還沒有。用「整理工具」把試算表（例如連鎖店外食營養表）做成資料庫檔，再按「匯入」。</p>');
 }
+$('packList').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-invite-join]')) { openInviteJoin(); return; }
+  const b = e.target.closest('[data-library-now]');
+  if (!b) return;
+  b.disabled = true; b.textContent = '下載中…';
+  await checkSharedPacks(true);
+  if (!sharedPacks.length) { showError('現在下載不到外食圖書館。請確認有網路，稍後再試；一直不行的話，用「設定 → 關於 → 意見回饋」告訴我們。'); renderPackList(); }
+});
 function afterPackChange() {
   persist();
   renderAll();
@@ -5108,6 +5125,7 @@ async function cloudRun(action, { auto = false } = {}) {
     }
     c.needAuth = false;
     await doSync({ auto, first: action === 'connect' });
+    checkSharedPacks();   // 同步帶來別台的邀請碼（舊用戶裝置可以升級）、或該檢查外食圖書館新版了
     try { sessionStorage.removeItem('diet_reauth_at'); localStorage.removeItem(SILENT_FAIL); } catch (e) { /* ignore */ }
   } catch (err) {
     if (err && err.auth) {
@@ -5379,7 +5397,9 @@ function showInviteStep(step) {
   $('inviteToChoiceBtn').classList.toggle('hidden', !canGoogle() || Boolean(state.meta.cloud.linked));
 }
 // reason：號碼被停用等原因要重新輸入；lead：換掉上面的說明（例如已連好 Google、雲端沒有邀請碼）
+let inviteVoluntary = false;   // 舊用戶自己要加入（可以關掉）；一般的邀請碼畫面不能關
 function showInviteGate(reason, lead) {
+  $('inviteCloseBtn').classList.toggle('hidden', !inviteVoluntary);
   $('inviteGate').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
   invitePending = null;
@@ -5390,6 +5410,7 @@ function showInviteGate(reason, lead) {
   setBox('inviteNote', reason ? 'err' : null, reason ? inviteMessage(reason) : '');
 }
 function hideInviteGate() {
+  inviteVoluntary = false;
   $('inviteGate').classList.add('hidden');
   if (!screenStack.length) document.body.style.overflow = '';
 }
@@ -5469,6 +5490,30 @@ async function afterInviteGoogle() {
   showInviteGate(null, '已連好 Google 雲端。第一次使用，請輸入邀請你的人給你的邀請碼（只要輸入這一次）。');
 }
 $('inviteGoogleBtn').addEventListener('click', inviteGoogle);
+$('inviteCloseBtn').addEventListener('click', hideInviteGate);
+// 公測之前就在用的（沒有邀請碼）：自己輸入邀請碼，才下載得到外食圖書館、能用意見回饋和推薦食物
+function openInviteJoin() {
+  inviteVoluntary = true;
+  showInviteGate(null, '輸入邀請碼，就能下載大家共用的外食圖書館，也能送意見回饋、推薦食物。你的記錄都不會變。');
+}
+// 舊用戶裝置：雲端（同一個 Google 帳號）已經有邀請碼（例如另一台登記過）→ 用它登記這台，不用輸入
+let upgrading = false;
+async function upgradeLegacy() {
+  const inv = state.meta.invite;
+  const ci = state.betaInvite;
+  if (upgrading || !INVITE_URL || !inv || !inv.legacy || !ci || !ci.code || navigator.onLine === false) return false;
+  if (inv.upgradeTried && now() - inv.upgradeTried < SHARED_EVERY) return false;
+  upgrading = true;
+  try {
+    const r = await callInvite({ action: 'register', code: ci.code, deviceId: state.meta.deviceId, deviceName: myDeviceName(), name: ci.name || '' });
+    if (!r.ok) { inv.upgradeTried = now(); inv.upgradeReason = r.reason; persistLocal(); return false; }
+    state.meta.invite = { code: ci.code, name: ci.name || r.name || '', at: now(), rev: APP_REV, lastCheck: now(), from: 'legacy' };
+    persistLocal();
+    return true;
+  } finally {
+    upgrading = false;
+  }
+}
 $('inviteLocalBtn').addEventListener('click', () => { showInviteStep('Code'); setBox('inviteNote', null, ''); $('inviteCode').focus(); });
 $('inviteToChoiceBtn').addEventListener('click', () => showInviteGate(null));
 async function checkInviteAgain() {
@@ -5545,6 +5590,10 @@ async function loadSharedPacks() {
 }
 let sharedBusy = false;
 async function checkSharedPacks(force = false) {
+  if (INVITE_URL && state.meta.invite && state.meta.invite.legacy) {
+    if (!(await upgradeLegacy())) return;
+    force = true;
+  }
   if (sharedBusy || !INVITE_URL || !canSendFeedback(state.meta.invite) || navigator.onLine === false) return;
   const m = sharedMeta();
   if (!force && now() - (m.checkedAt || 0) < SHARED_EVERY) return;

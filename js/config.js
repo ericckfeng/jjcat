@@ -6,4 +6,4 @@ export const GOOGLE_CLIENT_ID = '474494053412-21ck8avc54kfgpelu9bhtt29i51l9qot.a
 
 // 公測邀請碼：管理者的 Google Apps Script 網頁應用程式網址（tools/invite/Code.gs，部署步驟見 docs/INVITE.md）。
 // 留空時不用邀請碼，和以前一樣。
-export const INVITE_URL = 'https://script.google.com/macros/s/AKfycbyAnlbPv77qvVobHcWafVn3L-6928ObwLUsnkGQfV9p-V33GLZZWkucsWn_8pT3xis/exec';
+export const INVITE_URL = 'https://script.google.com/macros/s/AKfycby2T7BeL1aQKj_U9lzfVGBuuTKmbZZP9U5H9o9NlWoYo3uBi9LUaTGjkTozx_Qy3IqZ/exec';

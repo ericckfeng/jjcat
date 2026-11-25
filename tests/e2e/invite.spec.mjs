@@ -516,3 +516,23 @@ test('舊用戶裝置、沒有雲端的邀請碼：外食圖書館那裡按「�
   await expect(page.locator('#toastMsg')).toContainText('外食圖書館', { timeout: 10000 });
   await expect(page.locator('#packList')).toContainText('已選 3／3 家');
 });
+
+test('外食圖書館：「立刻檢查」不用等半天就換新版', async ({ page }) => {
+  await fakeSheet(page, { codes: { 'JJ-4821': { issued: true, name: '王美華' } } });
+  const shared = { list: [{ key: 'lib', version: 1, file: libraryFile() }] };
+  await fakeShared(page, {}, shared);
+  await seed(page, member);
+  await openApp(page, { inviteUrl: URL_ });
+  await expect(page.locator('#toastMsg')).toContainText('外食圖書館', { timeout: 10000 });
+  const f2 = libraryFile();
+  f2.foods.push({ id: 'l4', name: '宮保雞丁餐包', brand: '聯夏', group: '🥫 調理包・罐頭・冷凍食品', perServing: { kcal: 228 } });
+  shared.list = [{ key: 'lib', version: 2, file: f2 }];
+  await page.click('.mobile-nav-tab[data-tab=library]');
+  await page.click('#packList [data-screen="scr-library"]');
+  await page.click('#libCheckBtn');
+  await expect(page.locator('#libCheckNote')).toContainText('已經更新到最新版了');
+  await expect(page.locator('#libList')).toContainText('🥫 調理包・罐頭・冷凍食品');
+  await expect(page.locator('#libList')).toContainText('聯夏');
+  await page.click('#libCheckBtn');
+  await expect(page.locator('#libCheckNote')).toContainText('已經是最新版了');
+});

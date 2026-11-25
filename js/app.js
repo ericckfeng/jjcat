@@ -948,7 +948,7 @@ function openScreen(id) {
   if (id === 'scr-features') renderFeatures();
   if (id === 'scr-about') { renderAbout(); checkLatest(true); }
   if (id === 'scr-feedback') renderFeedback();
-  if (id === 'scr-library') renderLibrary();
+  if (id === 'scr-library') { setBox('libCheckNote', null, ''); renderLibrary(); }
   if (id === 'scr-data') { renderCloud(); renderBackupInfo(); }   // 關掉自動同步的人也要看得到雲端區塊
   if (id === 'scr-weekly') renderWeekly();
   if (id === 'scr-badges') renderBadges();
@@ -5589,6 +5589,7 @@ async function loadSharedPacks() {
   sharedPacks = out;
 }
 let sharedBusy = false;
+let lastSharedResult = null;   // 最近一次檢查：{ ok, changed, failed }（「立刻檢查」按鈕顯示結果用）
 async function checkSharedPacks(force = false) {
   if (INVITE_URL && state.meta.invite && state.meta.invite.legacy) {
     if (!(await upgradeLegacy())) return;
@@ -5618,6 +5619,7 @@ async function checkSharedPacks(force = false) {
     for (const key of plan.drop) { await sharedDB.del(key); delete m.files[key]; }
     if (!failed) m.checkedAt = now();   // 有沒下載成功的：下次打開再試
     persistLocal();
+    lastSharedResult = { ok: true, changed: done.length + plan.drop.length, failed };
     if (done.length || plan.drop.length) {
       await loadSharedPacks();
       renderAll();
@@ -5726,6 +5728,17 @@ function renderLibrary() {
       }).join('')}</div>`;
   }).join('');
 }
+$('libCheckBtn').addEventListener('click', async () => {
+  const btn = $('libCheckBtn');
+  btn.disabled = true; btn.textContent = '檢查中…';
+  lastSharedResult = null;
+  await checkSharedPacks(true);
+  btn.disabled = false; btn.textContent = '🔄 立刻檢查外食圖書館有沒有新版';
+  const r = lastSharedResult;
+  setBox('libCheckNote', r && r.ok && !r.failed ? 'ok' : 'err',
+    !r ? '連不上，請確認有網路再試一次。' : r.failed ? '有新版但沒下載完，請稍後再試一次。' : r.changed ? '已經更新到最新版了。' : '已經是最新版了。');
+  renderLibrary();
+});
 function setLibraryOff(brands) {
   state.libraryOff = { updatedAt: now(), brands };
   persist();

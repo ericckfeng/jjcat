@@ -75,3 +75,14 @@ test('意見回饋：有邀請碼（沒停用）才能直接送；聊天 App 的
   assert.match(feedbackMessage('limit'), /聊天 App/);
   assert.match(feedbackMessage('whatever'), /稍後再試/);
 });
+
+test('共用資料庫：新的、換版的要下載；不再發佈的拿掉；自己匯入的同一份用共用的', async () => {
+  const { sharedPlan, withShared } = await import('../../js/packs.js');
+  const files = { a: { version: 1 }, b: { version: 5 }, c: { version: 2 } };
+  assert.deepEqual(sharedPlan(files, [{ key: 'a', version: 1 }, { key: 'b', version: 6 }, { key: 'd', version: 1 }]), { fetch: ['b', 'd'], drop: ['c'] });
+  assert.deepEqual(sharedPlan(undefined, [{ key: 'a', version: 1 }]), { fetch: ['a'], drop: [] });
+  assert.deepEqual(sharedPlan(files, []), { fetch: [], drop: ['a', 'b', 'c'] });
+  const shared = [{ id: 'pk_1', name: '共用', shared: true }];
+  assert.deepEqual(withShared(shared, [{ id: 'pk_1', name: '舊的' }, { id: 'pk_2', name: '自己的' }]).map(p => p.name), ['共用', '自己的']);
+  assert.deepEqual(withShared([], [{ id: 'pk_2' }]).map(p => p.id), ['pk_2']);
+});

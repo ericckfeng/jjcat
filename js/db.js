@@ -53,3 +53,48 @@ export const photoDB = {
     return out;
   }
 };
+
+// 共用資料庫（管理者發佈、App 自動下載更新）：只存在這台，不進同步檔（換裝置時再下載一次）
+// 和照片分開一個資料庫，不動照片的資料庫版本
+const SHARED_DB = 'diet-tracker-shared';
+let sharedPromise = null;
+function openShared() {
+  if (!sharedPromise) {
+    sharedPromise = new Promise((resolve, reject) => {
+      if (!('indexedDB' in window)) return reject(new Error('no indexedDB'));
+      const req = indexedDB.open(SHARED_DB, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('packs');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    }).catch(err => {
+      sharedPromise = Promise.reject(err);
+      throw err;
+    });
+  }
+  return sharedPromise;
+}
+async function runShared(mode, fn) {
+  const db = await openShared();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('packs', mode);
+    const req = fn(tx.objectStore('packs'));
+    tx.oncomplete = () => resolve(req ? req.result : undefined);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+const sharedMemory = new Map();
+export const sharedDB = {
+  async get(key) {
+    try { return (await runShared('readonly', s => s.get(key))) || null; }
+    catch (e) { return sharedMemory.get(key) || null; }
+  },
+  async put(key, pack) {
+    try { await runShared('readwrite', s => s.put(pack, key)); }
+    catch (e) { sharedMemory.set(key, pack); }
+  },
+  async del(key) {
+    sharedMemory.delete(key);
+    try { await runShared('readwrite', s => s.delete(key)); } catch (e) { /* ignore */ }
+  }
+};

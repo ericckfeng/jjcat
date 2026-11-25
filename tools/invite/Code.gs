@@ -3,6 +3,7 @@
  *
  * App 第一次打開時輸入邀請碼 → 這裡檢查「已發出、可用、裝置還沒滿」→ 請對方填姓名 → 記到「裝置」分頁。
  * 同一台重新安裝（裝置 ID 換了）：同號碼＋同裝置名稱＋同姓名就改寫原本那一筆，不多算一台。
+ * 共用資料庫（action: packs／pack）：「共用資料庫」分頁打勾發佈的資料庫檔，登記過的裝置自動下載更新。
  * 意見回饋（action: feedback）：登記過的裝置送文字到「回饋」分頁（第一次會自動建立），一台一天最多 5 則。
  * App 每天第一次連網打開時再問一次：號碼被改成「停用」的，那台就要重新輸入邀請碼（記錄不會刪）。
  *
@@ -19,10 +20,12 @@ const FEEDBACK = '回饋';
 const FEEDBACK_PER_DAY = 5;      // 一台裝置一天最多送幾則
 const FEEDBACK_MAX = 500;        // 一則最多幾個字
 const KINDS = { bug: '哪裡怪怪的', wish: '希望增加', other: '其他' };
+const SHARED = '共用資料庫';     // A 資料庫檔網址、B 發佈（打勾）、C 名稱、D 樣數、E 檔案更新時間、F 檢查結果、G 備註
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('公測邀請碼')
     .addItem('產生 20 組號碼', 'generate20')
+    .addItem('檢查共用資料庫', 'checkShared')
     .addToUi();
 }
 
@@ -54,13 +57,66 @@ function generate20() {
   SpreadsheetApp.getActive().toast('產生了 20 組新號碼。發給誰就寫在「發給誰」，再打勾「已發出」。');
 }
 
+// ---- 共用資料庫：管理者把整理工具做的資料庫檔（.json）放在自己的雲端硬碟，網址貼到「共用資料庫」分頁、打勾發佈 ----
+// 檔案不用分享給任何人：App 透過這裡下載（只給登記過的裝置）。更新＝雲端硬碟「管理版本 → 上傳新版本」（網址不變）
+function fileIdOf_(url) {
+  const m = String(url || '').match(/\/d\/([-\w]{20,})/) || String(url || '').match(/[?&]id=([-\w]{20,})/) || String(url || '').match(/^([-\w]{20,})$/);
+  return m ? m[1] : '';
+}
+function sharedSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(SHARED);
+  if (!sh) {
+    sh = ss.insertSheet(SHARED);
+    sh.appendRow(['資料庫檔網址（雲端硬碟）', '發佈', '名稱', '樣數', '檔案更新時間', '檢查結果', '備註']);
+    sh.setFrozenRows(1);
+    sh.getRange('B2:B50').insertCheckboxes();
+    sh.setColumnWidth(1, 360);
+    sh.setColumnWidth(6, 260);
+  }
+  return sh;
+}
+// 發佈中的：[{ key: 檔案 id, row }]
+function sharedRows_() {
+  const sh = sharedSheet_();
+  const n = sh.getLastRow() - 1;
+  const rows = n > 0 ? sh.getRange(2, 1, n, 2).getValues() : [];
+  return rows.map((r, i) => ({ key: fileIdOf_(r[0]), on: r[1] === true, row: i + 2 })).filter(r => r.key && r.on);
+}
+function readPackFile_(key) {
+  const data = JSON.parse(DriveApp.getFileById(key).getBlob().getDataAsString('UTF-8'));
+  if (!data || data.app !== 'diet-tracker-foods' || !data.pack || !data.pack.id || !Array.isArray(data.foods) || !data.foods.length) throw new Error('這不是整理工具做的資料庫檔');
+  return data;
+}
+// 選單「檢查共用資料庫」：讀每個檔案，填好名稱、樣數、更新時間、檢查結果（發佈前先檢查一次）
+function checkShared() {
+  const sh = sharedSheet_();
+  const n = sh.getLastRow() - 1;
+  if (n < 1) { SpreadsheetApp.getActive().toast('在「' + SHARED + '」分頁 A 欄貼上資料庫檔的網址，B 欄打勾發佈，再檢查一次。'); return; }
+  const rows = sh.getRange(2, 1, n, 2).getValues();
+  rows.forEach((r, i) => {
+    if (!r[0]) return;
+    const key = fileIdOf_(r[0]);
+    let out;
+    try {
+      if (!key) throw new Error('看不懂這個網址，請貼雲端硬碟檔案的「共用連結」或網址');
+      const data = readPackFile_(key);
+      out = [data.pack.name, data.foods.length, DriveApp.getFileById(key).getLastUpdated(), r[1] === true ? 'OK，發佈中' : 'OK（還沒打勾發佈）'];
+    } catch (err) {
+      out = ['', '', '', '有問題：' + (err && err.message || err)];
+    }
+    sh.getRange(i + 2, 3, 1, 4).setValues([out]);
+  });
+  SpreadsheetApp.getActive().toast('檢查好了，看 F 欄的結果。App 大約半天內會自動更新。');
+}
+
 // App 打來的：POST（text/plain 的 JSON），回傳 JSON
 function doPost(e) {
   let req = {};
   try { req = JSON.parse(e.postData.contents || '{}'); } catch (err) { return out_({ ok: false, reason: 'bad' }); }
   try { return out_(handle_(req)); } catch (err) { return out_({ ok: false, reason: 'error' }); }
 }
-const VERSION = '2026-11-25b';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
+const VERSION = '2026-11-25c';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
 function doGet() { return out_({ ok: true, app: 'jjcat-invite', version: VERSION }); }
 function out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
 
@@ -117,6 +173,18 @@ function handle_(req) {
     return { ok: true, name, known: Boolean(here) };
   }
   if (req.action === 'feedback') return feedback_(req, code, name, here);
+  if (req.action === 'packs' || req.action === 'pack') {
+    if (!here) return { ok: false, reason: 'device' };
+    const live = sharedRows_();
+    if (req.action === 'packs') {
+      const packs = [];
+      live.forEach(r => { try { packs.push({ key: r.key, version: DriveApp.getFileById(r.key).getLastUpdated().getTime() }); } catch (err) { /* 檔案不見了：不列 */ } });
+      return { ok: true, packs };
+    }
+    const key = String(req.key || '');
+    if (!live.some(r => r.key === key)) return { ok: false, reason: 'gone' };   // 只給發佈中的
+    try { return { ok: true, file: readPackFile_(key) }; } catch (err) { return { ok: false, reason: 'error' }; }
+  }
   if (req.action === 'register' || req.action === 'ping') {
     if (!deviceId) return { ok: false, reason: 'bad' };
     const lock = LockService.getScriptLock();

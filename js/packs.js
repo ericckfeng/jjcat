@@ -482,3 +482,19 @@ export function packFileWithMine(pack, mine, { now = Date.now() } = {}) {
   });
   return packToFile({ ...pack, foods }, { now });
 }
+
+/* ---------------- 共用資料庫（管理者發佈，App 自動更新） ---------------- */
+// 管理者的試算表（tools/invite/Code.gs）回傳發佈中的清單 [{ key: 雲端檔案 id, version: 檔案更新時間 }]；
+// 這台記著 meta.shared.files = { key: { version, id, name, n } }。回傳要下載的 key、要拿掉的 key
+export function sharedPlan(files, list) {
+  const have = files || {};
+  const live = new Map((list || []).filter(x => x && x.key).map(x => [String(x.key), Number(x.version) || 0]));
+  const fetch = [...live].filter(([k, v]) => !have[k] || Number(have[k].version) !== v).map(([k]) => k);
+  const drop = Object.keys(have).filter(k => !live.has(k));
+  return { fetch, drop };
+}
+// 畫面用的資料庫清單：共用的在前面；自己匯入的和共用的是同一份（同一個 id）時用共用的（會自動更新）
+export function withShared(shared, own) {
+  const ids = new Set((shared || []).map(p => p.id));
+  return [...(shared || []), ...(own || []).filter(p => !ids.has(p.id))];
+}

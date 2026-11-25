@@ -1,7 +1,7 @@
 // 公測邀請碼：新裝置要輸入（錯了會說明、錯太多要等）→ 填姓名 → 開始用；舊裝置直接放行；
 // 號碼被停用：每天檢查時發現 → 要重新輸入（記錄還在）；連不上不擋人；同一組的第二台帶出姓名
 import { test, expect } from '@playwright/test';
-import { openApp, appState, openSettings } from './helpers.mjs';
+import { openApp, appState, openSettings, closeScreens } from './helpers.mjs';
 
 const URL_ = 'https://invite.test/exec';
 // 模擬管理者的試算表（tools/invite/Code.gs 的回應）
@@ -310,4 +310,84 @@ test('意見回饋：沒有邀請碼的舊用戶只看到「用聊天 App 告訴
   expect(shared[0].text).toMatch(/版本：.*Rev\. \d+/);
   expect(shared[0].text).toContain('裝置：');
   expect(shared[0].text).not.toContain('邀請碼');
+});
+
+// ---- 共用資料庫（管理者發佈，App 自動下載更新）----
+const packFile = (n, extra = {}) => ({ app: 'diet-tracker-foods', version: 1, pack: { id: 'pk_eatout', name: '外食店家營養資料庫', org: '飲控隨身記', edition: '第 ' + n + ' 版', askBy: 'serving' },
+  foods: [{ id: 'pf_1', name: '大麥克', brand: '麥當勞', perServing: { kcal: 530, p: 25, f: 28, c: 45 } }, ...(n > 1 ? [{ id: 'pf_2', name: '麥香雞', brand: '麥當勞', perServing: { kcal: 380 } }] : [])], ...extra });
+async function fakeShared(page, sheet, shared) {
+  await page.route(URL_, async (r) => {
+    const req = JSON.parse(r.request().postData() || '{}');
+    if (req.action !== 'packs' && req.action !== 'pack') return r.fallback();
+    (shared.calls = shared.calls || []).push(req);
+    const res = req.action === 'packs' ? { ok: true, packs: shared.list.map(x => ({ key: x.key, version: x.version })) }
+      : (shared.list.find(x => x.key === req.key) ? { ok: true, file: shared.list.find(x => x.key === req.key).file } : { ok: false, reason: 'gone' });
+    return r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(res) });
+  });
+}
+const member = { meta: { welcomed: true, invite: { code: 'JJ-4821', name: '王美華', at: 1, rev: 68, lastCheck: Date.now() } } };
+
+test('共用資料庫：登記過的裝置打開 App 自動下載，查食物找得到、資料庫清單標「共用」；不進同步檔', async ({ page }) => {
+  const errors = [];
+  const sheet = { codes: { 'JJ-4821': { issued: true, name: '王美華' } } };
+  await fakeSheet(page, sheet);
+  const shared = { list: [{ key: 'f1', version: 100, file: packFile(1) }] };
+  await fakeShared(page, sheet, shared);
+  await seed(page, member);
+  await openApp(page, { errors, inviteUrl: URL_ });
+  await expect(page.locator('#toastMsg')).toContainText('已加入「外食店家營養資料庫」（1 樣）', { timeout: 10000 });
+  await page.click('[data-food-open=all]');
+  await page.fill('#foodSearch', '大麥克');
+  await expect(page.locator('#foodPacks')).toContainText('大麥克');
+  await closeScreens(page);
+  await page.click('.mobile-nav-tab[data-tab=library]');
+  await expect(page.locator('#packList')).toContainText('共用・會自動更新');
+  await expect(page.locator('#packList [data-pack-del]')).toHaveCount(0);   // 共用的不能刪、不能分享
+  const s = await appState(page);
+  expect(s.meta.shared.files.f1).toMatchObject({ version: 100, id: 'pk_eatout', n: 1 });
+  expect(s.foodPacks || []).toEqual([]);
+  const payload = await page.evaluate(() => window.__dietApp.exportPayload());
+  expect(JSON.stringify(payload)).not.toContain('大麥克');
+  // 重開：從這台讀，不用再下載（半天內不再問）
+  shared.calls = [];
+  await page.reload();
+  await page.waitForFunction(() => window.__dietApp);
+  await page.waitForTimeout(3500);
+  expect(shared.calls).toEqual([]);
+  await page.click('[data-food-open=all]');
+  await page.fill('#foodSearch', '大麥克');
+  await expect(page.locator('#foodPacks')).toContainText('大麥克');
+  expect(errors).toEqual([]);
+});
+
+test('共用資料庫：管理者換新版 → 自動更新；不再發佈 → 拿掉', async ({ page }) => {
+  const sheet = { codes: { 'JJ-4821': { issued: true, name: '王美華' } } };
+  await fakeSheet(page, sheet);
+  const shared = { list: [{ key: 'f1', version: 100, file: packFile(1) }] };
+  await fakeShared(page, sheet, shared);
+  await seed(page, member);
+  await openApp(page, { inviteUrl: URL_, ownClock: true });
+  await expect.poll(async () => ((await appState(page)).meta.shared || {}).files?.f1?.version, { timeout: 10000 }).toBe(100);
+  shared.list = [{ key: 'f1', version: 200, file: packFile(2) }];
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('diet_tracker_v2')); s.meta.shared.checkedAt = 0; localStorage.setItem('diet_tracker_v2', JSON.stringify(s)); });
+  await page.reload();
+  await page.waitForFunction(() => window.__dietApp);
+  await expect(page.locator('#toastMsg')).toContainText('已更新「外食店家營養資料庫」（2 樣）', { timeout: 10000 });
+  shared.list = [];
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('diet_tracker_v2')); s.meta.shared.checkedAt = 0; localStorage.setItem('diet_tracker_v2', JSON.stringify(s)); });
+  await page.reload();
+  await page.waitForFunction(() => window.__dietApp);
+  await expect.poll(async () => Object.keys((await appState(page)).meta.shared.files).length, { timeout: 10000 }).toBe(0);
+  await page.click('.mobile-nav-tab[data-tab=library]');
+  await expect(page.locator('#packList')).not.toContainText('外食店家營養資料庫');
+});
+
+test('共用資料庫：沒有邀請碼的舊用戶不會去下載', async ({ page }) => {
+  const shared = { list: [{ key: 'f1', version: 100, file: packFile(1) }] };
+  await fakeSheet(page, { codes: {} });
+  await fakeShared(page, {}, shared);
+  await seed(page, { logs: { '2026-11-20': [{ id: 'a', name: '便當', kcal: 700, meal: 'lunch', updatedAt: 1 }] }, meta: { welcomed: true, invite: { legacy: true, at: 1, rev: 63 } } });
+  await openApp(page, { inviteUrl: URL_ });
+  await page.waitForTimeout(3500);
+  expect(shared.calls || []).toEqual([]);
 });

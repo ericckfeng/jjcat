@@ -2,7 +2,7 @@ import {
   MEAL_KEYS, MEAL_META, MACRO_KEYS, MACRO_META, EX_KEYS, EX_META, EX_DEFAULT_NUTR,
   EST_PARTS, HUNGER_LABELS, MOOD_OPTIONS, BOWEL_LABELS
 } from './nutrition.js';
-import { photoDB } from './db.js';
+import { photoDB, sharedDB } from './db.js';
 import { REPORT_CSS, buildReportHTML, buildReportText, periodSummary } from './report.js';
 import { buildWeekly, lastWeek, weeklyText } from './highlights.js';
 import * as cloud from './cloud.js';
@@ -15,7 +15,7 @@ import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, sho
 import { buildInsights } from './insights.js';
 import { APP_REV, APP_LABEL, parseLatest, requiredRev, minRevToWrite, deviceName, deviceRecord, upsertDevice, deviceRows } from './version.js';
 import { customFoodFromForm, formFromCustomFood, servingNutrients, servingKcal, servingText, searchMine, sortByUse, isPerServing, formFromManual } from './myfoods.js';
-import { packFromFile, searchPacks, groupHits, packRows, myFoodsFile, isMyFoodsFile, planMyFoodsImport, packsWithMine, looseMine, packFields, packFileWithMine } from './packs.js';
+import { packFromFile, searchPacks, groupHits, packRows, myFoodsFile, isMyFoodsFile, planMyFoodsImport, packsWithMine, looseMine, packFields, packFileWithMine, sharedPlan, withShared } from './packs.js';
 import { toCsv } from './lookup.js';
 import { normalizeBarcode, checkDigitOk, findByBarcode, offUrl, offToForm } from './barcode.js';
 import { computeBadges, badgesToShow, newBadges, remainText } from './achievements.js';
@@ -789,7 +789,7 @@ function packLink(food, pk) {
 // 我的食物：記 customFoodId；自己加到資料庫的，也記是哪個資料庫（報告的「資料來源」）
 function mineLink(food, entry) {
   entry.customFoodId = food.id;
-  const pk = food.packId && foodPacks().find(p => p.id === food.packId);
+  const pk = food.packId && allPacks().find(p => p.id === food.packId);
   if (pk) Object.assign(entry, { src: pk.id, srcName: pk.name });
 }
 function cartEntryFor(food, g, weighed) {
@@ -3427,9 +3427,9 @@ function customFoods() {
 }
 function isMine(food) { return Boolean(food && customFoods().includes(food)); }
 // 我的食物清單要列的：歸到資料庫的（packId）在資料庫裡找，不放這裡，清單才不會越來越長
-function myLoose() { return looseMine(customFoods(), foodPacks()); }
+function myLoose() { return looseMine(customFoods(), allPacks()); }
 // 畫面用的資料庫：原本匯入的＋自己加、改過的（js/packs.js 的 packsWithMine）
-function packsView() { return packsWithMine(foodPacks(), customFoods()); }
+function packsView() { return packsWithMine(allPacks(), customFoods()); }
 function myFoodRowHTML(f, action) {
   const attr = action === 'edit' ? `data-mf-edit="${esc(f.id)}"` : `data-cf-id="${esc(f.id)}"`;
   const row = `<button type="button" ${attr} class="pick-row${action === 'edit' ? '' : ' min-w-0 flex-1'}">
@@ -3500,7 +3500,7 @@ function openMyFood(food, name = '', prefill = null, pack = null) {
   mfEditing = food ? food.id : null;
   mfThenRecord = Boolean(prefill);
   mfSource = (prefill && prefill.source) || null;
-  const inPack = food && food.packId && foodPacks().find(p => p.id === food.packId);
+  const inPack = food && food.packId && allPacks().find(p => p.id === food.packId);
   mfPack = inPack ? { packId: food.packId, brand: food.brand || '', replaces: food.replaces || null } : pack;
   const form = food ? formFromCustomFood(food) : pack && pack.from ? formFromCustomFood(pack.from) : prefill ? { ...prefill } : { name, ex: {} };
   MF_FIELDS.forEach(k => { $('mf-' + k).value = form[k] == null ? '' : form[k]; });
@@ -3508,7 +3508,7 @@ function openMyFood(food, name = '', prefill = null, pack = null) {
   const barcode = (food && food.barcode) || (prefill && prefill.barcode) || '';
   $('mf-barcode').value = barcode;
   $('mf-more').open = Boolean((food || prefill) && (form.sugar !== '' || form.na !== '' || form.fiber !== '' || Object.keys(form.ex || {}).length || barcode));
-  const pk = mfPack && foodPacks().find(p => p.id === mfPack.packId);
+  const pk = mfPack && allPacks().find(p => p.id === mfPack.packId);
   $('mf-packBox').classList.toggle('hidden', !pk);
   $('mf-unpack').classList.toggle('hidden', !(food && pk));
   if (pk) {
@@ -3550,7 +3550,7 @@ $('mf-save').addEventListener('click', () => {
   if (customFoods().some(sameName)) { setBox('mf-note', 'err', '已經有「' + food.name + '」了，請換個名稱' + (mfPack ? '' : '（例如加上店名）')); return; }
   const list = customFoods();
   if (old) list[list.indexOf(old)] = food; else list.unshift(food);
-  const pkName = mfPack && (foodPacks().find(p => p.id === mfPack.packId) || {}).name;
+  const pkName = mfPack && (allPacks().find(p => p.id === mfPack.packId) || {}).name;
   afterMyFoodChange();
   if (mfThenRecord && !old) afterClose(() => openGrams(food)); else closeScreen();
   showToast((old ? '已更新' : pkName ? '已存到「' + pkName + '」：' : '已存到我的食物：') + '「' + food.name + '」');
@@ -3592,12 +3592,16 @@ function foodPacks() {
   if (!Array.isArray(state.foodPacks)) state.foodPacks = [];
   return state.foodPacks;
 }
+// 共用資料庫（管理者發佈、自動更新）：存在這台的 IndexedDB（js/db.js 的 sharedDB），不同步；meta.shared 記著哪幾份、哪一版
+let sharedPacks = [];
+// 讀資料庫一律用這個（自己匯入的＋共用的）；要改、要同步的才用 foodPacks()
+function allPacks() { return withShared(sharedPacks, foodPacks()); }
 // 交給畫面的資料庫食物 → 它在哪個資料庫（記錄要記 src／srcName）。同步會換掉物件，所以每次查到時重新登記
 const foodPack = new WeakMap();
 // 查食物上方：只查某一個（全部／我的／衛福部／各資料庫）。沒有資料庫時不顯示，和以前一樣
 let foodFilter = '';
 function renderFoodFilter() {
-  const packs = foodPacks();
+  const packs = allPacks();
   const box = $('foodFilter');
   if (!packs.length) { box.innerHTML = ''; foodFilter = ''; return; }
   if (foodFilter && !['mine', 'tfda'].includes(foodFilter) && !packs.some(p => p.id === foodFilter)) foodFilter = '';
@@ -3678,11 +3682,17 @@ $('pickList').addEventListener('click', (e) => {
 // 我的食物分頁：資料庫清單、匯入、刪除
 const minePacked = (packId) => customFoods().filter(f => f.packId === packId);
 function renderPackList() {
-  const packs = foodPacks();
+  const packs = allPacks();
   $('packList').innerHTML = packs.length ? packs.map(p => {
     const mine = minePacked(p.id);
     const fixed = mine.filter(f => f.replaces).length;
-    const info = [p.org, p.edition, (p.foods || []).length + ' 樣', mine.length - fixed ? '我加了 ' + (mine.length - fixed) + ' 樣' : '', fixed ? '改過 ' + fixed + ' 樣' : ''].filter(Boolean).join('・');
+    const info = [p.shared ? '共用・會自動更新' : p.org, p.edition, (p.foods || []).length + ' 樣', mine.length - fixed ? '我加了 ' + (mine.length - fixed) + ' 樣' : '', fixed ? '改過 ' + fixed + ' 樣' : ''].filter(Boolean).join('・');
+    if (p.shared) {
+      return `<div class="bg-emerald-50 rounded-xl p-3">
+        <span class="block text-lg font-semibold text-stone-900 leading-snug break-words">🌐 ${esc(p.name)}</span>
+        <span class="block text-sm text-stone-600 break-words">${esc(info)}</span>
+        <button type="button" data-pack-open="${esc(p.id)}" class="btn-secondary w-full mt-2">打開：找、新增、修改</button></div>`;
+    }
     return `<div class="flex items-center gap-2 bg-stone-50 rounded-xl p-3">
       <span class="min-w-0 flex-1"><span class="block text-lg font-semibold text-stone-900 leading-snug break-words">${esc(p.name)}</span>
       <span class="block text-sm text-stone-500 break-words">${esc(info)}</span>
@@ -3856,7 +3866,7 @@ $('packFoods').addEventListener('click', (e) => {
 // 我的食物 → 移到資料庫（packId＋店家；同一個物件，id 不變：記錄、套餐都不受影響）
 let moveTarget = null;
 function renderMove() {
-  const packs = foodPacks();
+  const packs = allPacks();
   const n = selectedFoods().length;
   $('moveWhat').textContent = '要移的：' + selectedFoods().slice(0, 5).map(f => '「' + f.name + '」').join('') + (n > 5 ? '等 ' + n + ' 樣' : '');
   if (!moveTarget) moveTarget = packs.length ? packs[0].id : 'new';
@@ -3879,12 +3889,12 @@ $('movePacks').addEventListener('click', (e) => {
 $('moveSaveBtn').addEventListener('click', () => {
   const foods = selectedFoods();
   if (!foods.length) { closeScreen(); return; }
-  let pack = foodPacks().find(p => p.id === moveTarget);
+  let pack = allPacks().find(p => p.id === moveTarget);
   let created = null;
   if (!pack) {
     const name = $('moveNewName').value.trim();
     if (!name) { setBox('moveNote', 'err', '請填新資料庫的名稱，例如「常吃的外食」'); $('moveNewName').focus(); return; }
-    if (foodPacks().some(p => p.name === name)) { setBox('moveNote', 'err', '已經有「' + name + '」了，請在上面選它'); return; }
+    if (allPacks().some(p => p.name === name)) { setBox('moveNote', 'err', '已經有「' + name + '」了，請在上面選它'); return; }
     created = pack = { id: uid('pk'), name, org: '自己建的', foods: [], updatedAt: now() };
     foodPacks().push(pack);
   }
@@ -3967,7 +3977,7 @@ async function lookupBarcode(raw) {
   if (!code) { scanBox('err', '條碼是 8～13 位數字（在黑白直線下面），請再確認一次。'); return; }
   $('scanInput').value = code;
   if (!checkDigitOk(code)) { scanBox('err', '「' + code + '」好像少了或打錯一個數字，請對照包裝再輸入一次。'); return; }
-  const hit = findByBarcode(code, { mine: customFoods(), packs: foodPacks() });
+  const hit = findByBarcode(code, { mine: customFoods(), packs: allPacks() });
   if (hit) {
     if (hit.pack) foodPack.set(hit.food, hit.pack);
     showToast('找到了：' + (hit.food.brand ? hit.food.brand + ' ' : '') + hit.food.name);
@@ -4069,10 +4079,10 @@ function renderComboList() {
 async function pickCombo(combo) {
   let tfda = null;
   try { tfda = (await loadFoodDB()).foods; } catch (e) { /* 離線又沒快取：用存套餐時的數字 */ }
-  const items = resolveCombo(combo, { tfda, mine: customFoods(), packs: foodPacks() });
+  const items = resolveCombo(combo, { tfda, mine: customFoods(), packs: allPacks() });
   // 資料庫裡找得到的，登記它在哪個資料庫（記錄要帶 src）
   const where = new Map();
-  foodPacks().forEach(p => (p.foods || []).forEach(f => where.set(f, p)));
+  allPacks().forEach(p => (p.foods || []).forEach(f => where.set(f, p)));
   items.forEach(({ food }) => { if (where.has(food)) foodPack.set(food, where.get(food)); });
   items.forEach(({ food, grams, weighed: w }) => {
     const { weighed, entry } = cartEntryFor(food, grams, w);
@@ -5391,6 +5401,7 @@ function initInviteGate() {
   if (g === 'new' || g === 'locked') { showInviteGate(g === 'locked' ? state.meta.invite.reason : null); return; }
   saveCloudInvite();
   if (needCheck(state.meta.invite, now()) && navigator.onLine !== false) checkInviteAgain();
+  setTimeout(() => checkSharedPacks(), 3000);
 }
 // 雲端記著的邀請碼：用它登記這台（同號碼＋同裝置名稱＋同姓名，試算表不會多算一台）
 async function restoreInvite() {
@@ -5410,6 +5421,7 @@ async function restoreInvite() {
   persistLocal();
   hideInviteGate();
   showToast('歡迎回來' + (state.meta.invite.name ? '，' + state.meta.invite.name : '') + '！');
+  setTimeout(() => checkSharedPacks(true), 3000);
 }
 // 在邀請碼畫面按「用 Google 帳號登入」：登入回來（或本來就有登入）→ 連好雲端、取回記錄 → 看雲端有沒有邀請碼
 async function inviteGoogle() {
@@ -5502,7 +5514,62 @@ $('inviteNameBtn').addEventListener('click', async () => {
   saveCloudInvite();
   hideInviteGate();
   showToast('歡迎加入公測，' + name + '！');
+  setTimeout(() => checkSharedPacks(true), 3000);
 });
+
+/* ---------------- 共用資料庫：管理者發佈（tools/invite/Code.gs 的 packs、pack），App 自動更新 ---------------- */
+// 只給用邀請碼登記過的裝置；大約每 12 小時問一次有沒有新版，有就下載換掉（不用使用者按）
+const SHARED_EVERY = 12 * 3600 * 1000;
+function sharedMeta() {
+  if (!state.meta.shared || typeof state.meta.shared !== 'object') state.meta.shared = { files: {}, checkedAt: 0 };
+  if (!state.meta.shared.files) state.meta.shared.files = {};
+  return state.meta.shared;
+}
+async function loadSharedPacks() {
+  const m = sharedMeta();
+  const out = [];
+  for (const key of Object.keys(m.files)) {
+    const pack = await sharedDB.get(key);
+    if (pack && pack.id) out.push(pack); else delete m.files[key];   // 讀不到：下次檢查重新下載
+  }
+  sharedPacks = out;
+}
+let sharedBusy = false;
+async function checkSharedPacks(force = false) {
+  if (sharedBusy || !INVITE_URL || !canSendFeedback(state.meta.invite) || navigator.onLine === false) return;
+  const m = sharedMeta();
+  if (!force && now() - (m.checkedAt || 0) < SHARED_EVERY) return;
+  sharedBusy = true;
+  try {
+    const who = { code: state.meta.invite.code, deviceId: state.meta.deviceId };
+    const r = await callInvite({ action: 'packs', ...who });
+    if (!r.ok || !Array.isArray(r.packs)) return;
+    const plan = sharedPlan(m.files, r.packs);
+    const versions = new Map(r.packs.map(x => [String(x.key), Number(x.version) || 0]));
+    const done = [];
+    let failed = false;
+    for (const key of plan.fetch) {
+      const d = await callInvite({ action: 'pack', key, ...who });
+      const { pack, error } = d.ok ? packFromFile(d.file, { now: now() }) : { error: d.reason };
+      if (error) { failed = true; continue; }
+      const sp = { ...pack, shared: true };
+      done.push((m.files[key] ? '已更新' : '已加入') + '「' + sp.name + '」（' + sp.foods.length + ' 樣）');
+      await sharedDB.put(key, sp);
+      m.files[key] = { version: versions.get(key), id: sp.id, name: sp.name, n: sp.foods.length };
+    }
+    for (const key of plan.drop) { await sharedDB.del(key); delete m.files[key]; }
+    if (!failed) m.checkedAt = now();   // 有沒下載成功的：下次打開再試
+    persistLocal();
+    if (done.length || plan.drop.length) {
+      await loadSharedPacks();
+      renderAll();
+      if (screenStack.includes('scr-food')) renderFoodResults();
+      if (done.length) showToast('共用資料庫' + done.join('、'));
+    }
+  } finally {
+    sharedBusy = false;
+  }
+}
 
 /* ---------------- 💬 意見回饋（設定 → 關於）---------------- */
 let fbKind = '';
@@ -5559,6 +5626,7 @@ $('fbShareBtn').addEventListener('click', async () => {
 
 (async function init() {
   await loadState();
+  await loadSharedPacks();
   if (!state.meta.deviceId) { state.meta.deviceId = uid('dev'); persistLocal(); }
   applyFontSize();
   renderAll();

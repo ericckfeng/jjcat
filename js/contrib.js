@@ -12,6 +12,7 @@ export function contribFood(food) {
   const out = { name: String(food.name || ''), serving: servingText(food) };
   const per = isPerServing(food) ? food.perServing : (food.per100g || {});
   const scale = isPerServing(food) ? 1 : ((food.serving && food.serving.g) || 100) / 100;
+  if (food.barcode) out.barcode = String(food.barcode);   // 包裝食品：收進外食圖書館後大家掃條碼找得到
   NUTR.forEach(k => {
     if (per[k] == null || !Number.isFinite(Number(per[k]))) return;
     out[k] = k === 'kcal' || k === 'na' ? Math.round(per[k] * scale) : r1(per[k] * scale);

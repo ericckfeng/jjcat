@@ -19,3 +19,8 @@ test('投稿前檢查：要有熱量、店家、至少 1 張照片', () => {
   assert.match(contribMessage('photo'), /換一張/);
   assert.match(contribMessage('???'), /稍後再試/);
 });
+
+test('投稿帶條碼（包裝食品）', () => {
+  assert.equal(contribFood({ name: '紅燒牛肉調理包', barcode: '4710088012345', serving: { label: '1 包' }, perServing: { kcal: 250 } }).barcode, '4710088012345');
+  assert.equal(contribFood({ name: '鍋貼', perServing: { kcal: 1 } }).barcode, undefined);
+});

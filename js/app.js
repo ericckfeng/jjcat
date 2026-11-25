@@ -15,7 +15,7 @@ import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, sho
 import { buildInsights } from './insights.js';
 import { APP_REV, APP_LABEL, parseLatest, requiredRev, minRevToWrite, deviceName, deviceRecord, upsertDevice, deviceRows } from './version.js';
 import { customFoodFromForm, formFromCustomFood, servingNutrients, servingKcal, servingText, searchMine, sortByUse, isPerServing, formFromManual } from './myfoods.js';
-import { packFromFile, searchPacks, groupHits, packRows, myFoodsFile, isMyFoodsFile, planMyFoodsImport, packsWithMine, looseMine, packFields, packFileWithMine, sharedPlan, withShared, libraryShops, pickShared, toggleShops } from './packs.js';
+import { packFromFile, searchPacks, groupHits, packRows, myFoodsFile, isMyFoodsFile, planMyFoodsImport, packsWithMine, looseMine, packFields, packFileWithMine, sharedPlan, withShared, libraryShops, pickShared, toggleShops, LIBRARY_GROUPS, OTHER_GROUP } from './packs.js';
 import { toCsv } from './lookup.js';
 import { normalizeBarcode, checkDigitOk, findByBarcode, offUrl, offToForm } from './barcode.js';
 import { computeBadges, badgesToShow, newBadges, remainText } from './achievements.js';
@@ -5648,7 +5648,7 @@ $('mf-contrib').addEventListener('click', () => {
   const groups = libraryShops(sharedPacks);
   $('ctBrandList').innerHTML = groups.flatMap(g => g.shops).map(x => `<option value="${esc(x.brand)}"></option>`).join('');
   const myGroup = (groups.find(g => g.shops.some(x => x.brand === food.brand)) || {}).group || '';
-  $('ctGroup').innerHTML = ['', ...groups.map(g => g.group).filter(g => g !== '其他')].map(g => `<option value="${esc(g)}"${g === myGroup ? ' selected' : ''}>${esc(g || '不知道（讓管理者分）')}</option>`).join('');
+  $('ctGroup').innerHTML = ['', ...new Set([...LIBRARY_GROUPS, ...groups.map(g => g.group)].filter(g => g !== OTHER_GROUP))].map(g => `<option value="${esc(g)}"${g === myGroup ? ' selected' : ''}>${esc(g || '不知道（讓管理者分）')}</option>`).join('');
   $('ctWhere').value = '';
   $('ctWhat').textContent = '按「送出推薦」會把這樣食物的名稱和數字、店家、照片、在哪裡看到的，連同版本、裝置名稱、邀請碼和姓名，送到公測管理者的 Google 試算表和雲端硬碟。不會送出你的飲食記錄。照片裡請不要拍到人臉或個人資料。';
   setBox('ctNote', null, '');

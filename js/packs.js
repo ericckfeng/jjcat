@@ -505,6 +505,12 @@ export function withShared(shared, own) {
 /* ---------------- 外食圖書館：共用資料庫裡的店家，依「店家分類」分組，讓人勾自己會去的 ---------------- */
 // 同步資料最上層 libraryOff = { updatedAt, brands: [沒勾的店家] }：預設全部勾選，之後新增的店也是勾選的
 export const OTHER_GROUP = '其他';
+// 外食圖書館的分類（試算表「店家分類」欄填這些字）。投稿時固定列出，還沒有食物的分類也選得到；包裝食品的「店家」填品牌
+export const LIBRARY_GROUPS = [
+  '🍔 速食・炸雞・披薩', '🥪 早餐店', '🧋 手搖飲', '☕ 咖啡', '🏪 便利商店・量販', '🍱 便當・自助餐', '🍛 丼飯・日式定食',
+  '🥟 麵食・水餃・小吃', '🍲 火鍋', '🍩 麵包・甜點', '🥗 健康餐盒',
+  '🥫 調理包・罐頭・冷凍食品', '🍜 泡麵・即食', '🍪 餅乾・零食・糖果', '🥛 包裝飲料・乳品'
+];
 export function libraryShops(shared) {
   const groups = new Map();
   (shared || []).forEach(p => (p.foods || []).forEach(f => {

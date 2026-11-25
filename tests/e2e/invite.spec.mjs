@@ -443,13 +443,15 @@ test('投稿：我的食物 → 推薦給外食圖書館 → 沒照片不能送 
     contribs.push(req);
     return r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ ok: true }) });
   });
-  await seed(page, { ...member, customFoods: [{ id: 'cf_g', name: '韭菜鍋貼', serving: { label: '10 顆' }, perServing: { kcal: 520, p: 20, f: 25, c: 50 }, updatedAt: 1 }] });
+  await seed(page, { ...member, customFoods: [{ id: 'cf_g', name: '韭菜鍋貼', barcode: '4710088012345', serving: { label: '10 顆' }, perServing: { kcal: 520, p: 20, f: 25, c: 50 }, updatedAt: 1 }] });
   await openApp(page, { errors, inviteUrl: URL_ });
   await page.click('.mobile-nav-tab[data-tab=library]');
   await page.click('[data-mf-edit=cf_g]');
   await page.click('#mf-contrib');
   await expect(page.locator('#scr-contrib')).toBeVisible();
   await expect(page.locator('#ctSummary')).toContainText('熱量 520 大卡');
+  await expect(page.locator('#ctGroup option')).toContainText(['🥫 調理包・罐頭・冷凍食品', '🍪 餅乾・零食・糖果']);   // 還沒有食物的分類也選得到
+  await page.selectOption('#ctGroup', '🥟 麵食・水餃・小吃');
   await page.click('#ctSendBtn');
   await expect(page.locator('#ctNote')).toContainText('請填店家');
   await page.fill('#ctBrand', '八方雲集');
@@ -462,7 +464,7 @@ test('投稿：我的食物 → 推薦給外食圖書館 → 沒照片不能送 
   await expect(page.locator('#toastMsg')).toContainText('已經送給管理者');
   const c = contribs[0];
   expect(Object.keys(c).sort()).toEqual(['action', 'brand', 'code', 'deviceId', 'deviceName', 'food', 'group', 'photos', 'ver', 'where']);
-  expect(c).toMatchObject({ brand: '八方雲集', where: '店家官網', food: { name: '韭菜鍋貼', serving: '10 顆', kcal: 520, p: 20 } });
+  expect(c).toMatchObject({ brand: '八方雲集', group: '🥟 麵食・水餃・小吃', where: '店家官網', food: { name: '韭菜鍋貼', serving: '10 顆', kcal: 520, p: 20, barcode: '4710088012345' } });
   expect(c.photos).toHaveLength(1);
   expect(c.photos[0]).toMatch(/^data:image\/jpeg;base64,/);
   expect((await appState(page)).meta.contribs.cf_g).toBeGreaterThan(0);

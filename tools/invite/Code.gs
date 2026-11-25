@@ -30,13 +30,21 @@ const MASTER = '外食圖書館總表';   // 外食圖書館的原始資料（�
 const SHARED_FOLDER = '飲控隨身記 共用資料庫';   // 發佈的資料庫檔放這裡（不公開，程式自己管）
 // 和外食圖書館試算表一樣的欄位：「整理通過的投稿」排好，複製貼上就好
 const LIB_HEAD = ['提供者(餐廳店家)', '店家分類', '餐點分類', '品項名稱', '份量規格', '熱量(kcal)', '蛋白質(g)', '脂肪(g)', '飽和脂肪(g)', '反式脂肪(g)', '碳水化合物(g)', '糖(g)', '鈉(mg)', '資料來源說明', '條碼'];
-const SHARED = '共用資料庫';     // A 資料庫檔網址、B 發佈（打勾）、C 名稱、D 樣數、E 檔案更新時間、F 檢查結果、G 備註
+const SHARED = '共用資料庫';
+const GROUPS = '分類';   // 外食圖書館的分類（一列一個）：「投稿」「外食圖書館總表」的店家分類欄用它做下拉選單；加分類＝在這裡多寫一列
+// 預設的 15 類，和 App 的 js/packs.js LIBRARY_GROUPS 一樣（App 投稿時固定列出這些）
+const DEFAULT_GROUPS = ['🍔 速食・炸雞・披薩', '🥪 早餐店', '🧋 手搖飲', '☕ 咖啡', '🏪 便利商店・量販', '🍱 便當・自助餐', '🍛 丼飯・日式定食',
+  '🥟 麵食・水餃・小吃', '🍲 火鍋', '🍩 麵包・甜點', '🥗 健康餐盒', '🥫 調理包・罐頭・冷凍食品', '🍜 泡麵・即食', '🍪 餅乾・零食・糖果', '🥛 包裝飲料・乳品'];
+const TOOL_URL = 'https://ericckfeng.github.io/jjcat/tools/foodpack.html';     // A 資料庫檔網址、B 發佈（打勾）、C 名稱、D 樣數、E 檔案更新時間、F 檢查結果、G 備註
 
 function onOpen() {
+  try { groupMenus_(); } catch (err) { /* 沒有權限或還沒有分頁：選單「更新分類選單」再做 */ }
   SpreadsheetApp.getUi().createMenu('公測邀請碼')
+    .addItem('打開整理工具（發佈外食圖書館）', 'openTool')
     .addItem('產生 20 組號碼', 'generate20')
     .addItem('檢查共用資料庫', 'checkShared')
     .addItem('併入通過的投稿', 'mergeApproved')
+    .addItem('更新分類選單', 'updateGroupMenus')
     .addItem('設定發佈密碼', 'setAdminKey')
     .addToUi();
 }
@@ -131,7 +139,7 @@ function doPost(e) {
     return out_({ ok: false, reason: 'error', detail: /^admin/.test(String(req.action || '')) ? String(err && err.message || err).slice(0, 300) : undefined });
   }
 }
-const VERSION = '2026-11-25g';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
+const VERSION = '2026-11-25h';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
 function doGet() { return out_({ ok: true, app: 'jjcat-invite', version: VERSION }); }
 function out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
 
@@ -339,6 +347,7 @@ function mergeApproved() {
   });
   master.getRange(master.getLastRow() + 1, 1, out.length, head.length).setValues(out);
   picked.forEach(([, row]) => sh.getRange(row, 22).setValue(true));
+  try { groupMenus_(); } catch (err) { /* 選單「更新分類選單」再做 */ }
   ss.toast('已把 ' + out.length + ' 樣加到「' + MASTER + '」最下面。到整理工具「從試算表讀總表」→ 檢查 →「發佈給大家」。');
 }
 
@@ -425,4 +434,44 @@ function diagnose() {
   step('「共用資料庫」分頁', () => sharedSheet_().getName());
   step('「外食圖書館總表」分頁', () => { const sh = SpreadsheetApp.getActive().getSheetByName(MASTER); return sh ? (sh.getLastRow() - 1) + ' 列' : '沒有'; });
   SpreadsheetApp.getUi().alert('診斷結果\n\n' + log.join('\n'));
+}
+
+// ---- 選單：打開整理工具（不用記網址）----
+function openTool() {
+  const html = HtmlService.createHtmlOutput(
+    '<div style="font:16px sans-serif;line-height:1.6">' +
+    '<p><a href="' + TOOL_URL + '" target="_blank" style="font-size:18px">👉 按這裡打開整理工具</a></p>' +
+    '<p style="color:#666">在「🔑 管理者」按「從試算表讀總表」→ 檢查 →「發佈給大家」。</p></div>' +
+    '<script>var w = window.open("' + TOOL_URL + '", "_blank"); if (w) google.script.host.close();</script>'
+  ).setWidth(380).setHeight(140);
+  SpreadsheetApp.getUi().showModalDialog(html, '整理工具');
+}
+
+// ---- 分類下拉選單 ----
+function groupsSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(GROUPS);
+  if (!sh) {
+    sh = ss.insertSheet(GROUPS);
+    sh.getRange(1, 1, DEFAULT_GROUPS.length + 1, 1).setValues([['外食圖書館的分類（一列一個；要加分類就往下寫）']].concat(DEFAULT_GROUPS.map(g => [g])));
+    sh.setFrozenRows(1);
+    sh.setColumnWidth(1, 320);
+  }
+  return sh;
+}
+// 「投稿」G 欄、「外食圖書館總表」的「店家分類」欄：下拉選單（也可以打別的字，只是會標示）
+function groupMenus_() {
+  const ss = SpreadsheetApp.getActive();
+  const rule = SpreadsheetApp.newDataValidation().requireValueInRange(groupsSheet_().getRange('A2:A200'), true).setAllowInvalid(true).build();
+  const contrib = ss.getSheetByName(CONTRIB);
+  if (contrib) contrib.getRange(2, 7, 2000, 1).setDataValidation(rule);
+  const master = ss.getSheetByName(MASTER);
+  if (master && master.getLastColumn() > 0) {
+    const col = master.getRange(1, 1, 1, master.getLastColumn()).getDisplayValues()[0].indexOf('店家分類') + 1;
+    if (col > 0) master.getRange(2, col, Math.max(master.getLastRow() + 500, 1000), 1).setDataValidation(rule);
+  }
+}
+function updateGroupMenus() {
+  groupMenus_();
+  SpreadsheetApp.getActive().toast('「投稿」和「外食圖書館總表」的店家分類欄已經是下拉選單了。要加分類，到「' + GROUPS + '」分頁往下寫。');
 }

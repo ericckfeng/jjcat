@@ -315,6 +315,10 @@ test('意見回饋：沒有邀請碼的舊用戶只看到「用聊天 App 告訴
 // ---- 共用資料庫（管理者發佈，App 自動下載更新）----
 const packFile = (n, extra = {}) => ({ app: 'diet-tracker-foods', version: 1, pack: { id: 'pk_eatout', name: '外食店家營養資料庫', org: '飲控隨身記', edition: '第 ' + n + ' 版', askBy: 'serving' },
   foods: [{ id: 'pf_1', name: '大麥克', brand: '麥當勞', perServing: { kcal: 530, p: 25, f: 28, c: 45 } }, ...(n > 1 ? [{ id: 'pf_2', name: '麥香雞', brand: '麥當勞', perServing: { kcal: 380 } }] : [])], ...extra });
+const libraryFile = () => ({ app: 'diet-tracker-foods', version: 1, pack: { id: 'pk_lib', name: '外食圖書館', org: '飲控隨身記', askBy: 'serving' }, foods: [
+  { id: 'l1', name: '大麥克', brand: '台灣麥當勞', group: '🍔 速食・炸雞・披薩', perServing: { kcal: 530 } },
+  { id: 'l2', name: '咔啦雞腿堡', brand: '台灣肯德基', group: '🍔 速食・炸雞・披薩', perServing: { kcal: 560 } },
+  { id: 'l3', name: '珍珠奶茶(大杯/無糖)', brand: '50嵐', group: '🧋 手搖飲', perServing: { kcal: 340 } }] });
 async function fakeShared(page, sheet, shared) {
   await page.route(URL_, async (r) => {
     const req = JSON.parse(r.request().postData() || '{}');
@@ -390,4 +394,39 @@ test('共用資料庫：沒有邀請碼的舊用戶不會去下載', async ({ pa
   await openApp(page, { inviteUrl: URL_ });
   await page.waitForTimeout(3500);
   expect(shared.calls || []).toEqual([]);
+});
+
+test('外食圖書館：預設全部勾選；取消一家查不到、整類全不選、再勾回來；勾選會同步', async ({ page }) => {
+  const errors = [];
+  await fakeSheet(page, { codes: { 'JJ-4821': { issued: true, name: '王美華' } } });
+  await fakeShared(page, {}, { list: [{ key: 'lib', version: 1, file: libraryFile() }] });
+  await seed(page, member);
+  await openApp(page, { errors, inviteUrl: URL_ });
+  await expect(page.locator('#toastMsg')).toContainText('外食圖書館', { timeout: 10000 });
+  await page.click('.mobile-nav-tab[data-tab=library]');
+  await expect(page.locator('#packList')).toContainText('已選 3／3 家');
+  await page.click('#packList [data-screen="scr-library"]');
+  await expect(page.locator('#libList')).toContainText('🧋 手搖飲');
+  await page.click('[data-lib-shop="台灣麥當勞"]');
+  await expect(page.locator('#libSummary')).toHaveText('已選 2／3 家');
+  await expect(page.locator('[data-lib-shop="台灣麥當勞"]')).toHaveAttribute('aria-pressed', 'false');
+  expect((await appState(page)).libraryOff.brands).toEqual(['台灣麥當勞']);
+  const payload = await page.evaluate(() => window.__dietApp.exportPayload());
+  expect(payload.libraryOff.brands).toEqual(['台灣麥當勞']);   // 會同步到自己的其他裝置
+  await closeScreens(page);
+  await page.click('.mobile-nav-tab[data-tab=log]');
+  await page.click('[data-food-open=all]');
+  await page.fill('#foodSearch', '大麥克');
+  await expect(page.locator('#foodPacks')).not.toContainText('大麥克');
+  await page.fill('#foodSearch', '珍珠奶茶');
+  await expect(page.locator('#foodPacks')).toContainText('珍珠奶茶');
+  await closeScreens(page);
+  await page.click('.mobile-nav-tab[data-tab=library]');
+  await page.click('#packList [data-screen="scr-library"]');
+  await page.click('[data-lib-group="0"]');   // 速食：全選
+  await expect(page.locator('#libSummary')).toHaveText('已選 3／3 家');
+  await page.click('[data-lib-group="1"]');   // 手搖飲：全不選
+  await expect(page.locator('#libSummary')).toHaveText('已選 2／3 家');
+  expect((await appState(page)).libraryOff.brands).toEqual(['50嵐']);
+  expect(errors).toEqual([]);
 });

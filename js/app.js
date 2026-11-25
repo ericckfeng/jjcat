@@ -15,7 +15,7 @@ import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, sho
 import { buildInsights } from './insights.js';
 import { APP_REV, APP_LABEL, parseLatest, requiredRev, minRevToWrite, deviceName, deviceRecord, upsertDevice, deviceRows } from './version.js';
 import { customFoodFromForm, formFromCustomFood, servingNutrients, servingKcal, servingText, searchMine, sortByUse, isPerServing, formFromManual } from './myfoods.js';
-import { packFromFile, searchPacks, groupHits, packRows, myFoodsFile, isMyFoodsFile, planMyFoodsImport, packsWithMine, looseMine, packFields, packFileWithMine, sharedPlan, withShared } from './packs.js';
+import { packFromFile, searchPacks, groupHits, packRows, myFoodsFile, isMyFoodsFile, planMyFoodsImport, packsWithMine, looseMine, packFields, packFileWithMine, sharedPlan, withShared, libraryShops, pickShared, toggleShops } from './packs.js';
 import { toCsv } from './lookup.js';
 import { normalizeBarcode, checkDigitOk, findByBarcode, offUrl, offToForm } from './barcode.js';
 import { computeBadges, badgesToShow, newBadges, remainText } from './achievements.js';
@@ -931,7 +931,7 @@ function openScreen(id) {
   el.querySelector('.scr-body').scrollTop = 0;
   renderMealSelector();
   renderDayPanel();
-  if (id === 'scr-food') { foodFilter = ''; $('foodSearch').value = ''; $('foodTitle').textContent = foodMode === 'mine' ? '⭐ 我的食物' : '🔍 查食物'; $('eatoutOpenBtn').classList.toggle('hidden', !brandsOf(packsView()).length); renderFoodResults(); renderFoodCart(); }
+  if (id === 'scr-food') { foodFilter = ''; $('foodSearch').value = ''; $('foodTitle').textContent = foodMode === 'mine' ? '⭐ 我的食物' : '🔍 查食物'; $('eatoutOpenBtn').classList.toggle('hidden', !brandsOf(pickedPacks()).length); renderFoodResults(); renderFoodCart(); }
   if (id === 'scr-eatout') openEatout();
   if (id === 'scr-move') { moveTarget = null; $('moveNewName').value = ''; $('moveBrand').value = ''; renderMove(); }
   if (id === 'scr-grams') renderGrams();
@@ -947,6 +947,7 @@ function openScreen(id) {
   if (id === 'scr-features') renderFeatures();
   if (id === 'scr-about') { renderAbout(); checkLatest(true); }
   if (id === 'scr-feedback') renderFeedback();
+  if (id === 'scr-library') renderLibrary();
   if (id === 'scr-data') { renderCloud(); renderBackupInfo(); }   // 關掉自動同步的人也要看得到雲端區塊
   if (id === 'scr-weekly') renderWeekly();
   if (id === 'scr-badges') renderBadges();
@@ -3596,6 +3597,9 @@ function foodPacks() {
 let sharedPacks = [];
 // 讀資料庫一律用這個（自己匯入的＋共用的）；要改、要同步的才用 foodPacks()
 function allPacks() { return withShared(sharedPacks, foodPacks()); }
+// 查食物、外食小幫手用：外食圖書館只列勾選的店（找記錄來源、套餐、條碼還是用全部的）
+const libraryOff = () => (state.libraryOff && Array.isArray(state.libraryOff.brands) ? state.libraryOff.brands : []);
+function pickedPacks() { return packsWithMine(withShared(pickShared(sharedPacks, libraryOff()), foodPacks()), customFoods()); }
 // 交給畫面的資料庫食物 → 它在哪個資料庫（記錄要記 src／srcName）。同步會換掉物件，所以每次查到時重新登記
 const foodPack = new WeakMap();
 // 查食物上方：只查某一個（全部／我的／衛福部／各資料庫）。沒有資料庫時不顯示，和以前一樣
@@ -3622,7 +3626,7 @@ const kcalRange = (foods) => {
 let packGroups = [];
 function renderFoodPacks(q) {
   const box = $('foodPacks');
-  const packs = packsView();
+  const packs = pickedPacks();
   const only = packs.find(p => p.id === foodFilter);
   if (!q || !packs.length || !(foodFilter === '' || only)) { box.innerHTML = ''; packGroups = []; return; }
   const hits = searchPacks(packs, q, { packId: only ? only.id : null });
@@ -3691,6 +3695,7 @@ function renderPackList() {
       return `<div class="bg-emerald-50 rounded-xl p-3">
         <span class="block text-lg font-semibold text-stone-900 leading-snug break-words">🌐 ${esc(p.name)}</span>
         <span class="block text-sm text-stone-600 break-words">${esc(info)}</span>
+        ${libraryShops([p]).length ? `<button type="button" data-screen="scr-library" class="btn-primary w-full mt-2">📚 選我會去的店（${esc(libraryCount())}）</button>` : ''}
         <button type="button" data-pack-open="${esc(p.id)}" class="btn-secondary w-full mt-2">打開：找、新增、修改</button></div>`;
     }
     return `<div class="flex items-center gap-2 bg-stone-50 rounded-xl p-3">
@@ -4100,7 +4105,7 @@ const eo = { brand: '', adj: 0, list: [] };
 function openEatout() {
   eo.adj = 0;
   $('eoSearch').value = '';
-  showEatoutPick(!eo.brand || !brandsOf(packsView()).some(b => b.brand === eo.brand));
+  showEatoutPick(!eo.brand || !brandsOf(pickedPacks()).some(b => b.brand === eo.brand));
 }
 function showEatoutPick(pick) {
   $('eoPick').classList.toggle('hidden', !pick);
@@ -4110,7 +4115,7 @@ function showEatoutPick(pick) {
 function renderEatoutBrands() {
   const q = $('eoSearch').value.trim().toLowerCase();
   const recent = state.meta.eatoutRecent || [];
-  let list = brandsOf(packsView());
+  let list = brandsOf(pickedPacks());
   if (q) list = list.filter(b => b.brand.toLowerCase().includes(q));
   // 最近去過的排前面
   list.sort((a, b) => (recent.includes(a.brand) ? recent.indexOf(a.brand) : 99) - (recent.includes(b.brand) ? recent.indexOf(b.brand) : 99));
@@ -4122,7 +4127,7 @@ function renderEatoutBrands() {
 }
 function eatoutFoods() {
   const out = [];
-  packsView().forEach(pk => (pk.foods || []).forEach(f => { if (f.brand === eo.brand) { foodPack.set(f, pk); out.push(f); } }));
+  pickedPacks().forEach(pk => (pk.foods || []).forEach(f => { if (f.brand === eo.brand) { foodPack.set(f, pk); out.push(f); } }));
   return out;
 }
 function eatoutBudget() {
@@ -4154,7 +4159,7 @@ function renderEatoutPlan() {
 $('eoSearch').addEventListener('input', renderEatoutBrands);
 // 這家有新菜：存進有這家店的資料庫（品項最多的那個），店家先填好
 $('eoAddBtn').addEventListener('click', () => {
-  const pk = packsView().map(p => [p, p.foods.filter(f => f.brand === eo.brand).length]).filter(x => x[1]).sort((a, b) => b[1] - a[1])[0];
+  const pk = pickedPacks().map(p => [p, p.foods.filter(f => f.brand === eo.brand).length]).filter(x => x[1]).sort((a, b) => b[1] - a[1])[0];
   if (pk) openMyFood(null, '', null, { packId: pk[0].id, brand: eo.brand });
 });
 $('eoChange').addEventListener('click', () => { $('eoSearch').value = ''; showEatoutPick(true); });
@@ -5570,6 +5575,51 @@ async function checkSharedPacks(force = false) {
     sharedBusy = false;
   }
 }
+
+/* ---------------- 📚 外食圖書館：勾自己會去的店 ---------------- */
+function libraryCount() {
+  const shops = libraryShops(sharedPacks).flatMap(g => g.shops);
+  const off = new Set(libraryOff());
+  return '已選 ' + shops.filter(x => !off.has(x.brand)).length + '／' + shops.length + ' 家';
+}
+function renderLibrary() {
+  const groups = libraryShops(sharedPacks);
+  const off = new Set(libraryOff());
+  if (!groups.length) {
+    $('libSummary').textContent = '';
+    $('libList').innerHTML = '<p class="rounded-2xl bg-stone-50 text-stone-700 p-4 text-lg leading-relaxed">還沒有下載外食圖書館。用邀請碼加入公測、連上網路，打開 App 後會自動下載。</p>';
+    return;
+  }
+  $('libSummary').textContent = libraryCount();
+  $('libList').innerHTML = groups.map((g, gi) => {
+    const onN = g.shops.filter(x => !off.has(x.brand)).length;
+    const all = onN === g.shops.length;
+    return `<div class="rounded-2xl bg-white border border-stone-200 p-3 space-y-2">
+      <div class="flex items-center gap-2"><span class="min-w-0 flex-1 text-xl font-bold text-stone-900 break-words">${esc(g.group)}</span>
+      <button type="button" data-lib-group="${gi}" data-on="${all ? '0' : '1'}" class="chip-btn chip-lg shrink-0">${all ? '全不選' : '全選'}</button></div>
+      ${g.shops.map(x => {
+        const on = !off.has(x.brand);
+        return `<button type="button" data-lib-shop="${esc(x.brand)}" aria-pressed="${on}" class="pick-row${on ? ' pick-done' : ''}">
+          <span class="text-2xl shrink-0" aria-hidden="true">${on ? '☑️' : '⬜'}</span>
+          <span class="min-w-0 flex-1 text-left"><span class="block text-lg font-semibold text-stone-900 break-words">${esc(x.brand)}</span>
+          <span class="block text-sm text-stone-500">${x.n} 樣</span></span></button>`;
+      }).join('')}</div>`;
+  }).join('');
+}
+function setLibraryOff(brands) {
+  state.libraryOff = { updatedAt: now(), brands };
+  persist();
+  renderLibrary();
+  renderPackList();
+}
+$('libList').addEventListener('click', (e) => {
+  const shop = e.target.closest('[data-lib-shop]');
+  if (shop) { const b = shop.getAttribute('data-lib-shop'); setLibraryOff(toggleShops(libraryOff(), [b], libraryOff().includes(b))); return; }
+  const grp = e.target.closest('[data-lib-group]');
+  if (!grp) return;
+  const g = libraryShops(sharedPacks)[Number(grp.getAttribute('data-lib-group'))];
+  if (g) setLibraryOff(toggleShops(libraryOff(), g.shops.map(x => x.brand), grp.getAttribute('data-on') === '1'));
+});
 
 /* ---------------- 💬 意見回饋（設定 → 關於）---------------- */
 let fbKind = '';

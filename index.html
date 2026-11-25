@@ -984,6 +984,17 @@
     <div class="scr-foot"><button type="button" data-back class="btn-primary btn-xl w-full">完成</button></div>
   </div>
 
+  <!-- 📚 外食圖書館（js/packs.js 的 libraryShops）：勾自己會去的店，查食物和外食小幫手只列勾的；同步到自己的其他裝置 -->
+  <div id="scr-library" class="screen hidden" role="dialog" aria-label="外食圖書館">
+    <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>📚 外食圖書館</h2></div>
+    <div class="scr-body">
+      <p class="text-lg text-stone-700 leading-relaxed">勾你會去的店，查食物和外食小幫手就只列這些店。不小心取消了，再勾回來就好。</p>
+      <p id="libSummary" class="text-lg font-bold text-emerald-800"></p>
+      <div id="libList" class="space-y-4"></div>
+    </div>
+    <div class="scr-foot"><button type="button" data-back class="btn-primary btn-xl w-full">完成</button></div>
+  </div>
+
   <!-- 💬 意見回饋（js/invite.js）：有邀請碼的送文字到管理者的試算表；截圖、沒有邀請碼的用分享選單從聊天 App 傳 -->
   <div id="scr-feedback" class="screen hidden" role="dialog" aria-label="意見回饋">
     <div class="scr-head"><button type="button" data-back class="scr-back">‹ 返回</button><h2>💬 意見回饋</h2></div>

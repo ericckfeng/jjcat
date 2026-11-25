@@ -197,7 +197,7 @@
 
 ```
 { id: 'pk_xxxx', name, org?, title?, edition?, url?, note?, askBy: 'serving' | 'grams', updatedAt,
-  foods: [{ id: 'pf_xxxx', name, base, variant?, brand?, category?, aliases?, note?, source?, barcode?,
+  foods: [{ id: 'pf_xxxx', name, base, variant?, brand?, group?, category?, aliases?, note?, source?, barcode?,
             serving?: { label?, g?, ml? },
             perServing? | per100g?: { kcal, p?, f?, c?, sugar?, na?, fiber?, sfa?, tfa? }, exPerServing? | exPer100g? }] }
 ```
@@ -208,6 +208,7 @@
 - `askBy: 'serving'`（外食）：一律存 `perServing`，問幾份，`serving.g`／`ml` 只是說明。`'grams'`（食材份量表）：有每份克數就存 `per100g`，問幾克。
 - **分享我的食物**用同一種檔案，只是**沒有 `pack`**：`{ app: 'diet-tracker-foods', version: 1, exportedAt, foods }`（`foods` 是我的食物的欄位，不帶 `updatedAt`）。匯入時加進對方的「我的食物」（給新 id）：以名稱比對，新的先問要不要加；同名但數字不同的再問「換成檔案裡的／保留我的」（換的話留原本的 id，只換 `serving`、`per100g`、`perServing`、六大類）；一樣的不動（`js/packs.js` 的 `planMyFoodsImport`）。
 - 資料庫也可以整包分享（`packToFile`），對方匯入就是同一個資料庫（同一個 `id`）。
+- `group`（Rev. 69 起）：店家分類（「🍔 速食・炸雞・披薩」），試算表的「店家分類」欄。外食圖書館依它把店家分組讓人勾選；沒有的歸「其他」。
 - `sfa`（飽和脂肪 g）、`tfa`（反式脂肪 g）：存起來，App 還不顯示、不算進記錄（2026-11-21 使用者決定）。
 - 清單照規則 5 合併（`id`＋`updatedAt`，整包比較），刪除用 `tomb['foodPacks:<id>']`。會同步到自己的其他裝置；不放進公開的 App 程式碼（著作權、準確度由整理的人負責）。
 
@@ -221,6 +222,7 @@
 - **下載的完整備份**：同上，另加 `exportedAt` 和 `photos: { entryId: dataURL }`。Rev. 41 起第 2、3 張也放在 `photos` 裡，key 就是 `morePhotos` 的 key（舊版匯入時用不到、會略過）。
 - 兩種檔案都會帶著其他最上層資料（相容性規則 5）。
 - **最上層 `devices`**（Rev. 39 起）：`[{ id: deviceId, rev, ver, name, updatedAt }]`，每台裝置用的版本，給「關於 → 我的裝置」看。清單形狀，照規則 5 合併；移除用 `tomb['devices:<id>']`。每台只在版本、名字變了或超過 20 小時才更新自己那一筆（避免每次同步都改到資料、兩台來回上傳）。
+- **最上層 `libraryOff`**（Rev. 69 起）：外食圖書館沒勾的店家 `{ updatedAt, brands: [店家名稱] }`。物件形狀，較新的勝出。預設空的＝全部勾選，之後新增的店也是勾選的。只影響查食物、外食小幫手列哪些店（`pickedPacks()`）；記錄來源、套餐、條碼還是找全部的。
 - **最上層 `betaInvite`**（Rev. 66 起）：公測邀請碼的雲端備份，`{ code, name, updatedAt }`（用邀請碼加入的）或 `{ legacy: true, updatedAt }`（有邀請碼之前就在用的）。物件形狀，照規則合併（較新的勝出）。新裝置、重裝後在邀請碼畫面用 Google 登入，取回的資料有這一份就用它向試算表登記，不用再輸入；沒有這份但有記錄的，當舊用戶放行。這台被停用（`meta.invite.locked`）不寫；別台後來換了新號碼（雲端較新）不蓋掉。舊版 App 會原樣保留。
   - 這是第一個最上層新資料，但**只是資訊**：v9 以前的 App 同步時會丟掉它，不影響任何記錄，新版裝置下次同步會再寫回去，所以不用等 11/26。
 - **最上層 `minRev`**（Rev. 39 起）：`{ rev, updatedAt }`，見相容性規則 9。目前沒有寫入（`DATA_MIN_REV = 0`）。

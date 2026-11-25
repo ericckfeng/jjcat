@@ -28,7 +28,8 @@ export function hashId(s) {
 // 每個欄位：[key, label, 欄名包含這些字就算, 欄名包含這些字就不算]
 export const PACK_FIELDS = [
   ['name', '名稱', ['品項名稱', '食物名稱', '品名', '名稱', '品項', '餐點名稱', '菜名'], ['別名']],
-  ['brand', '店家／品牌', ['提供者', '店家', '餐廳', '品牌', '廠商', '店名']],
+  ['brand', '店家／品牌', ['提供者', '店家', '餐廳', '品牌', '廠商', '店名'], ['店家分類', '店家類型']],
+  ['group', '店家分類', ['店家分類', '店家類型']],   // 外食圖書館的分類（速食、手搖飲…），依店家分組讓人勾選
   ['category', '分類', ['餐點分類', '分類', '類別']],
   ['basis', '計量方式', ['計量方式']],
   ['servingG', '每份克數', ['每份克數', '克數', '重量']],
@@ -174,6 +175,8 @@ export function rowsToFoods(rows, mapping, { askBy = 'serving' } = {}) {
     if (Object.keys(serving).length) food.serving = serving;
     const category = cleanText(get(r, 'category'));
     if (category) food.category = category;
+    const group = cleanText(get(r, 'group'));
+    if (group) food.group = group;
     const aliases = cleanText(get(r, 'aliases')).split(/[、,，;；]/).map(s => s.trim()).filter(Boolean);
     if (aliases.length) food.aliases = aliases;
     ['note', 'source', 'barcode'].forEach(k => { const v = cleanText(get(r, k)); if (v) food[k] = v; });
@@ -318,7 +321,7 @@ export function groupHits(hits) {
 
 /* ---------------- 分享我的食物 ---------------- */
 // 我的食物 → 分享檔：和資料庫檔同一種格式，只是沒有 pack（App 匯入時加進「我的食物」，不是另一個資料庫）
-const FOOD_KEYS = ['name', 'aliases', 'category', 'brand', 'note', 'source', 'barcode', 'serving', 'per100g', 'exPer100g', 'perServing', 'exPerServing'];
+const FOOD_KEYS = ['name', 'aliases', 'category', 'group', 'brand', 'note', 'source', 'barcode', 'serving', 'per100g', 'exPer100g', 'perServing', 'exPerServing'];
 const NUTR_KEYS = ['serving', 'per100g', 'exPer100g', 'perServing', 'exPerServing'];
 export function myFoodsFile(foods, { now = Date.now() } = {}) {
   const out = (foods || []).map(f => {
@@ -497,4 +500,31 @@ export function sharedPlan(files, list) {
 export function withShared(shared, own) {
   const ids = new Set((shared || []).map(p => p.id));
   return [...(shared || []), ...(own || []).filter(p => !ids.has(p.id))];
+}
+
+/* ---------------- 外食圖書館：共用資料庫裡的店家，依「店家分類」分組，讓人勾自己會去的 ---------------- */
+// 同步資料最上層 libraryOff = { updatedAt, brands: [沒勾的店家] }：預設全部勾選，之後新增的店也是勾選的
+export const OTHER_GROUP = '其他';
+export function libraryShops(shared) {
+  const groups = new Map();
+  (shared || []).forEach(p => (p.foods || []).forEach(f => {
+    if (!f.brand) return;
+    const g = f.group || OTHER_GROUP;
+    if (!groups.has(g)) groups.set(g, new Map());
+    const shops = groups.get(g);
+    shops.set(f.brand, (shops.get(f.brand) || 0) + 1);
+  }));
+  return [...groups].map(([group, shops]) => ({ group, shops: [...shops].map(([brand, n]) => ({ brand, n })) }));
+}
+// 沒勾的店家不列（只篩共用資料庫；自己匯入的、我的食物不受影響）
+export function pickShared(shared, off) {
+  const skip = off instanceof Set ? off : new Set(off || []);
+  if (!skip.size) return shared || [];
+  return (shared || []).map(p => ({ ...p, foods: (p.foods || []).filter(f => !f.brand || !skip.has(f.brand)) }));
+}
+// 勾／取消一家或一整類
+export function toggleShops(off, brands, on) {
+  const set = new Set(off || []);
+  brands.forEach(b => { if (on) set.delete(b); else set.add(b); });
+  return [...set].sort();
 }

@@ -86,3 +86,21 @@ test('共用資料庫：新的、換版的要下載；不再發佈的拿掉；�
   assert.deepEqual(withShared(shared, [{ id: 'pk_1', name: '舊的' }, { id: 'pk_2', name: '自己的' }]).map(p => p.name), ['共用', '自己的']);
   assert.deepEqual(withShared([], [{ id: 'pk_2' }]).map(p => p.id), ['pk_2']);
 });
+
+test('外食圖書館：依店家分類列店、沒勾的店不列、全選全不選；表頭「店家分類」對得到', async () => {
+  const { libraryShops, pickShared, toggleShops, guessMapping, rowsToFoods } = await import('../../js/packs.js');
+  const shared = [{ id: 'pk', foods: [
+    { id: '1', name: '大麥克', brand: '麥當勞', group: '🍔 速食' }, { id: '2', name: '麥香雞', brand: '麥當勞', group: '🍔 速食' },
+    { id: '3', name: '珍奶', brand: '50嵐', group: '🧋 手搖飲' }, { id: '4', name: '白飯', brand: '自助餐' }] }];
+  assert.deepEqual(libraryShops(shared), [
+    { group: '🍔 速食', shops: [{ brand: '麥當勞', n: 2 }] }, { group: '🧋 手搖飲', shops: [{ brand: '50嵐', n: 1 }] }, { group: '其他', shops: [{ brand: '自助餐', n: 1 }] }]);
+  assert.deepEqual(pickShared(shared, ['麥當勞'])[0].foods.map(f => f.id), ['3', '4']);
+  assert.equal(pickShared(shared, []), shared);
+  assert.deepEqual(toggleShops(['50嵐'], ['麥當勞', '50嵐'], false), ['50嵐', '麥當勞']);
+  assert.deepEqual(toggleShops(['50嵐', '麥當勞'], ['50嵐'], true), ['麥當勞']);
+  const map = guessMapping(['提供者(餐廳店家)', '店家分類', '餐點分類', '品項名稱', '份量規格', '熱量(kcal)']);
+  assert.deepEqual(map, ['brand', 'group', 'category', 'name', 'serving', 'kcal']);
+  assert.deepEqual(guessMapping(['店家分類', '提供者(餐廳店家)', '品項名稱', '熱量(kcal)']).slice(0, 2), ['group', 'brand']);
+  const { foods } = rowsToFoods([['麥當勞', '🍔 速食', '主餐', '大麥克', '1份', '530']], map);
+  assert.equal(foods[0].group, '🍔 速食');
+});

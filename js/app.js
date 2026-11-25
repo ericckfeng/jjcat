@@ -15,7 +15,7 @@ import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, sho
 import { buildInsights } from './insights.js';
 import { APP_REV, APP_LABEL, parseLatest, requiredRev, minRevToWrite, deviceName, deviceRecord, upsertDevice, deviceRows } from './version.js';
 import { customFoodFromForm, formFromCustomFood, servingNutrients, servingKcal, servingText, searchMine, sortByUse, isPerServing, formFromManual } from './myfoods.js';
-import { packFromFile, searchPacks, groupHits, packRows, myFoodsFile, isMyFoodsFile, planMyFoodsImport, packsWithMine, looseMine, packFields, packFileWithMine, sharedPlan, withShared, libraryShops, pickShared, toggleShops, LIBRARY_GROUPS, OTHER_GROUP } from './packs.js';
+import { packFromFile, searchPacks, groupHits, packRows, myFoodsFile, isMyFoodsFile, planMyFoodsImport, packsWithMine, looseMine, packFields, packFileWithMine, sharedPlan, withShared, libraryShops, pickShared, toggleShops, LIBRARY_GROUPS, OTHER_GROUP, libraryThanks } from './packs.js';
 import { toCsv } from './lookup.js';
 import { normalizeBarcode, checkDigitOk, findByBarcode, offUrl, offToForm } from './barcode.js';
 import { computeBadges, badgesToShow, newBadges, remainText } from './achievements.js';
@@ -32,7 +32,7 @@ import { FEATURES, featureOn, featuresOff, BADGE_FEATURE } from './features.js';
 import { backupReminder, backupText, SNOOZE_DAYS } from './backup.js';
 import { normalizeInvite, gateState, cloudInviteFor, needCheck, waitSeconds, addFail, inviteMessage, FEEDBACK_MAX, canSendFeedback, feedbackInfo, feedbackMessage } from './invite.js';
 import { INVITE_URL } from './config.js';
-import { CONTRIB_PHOTOS, contribFood, contribProblem, contribMessage } from './contrib.js';
+import { CONTRIB_PHOTOS, contribFood, contribProblem, contribMessage, maskName, ANON } from './contrib.js';
 import { GLUCOSE_KINDS, glucoseKindLabel, bpReading, glucoseReading, bpAlert, glucoseAlert, bpText, glucoseText, vitalsSummary, dailyVitals } from './vitals.js';
 import { callGemini, buildRequest, mealPrompt, LABEL_PROMPT, MEAL_SCHEMA, LABEL_SCHEMA, PING_REQUEST, normalizeMeal, aiItemToFood, normalizeLabel, runAiCheck, checkReport, CHECK_KCAL } from './ai.js';
 
@@ -2026,7 +2026,8 @@ function currentBadges() {
       walk: num(d.steps) > 0 && num(d.steps) >= (state.targets.steps || 1) };
   });
   const weights = dates.filter(date => num((state.days[date] || {}).weight) != null).map(date => ({ date, kg: num(state.days[date].weight) }));
-  const res = computeBadges({ facts, weights, dir: weightDir(), today });
+  const helper = INVITE_URL && canSendFeedback(state.meta.invite) ? ((state.meta.contribStats && state.meta.contribStats.approved) || []) : null;
+  const res = computeBadges({ facts, weights, dir: weightDir(), today, helper });
   // 關掉的功能（喝水、睡眠…）不列那一組
   const off = new Set(featuresOff(state.profile));
   return { ...res, badges: res.badges.filter(b => !off.has(BADGE_FEATURE[b.group])) };
@@ -5588,6 +5589,17 @@ async function loadSharedPacks() {
   }
   sharedPacks = out;
 }
+// 我推薦的有幾樣被採用（同一組邀請碼的所有裝置一起算）：熱心貢獻者小成就、「謝謝你」提示。只存這台
+async function checkContribStats(who) {
+  const r = await callInvite({ action: 'myContribs', ...who });
+  if (!r.ok || !Array.isArray(r.approved)) return;
+  const before = state.meta.contribStats ? state.meta.contribStats.approved.length : null;
+  state.meta.contribStats = { sent: Number(r.sent) || 0, approved: r.approved.map(String).sort(), at: now() };
+  persistLocal();
+  const more = before == null ? 0 : state.meta.contribStats.approved.length - before;
+  if (more > 0) showToast('你推薦的食物有 ' + more + ' 樣被加進外食圖書館了，謝謝你！🙌');
+  renderMascot();
+}
 let sharedBusy = false;
 let lastSharedResult = null;   // 最近一次檢查：{ ok, changed, failed }（「立刻檢查」按鈕顯示結果用）
 async function checkSharedPacks(force = false) {
@@ -5603,6 +5615,7 @@ async function checkSharedPacks(force = false) {
     const who = { code: state.meta.invite.code, deviceId: state.meta.deviceId };
     const r = await callInvite({ action: 'packs', ...who });
     if (!r.ok || !Array.isArray(r.packs)) return;
+    checkContribStats(who);
     const plan = sharedPlan(m.files, r.packs);
     const versions = new Map(r.packs.map(x => [String(x.key), Number(x.version) || 0]));
     const done = [];
@@ -5652,6 +5665,8 @@ $('mf-contrib').addEventListener('click', () => {
   const myGroup = (groups.find(g => g.shops.some(x => x.brand === food.brand)) || {}).group || '';
   $('ctGroup').innerHTML = ['', ...new Set([...LIBRARY_GROUPS, ...groups.map(g => g.group)].filter(g => g !== OTHER_GROUP))].map(g => `<option value="${esc(g)}"${g === myGroup ? ' selected' : ''}>${esc(g || '不知道（讓管理者分）')}</option>`).join('');
   $('ctWhere').value = '';
+  if (state.meta.creditName == null) state.meta.creditName = maskName(state.meta.invite && state.meta.invite.name);
+  $('ctCredit').value = state.meta.creditName;
   $('ctWhat').textContent = '按「送出推薦」會把這樣食物的名稱和數字、店家、照片、在哪裡看到的，連同版本、裝置名稱、邀請碼和姓名，送到公測管理者的 Google 試算表和雲端硬碟。不會送出你的飲食記錄。照片裡請不要拍到人臉或個人資料。';
   setBox('ctNote', null, '');
   renderCtPhotos();
@@ -5686,9 +5701,10 @@ $('ctSendBtn').addEventListener('click', async () => {
   const btn = $('ctSendBtn');
   btn.disabled = true; btn.textContent = '送出中，照片比較久…';
   const r = await callInvite({ action: 'contrib', code: state.meta.invite.code, deviceId: state.meta.deviceId, deviceName: myDeviceName(), ver: APP_LABEL,
-    brand, group: $('ctGroup').value, where: $('ctWhere').value.trim(), food, photos: ctPhotos }, 90000);
+    brand, group: $('ctGroup').value, where: $('ctWhere').value.trim(), credit: $('ctCredit').value.trim() || ANON, food, photos: ctPhotos }, 90000);
   btn.disabled = false; btn.textContent = '送出推薦';
   if (!r.ok) { setBox('ctNote', 'err', contribMessage(r.reason)); return; }
+  state.meta.creditName = $('ctCredit').value.trim();   // 下次預填一樣的名字
   if (!state.meta.contribs) state.meta.contribs = {};
   state.meta.contribs[ctFood.id] = now();
   persistLocal();
@@ -5713,6 +5729,10 @@ function renderLibrary() {
     return;
   }
   $('libSummary').textContent = libraryCount();
+  const thanks = libraryThanks(sharedPacks);
+  $('libThanks').classList.toggle('hidden', !thanks.length);
+  $('libThanks').innerHTML = thanks.length ? '<div class="text-lg font-bold text-stone-900">🙏 感謝提供資料的朋友</div><p class="text-base text-stone-700 leading-relaxed">' +
+    thanks.map(t => esc(t.name) + '（' + t.n + ' 樣）').join('、') + '</p><p class="text-sm text-stone-500">在「我的食物」按「📮 推薦給外食圖書館」，被採用就會列在這裡。</p>' : '';
   $('libList').innerHTML = groups.map((g, gi) => {
     const onN = g.shops.filter(x => !off.has(x.brand)).length;
     const all = onN === g.shops.length;

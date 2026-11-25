@@ -463,8 +463,9 @@ test('投稿：我的食物 → 推薦給外食圖書館 → 沒照片不能送 
   await page.click('#ctSendBtn');
   await expect(page.locator('#toastMsg')).toContainText('已經送給管理者');
   const c = contribs[0];
-  expect(Object.keys(c).sort()).toEqual(['action', 'brand', 'code', 'deviceId', 'deviceName', 'food', 'group', 'photos', 'ver', 'where']);
+  expect(Object.keys(c).sort()).toEqual(['action', 'brand', 'code', 'credit', 'deviceId', 'deviceName', 'food', 'group', 'photos', 'ver', 'where']);
   expect(c).toMatchObject({ brand: '八方雲集', group: '🥟 麵食・水餃・小吃', where: '店家官網', food: { name: '韭菜鍋貼', serving: '10 顆', kcal: 520, p: 20, barcode: '4710088012345' } });
+  expect(c.credit).toBe('王○華');   // 感謝名單預設把姓名中間遮起來
   expect(c.photos).toHaveLength(1);
   expect(c.photos[0]).toMatch(/^data:image\/jpeg;base64,/);
   expect((await appState(page)).meta.contribs.cf_g).toBeGreaterThan(0);
@@ -535,4 +536,29 @@ test('外食圖書館：「立刻檢查」不用等半天就換新版', async ({
   await expect(page.locator('#libList')).toContainText('聯夏');
   await page.click('#libCheckBtn');
   await expect(page.locator('#libCheckNote')).toContainText('已經是最新版了');
+});
+
+test('投稿被採用：跳出謝謝你、熱心貢獻者小成就；外食圖書館列感謝名單', async ({ page }) => {
+  await fakeSheet(page, { codes: { 'JJ-4821': { issued: true, name: '王美華' } } });
+  const f = libraryFile();
+  f.foods.push({ id: 'l4', name: '宮保雞丁餐包', brand: '聯夏', group: '🥫 調理包・罐頭・冷凍食品', credit: '王○華', perServing: { kcal: 228 } });
+  await fakeShared(page, {}, { list: [{ key: 'lib', version: 1, file: f }] });
+  const stats = { sent: 2, approved: [] };
+  await page.route(URL_, async (r) => {
+    const req = JSON.parse(r.request().postData() || '{}');
+    if (req.action !== 'myContribs') return r.fallback();
+    return r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ ok: true, ...stats }) });
+  });
+  await seed(page, { ...member, meta: { ...member.meta, badgesSeen: [] } });
+  await openApp(page, { inviteUrl: URL_ });
+  await expect.poll(async () => ((await appState(page)).meta.contribStats || {}).sent, { timeout: 10000 }).toBe(2);
+  stats.approved = ['2026-11-25'];
+  await page.click('.mobile-nav-tab[data-tab=library]');
+  await page.click('#packList [data-screen="scr-library"]');
+  await expect(page.locator('#libThanks')).toContainText('王○華（1 樣）');
+  await page.click('#libCheckBtn');
+  await expect(page.locator('#toastMsg')).toContainText('有 1 樣被加進外食圖書館了');
+  await closeScreens(page);
+  await page.evaluate(() => document.querySelector('[data-screen="scr-badges"]').click());
+  await expect(page.locator('#badgeList')).toContainText('熱心貢獻者');
 });

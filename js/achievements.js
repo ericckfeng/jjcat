@@ -23,6 +23,9 @@ export const BADGE_GROUPS = [
     title: (n) => '走路達標 ' + n + ' 天', hint: '走到每天的步數下限（沒設下限，有記步數就算）' },
   { id: 'move', emoji: '🏃', name: '有運動', unit: '天', levels: [5, 20, 50, 100, 200],
     title: (n) => '有運動的日子 ' + n + ' 天', hint: '散步也算' },
+  // 投稿被採用（加進外食圖書館）：只有用邀請碼加入公測的才有這一組
+  { id: 'helper', emoji: '🙌', name: '熱心貢獻者', unit: '樣', levels: [1, 5, 20, 50],
+    title: (n) => n === 1 ? '熱心貢獻者' : '熱心貢獻者・採用 ' + n + ' 樣', hint: '我的食物按「📮 推薦給外食圖書館」，管理者採用就算' },
   // 體重往目標前進（沒有方向，例如體重正常、沒設目標，就沒有這一組）
   { id: 'kg', emoji: '🎯', name: '體重前進', unit: '公斤', levels: [1, 2, 3, 5, 8, 10, 15, 20],
     title: (n, dir) => (dir < 0 ? '少了 ' : '增加了 ') + n + ' 公斤',
@@ -37,7 +40,8 @@ export const BADGE_GROUPS = [
 // 回傳 { stats, badges }
 //   stats：{ streak, todayLogged, longest, days, water, weigh, sleep, move, walk, kg }
 //   badges：每一組每一級 { id, group, level, emoji, title, life, earnedOn（日期或 null）, have, need }
-export function computeBadges({ facts = [], weights = [], dir = 0, today }) {
+// helper：投稿被採用的日期（遞增）；null＝沒有加入公測，不列這一組
+export function computeBadges({ facts = [], weights = [], dir = 0, today, helper = null }) {
   const earned = {};   // id → 第一次達到的日期
   const mark = (id, date) => { if (!earned[id]) earned[id] = date; };
   const count = { days: 0, water: 0, weigh: 0, sleep: 0, move: 0, walk: 0 };
@@ -72,11 +76,14 @@ export function computeBadges({ facts = [], weights = [], dir = 0, today }) {
     // 現在的進度用最近一次（最大值只用來記「哪天達到」）
     kg = Math.max(0, Math.round((weights[weights.length - 1].kg - start) * dir * 10) / 10);
   }
-  const stats = { streak, todayLogged, longest, ...count, kg };
-  const haveOf = { streak: longest, days: count.days, water: count.water, weigh: count.weigh, sleep: count.sleep, move: count.move, walk: count.walk, kg };
+  const helped = Array.isArray(helper) ? helper.length : 0;
+  if (helped) BADGE_GROUPS.find(g => g.id === 'helper').levels.forEach(n => { if (helped >= n) mark('helper-' + n, helper[n - 1]); });
+  const stats = { streak, todayLogged, longest, ...count, kg, helper: helped };
+  const haveOf = { streak: longest, days: count.days, water: count.water, weigh: count.weigh, sleep: count.sleep, move: count.move, walk: count.walk, kg, helper: helped };
   const badges = [];
   BADGE_GROUPS.forEach(g => {
     if (g.id === 'kg' && !dir) return;
+    if (g.id === 'helper' && !Array.isArray(helper)) return;
     g.levels.forEach(n => {
       const id = g.id + '-' + n;
       badges.push({ id, group: g.id, level: n, emoji: g.emoji, title: g.title(n, dir), life: g.life ? g.life(n, dir) : '',
@@ -111,5 +118,6 @@ export function remainText(b) {
   const g = BADGE_GROUPS.find(x => x.id === b.group);
   const left = Math.round((b.need - (b.have || 0)) * 10) / 10;
   if (b.group === 'streak') return '最長連續 ' + (b.have || 0) + ' 天，再 ' + left + ' 天';
+  if (b.group === 'helper') return '已經被採用 ' + (b.have || 0) + ' 樣，再 ' + left + ' 樣';
   return '已經 ' + (b.have || 0) + ' ' + g.unit + '，再 ' + left + ' ' + g.unit;
 }

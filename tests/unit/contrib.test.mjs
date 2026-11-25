@@ -24,3 +24,30 @@ test('投稿帶條碼（包裝食品）', () => {
   assert.equal(contribFood({ name: '紅燒牛肉調理包', barcode: '4710088012345', serving: { label: '1 包' }, perServing: { kcal: 250 } }).barcode, '4710088012345');
   assert.equal(contribFood({ name: '鍋貼', perServing: { kcal: 1 } }).barcode, undefined);
 });
+
+test('感謝名單的名字：中文中間遮起來、英文留第一個字和字首', async () => {
+  const { maskName } = await import('../../js/contrib.js');
+  assert.equal(maskName('王美華'), '王○華');
+  assert.equal(maskName('歐陽美華'), '歐○○華');
+  assert.equal(maskName('王華'), '王○');
+  assert.equal(maskName('Jian Kai FENG'), 'Jian K. F.');
+  assert.equal(maskName(''), '');
+});
+
+test('外食圖書館的感謝名單、熱心貢獻者小成就', async () => {
+  const { libraryThanks, guessMapping } = await import('../../js/packs.js');
+  const { computeBadges, remainText } = await import('../../js/achievements.js');
+  assert.deepEqual(libraryThanks([{ foods: [{ credit: '王○華' }, { credit: '小明' }, { credit: '王○華' }, {}] }]), [{ name: '王○華', n: 2 }, { name: '小明', n: 1 }]);
+  assert.equal(guessMapping(['品項名稱', '熱量(kcal)', '投稿人'])[2], 'credit');
+  const none = computeBadges({ today: '2026-11-25' });
+  assert.equal(none.badges.some(b => b.group === 'helper'), false);   // 沒加入公測：沒有這一組
+  const zero = computeBadges({ today: '2026-11-25', helper: [] });
+  const first = zero.badges.find(b => b.id === 'helper-1');
+  assert.equal(first.earnedOn, null);
+  assert.equal(remainText(first), '已經被採用 0 樣，再 1 樣');
+  const some = computeBadges({ today: '2026-11-25', helper: ['2026-11-20', '2026-11-21', '2026-11-22', '2026-11-23', '2026-11-25'] });
+  assert.equal(some.badges.find(b => b.id === 'helper-1').earnedOn, '2026-11-20');
+  assert.equal(some.badges.find(b => b.id === 'helper-5').earnedOn, '2026-11-25');
+  assert.equal(some.badges.find(b => b.id === 'helper-5').title, '熱心貢獻者・採用 5 樣');
+  assert.equal(some.badges.find(b => b.id === 'helper-20').earnedOn, null);
+});

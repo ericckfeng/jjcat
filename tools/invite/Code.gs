@@ -29,7 +29,7 @@ const PHOTO_FOLDER = '飲控隨身記 投稿照片';   // 管理者雲端硬碟�
 const MASTER = '外食圖書館總表';   // 外食圖書館的原始資料（一列一樣食物）：整理工具「從試算表讀總表」→ 檢查 →「發佈給大家」
 const SHARED_FOLDER = '飲控隨身記 共用資料庫';   // 發佈的資料庫檔放這裡（不公開，程式自己管）
 // 和外食圖書館試算表一樣的欄位：「整理通過的投稿」排好，複製貼上就好
-const LIB_HEAD = ['提供者(餐廳店家)', '店家分類', '餐點分類', '品項名稱', '份量規格', '熱量(kcal)', '蛋白質(g)', '脂肪(g)', '飽和脂肪(g)', '反式脂肪(g)', '碳水化合物(g)', '糖(g)', '鈉(mg)', '資料來源說明', '條碼'];
+const LIB_HEAD = ['提供者(餐廳店家)', '店家分類', '餐點分類', '品項名稱', '份量規格', '熱量(kcal)', '蛋白質(g)', '脂肪(g)', '飽和脂肪(g)', '反式脂肪(g)', '碳水化合物(g)', '糖(g)', '鈉(mg)', '資料來源說明', '條碼', '投稿人'];
 const SHARED = '共用資料庫';
 const GROUPS = '分類';   // 外食圖書館的分類（一列一個）：「投稿」「外食圖書館總表」的店家分類欄用它做下拉選單；加分類＝在這裡多寫一列
 // 預設的 15 類，和 App 的 js/packs.js LIBRARY_GROUPS 一樣（App 投稿時固定列出這些）
@@ -139,7 +139,7 @@ function doPost(e) {
     return out_({ ok: false, reason: 'error', detail: /^admin/.test(String(req.action || '')) ? String(err && err.message || err).slice(0, 300) : undefined });
   }
 }
-const VERSION = '2026-11-25h';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
+const VERSION = '2026-11-25i';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
 function doGet() { return out_({ ok: true, app: 'jjcat-invite', version: VERSION }); }
 function out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
 
@@ -198,6 +198,7 @@ function handle_(req) {
   }
   if (req.action === 'feedback') return feedback_(req, code, name, here);
   if (req.action === 'contrib') return contrib_(req, code, name, here);
+  if (req.action === 'myContribs') return myContribs_(code, here);
   if (req.action === 'packs' || req.action === 'pack') {
     if (!here) return { ok: false, reason: 'device' };
     const live = sharedRows_();
@@ -271,7 +272,7 @@ function feedback_(req, code, name, here) {
 }
 
 // ---- 投稿：推薦一樣食物給外食圖書館（一定要有照片，管理者人工審核）----
-const CONTRIB_HEAD = ['時間', '邀請碼', '姓名', '裝置名稱', '版本', '店家', '店家分類', '品名', '份量', '熱量(kcal)', '蛋白質(g)', '脂肪(g)', '飽和脂肪(g)', '反式脂肪(g)', '碳水(g)', '糖(g)', '鈉(mg)', '膳食纖維(g)', '在哪裡看到的', '照片', '通過', '已併入', '備註', '裝置ID', '條碼'];
+const CONTRIB_HEAD = ['時間', '邀請碼', '姓名', '裝置名稱', '版本', '店家', '店家分類', '品名', '份量', '熱量(kcal)', '蛋白質(g)', '脂肪(g)', '飽和脂肪(g)', '反式脂肪(g)', '碳水(g)', '糖(g)', '鈉(mg)', '膳食纖維(g)', '在哪裡看到的', '照片', '通過', '已併入', '備註', '裝置ID', '條碼', '感謝名單'];
 function num_(v) {
   if (v === '' || v == null) return '';
   const n = Number(v);
@@ -322,7 +323,7 @@ function contrib_(req, code, name, here) {
     if (sh.getLastColumn() < CONTRIB_HEAD.length) sh.getRange(1, 1, 1, CONTRIB_HEAD.length).setValues([CONTRIB_HEAD]);   // 舊的分頁補上新欄位（條碼）
     const barcode = String(f.barcode || '').replace(/\D/g, '').slice(0, 14);
     sh.appendRow([now, code, plain_(name || here.who, 30), here.dev, plain_(req.ver, 40), brand, plain_(req.group, 30), fname, plain_(f.serving, 40),
-      kcal, num_(f.p), num_(f.f), num_(f.sfa), num_(f.tfa), num_(f.c), num_(f.sugar), num_(f.na), num_(f.fiber), plain_(req.where, 60), urls.join('\n'), false, false, '', here.id, barcode ? "'" + barcode : '']);
+      kcal, num_(f.p), num_(f.f), num_(f.sfa), num_(f.tfa), num_(f.c), num_(f.sugar), num_(f.na), num_(f.fiber), plain_(req.where, 60), urls.join('\n'), false, false, '', here.id, barcode ? "'" + barcode : '', plain_(req.credit, 20) || '熱心的朋友']);
     sh.getRange(sh.getLastRow(), 21, 1, 2).insertCheckboxes();
     return { ok: true };
   } finally {
@@ -338,11 +339,11 @@ function mergeApproved() {
   const n = sh ? sh.getLastRow() - 1 : 0;
   const rows = n > 0 ? sh.getRange(2, 1, n, CONTRIB_HEAD.length).getValues() : [];
   let head = master.getRange(1, 1, 1, master.getLastColumn()).getDisplayValues()[0];
-  if (head.indexOf('條碼') < 0) { master.getRange(1, head.length + 1).setValue('條碼'); head = head.concat('條碼'); }   // 總表補上條碼欄
+  ['條碼', '投稿人'].forEach(h => { if (head.indexOf(h) < 0) { master.getRange(1, head.length + 1).setValue(h); head = head.concat(h); } });   // 總表補上新欄位
   const picked = rows.map((r, i) => [r, i + 2]).filter(([r]) => r[20] === true && r[21] !== true);
   if (!picked.length) { ss.toast('沒有「通過」又還沒「已併入」的投稿。'); return; }
   const out = picked.map(([r]) => {
-    const lib = [r[5], r[6], '', r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14], r[15], r[16], '使用者投稿' + (r[18] ? '：' + r[18] : ''), r[24] ? "'" + String(r[24]).replace(/^'/, '') : ''];
+    const lib = [r[5], r[6], '', r[7], r[8], r[9], r[10], r[11], r[12], r[13], r[14], r[15], r[16], '使用者投稿' + (r[18] ? '：' + r[18] : ''), r[24] ? "'" + String(r[24]).replace(/^'/, '') : '', r[25] || '熱心的朋友'];
     return head.map(h => { const k = LIB_HEAD.indexOf(h); return k < 0 ? '' : lib[k]; });
   });
   master.getRange(master.getLastRow() + 1, 1, out.length, head.length).setValues(out);
@@ -474,4 +475,15 @@ function groupMenus_() {
 function updateGroupMenus() {
   groupMenus_();
   SpreadsheetApp.getActive().toast('「投稿」和「外食圖書館總表」的店家分類欄已經是下拉選單了。要加分類，到「' + GROUPS + '」分頁往下寫。');
+}
+
+// 這組邀請碼推薦了幾樣、哪幾樣被採用（打勾「通過」）：App 的熱心貢獻者小成就、「謝謝你」提示用。只回數字和日期
+function myContribs_(code, here) {
+  if (!here) return { ok: false, reason: 'device' };
+  const sh = SpreadsheetApp.getActive().getSheetByName(CONTRIB);
+  const n = sh ? sh.getLastRow() - 1 : 0;
+  const rows = n > 0 ? sh.getRange(2, 1, n, 22).getValues() : [];
+  const mine = rows.filter(r => String(r[1]) === code);
+  const day = (d) => d instanceof Date ? Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd') : String(d).slice(0, 10);
+  return { ok: true, sent: mine.length, approved: mine.filter(r => r[20] === true).map(r => day(r[0])).sort() };
 }

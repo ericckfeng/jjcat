@@ -29,7 +29,8 @@ export function hashId(s) {
 export const PACK_FIELDS = [
   ['name', '名稱', ['品項名稱', '食物名稱', '品名', '名稱', '品項', '餐點名稱', '菜名'], ['別名']],
   ['brand', '店家／品牌', ['提供者', '店家', '餐廳', '品牌', '廠商', '店名'], ['店家分類', '店家類型']],
-  ['group', '店家分類', ['店家分類', '店家類型']],   // 外食圖書館的分類（速食、手搖飲…），依店家分組讓人勾選
+  ['group', '店家分類', ['店家分類', '店家類型']],
+  ['credit', '投稿人', ['投稿人', '感謝']],   // 外食圖書館：使用者投稿、審核通過的，感謝名單用（投稿時自己選的名字）   // 外食圖書館的分類（速食、手搖飲…），依店家分組讓人勾選
   ['category', '分類', ['餐點分類', '分類', '類別']],
   ['basis', '計量方式', ['計量方式']],
   ['servingG', '每份克數', ['每份克數', '克數', '重量']],
@@ -177,6 +178,8 @@ export function rowsToFoods(rows, mapping, { askBy = 'serving' } = {}) {
     if (category) food.category = category;
     const group = cleanText(get(r, 'group'));
     if (group) food.group = group;
+    const credit = cleanText(get(r, 'credit'));
+    if (credit) food.credit = credit;
     const aliases = cleanText(get(r, 'aliases')).split(/[、,，;；]/).map(s => s.trim()).filter(Boolean);
     if (aliases.length) food.aliases = aliases;
     ['note', 'source', 'barcode'].forEach(k => { const v = cleanText(get(r, k)); if (v) food[k] = v; });
@@ -533,4 +536,11 @@ export function toggleShops(off, brands, on) {
   const set = new Set(off || []);
   brands.forEach(b => { if (on) set.delete(b); else set.add(b); });
   return [...set].sort();
+}
+
+// 外食圖書館的感謝名單：投稿被採用的（food.credit），樣數多的在前
+export function libraryThanks(shared) {
+  const count = new Map();
+  (shared || []).forEach(p => (p.foods || []).forEach(f => { if (f.credit) count.set(f.credit, (count.get(f.credit) || 0) + 1); }));
+  return [...count].map(([name, n]) => ({ name, n })).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, 'zh-Hant'));
 }

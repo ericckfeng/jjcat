@@ -42,3 +42,18 @@ export function contribMessage(reason) {
     network: '連不上，或照片太大送不完。請確認網路（最好用 Wi-Fi）再試一次。'
   }[reason] || '出了點問題，請稍後再試一次。';
 }
+
+// 感謝名單上的名字（預設）：中文名中間遮起來「王○華」「王○」；英文名留第一個字＋後面的字首「Jian K. F.」
+export const ANON = '熱心的朋友';
+export function maskName(name) {
+  const n = String(name || '').trim();
+  if (!n) return '';
+  if (/^[\x00-\x7F\s]+$/.test(n)) {
+    const w = n.split(/\s+/).filter(Boolean);
+    return [w[0], ...w.slice(1).map(x => x[0].toUpperCase() + '.')].join(' ');
+  }
+  const c = [...n.replace(/\s+/g, '')];
+  if (c.length <= 1) return c.join('');
+  if (c.length === 2) return c[0] + '○';
+  return c[0] + '○'.repeat(c.length - 2) + c[c.length - 1];
+}

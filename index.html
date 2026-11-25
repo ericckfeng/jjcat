@@ -1001,6 +1001,8 @@
         <button type="button" id="ctAddPhoto" class="btn-secondary btn-xl w-full">📷 拍照或選照片</button>
         <input id="ctPhotoInput" type="file" accept="image/*" class="hidden" />
       </div>
+      <label class="block"><span class="scr-label">感謝名單上的名字</span><input id="ctCredit" type="text" maxlength="20" class="field text-lg" placeholder="留空就寫「熱心的朋友」" /></label>
+      <p class="text-sm text-stone-500 -mt-2">採用後，外食圖書館的感謝名單會列這個名字。可以改成暱稱。</p>
       <label class="block"><span class="scr-label">在哪裡看到的（可不填）</span><input id="ctWhere" type="text" maxlength="60" class="field text-lg" placeholder="例如：包裝背面、店家官網" /></label>
       <p id="ctWhat" class="text-base text-stone-600 leading-relaxed"></p>
       <p id="ctNote" class="hidden rounded-2xl whitespace-pre-line p-3 text-base leading-relaxed"></p>
@@ -1015,6 +1017,7 @@
       <p class="text-lg text-stone-700 leading-relaxed">勾你會去的店，查食物和外食小幫手就只列這些店。不小心取消了，再勾回來就好。</p>
       <p id="libSummary" class="text-lg font-bold text-emerald-800"></p>
       <div id="libList" class="space-y-4"></div>
+      <div id="libThanks" class="hidden rounded-2xl bg-amber-50 border border-amber-200 p-4 space-y-1"></div>
       <button type="button" id="libCheckBtn" class="btn-secondary w-full">🔄 立刻檢查外食圖書館有沒有新版</button>
       <p id="libCheckNote" class="hidden rounded-2xl p-3 text-base leading-relaxed"></p>
     </div>

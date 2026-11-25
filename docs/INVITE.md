@@ -18,7 +18,8 @@
    - 執行身分：**我**
    - 誰可以存取：**所有人**
    - 按「部署」。第一次會要求授權：選你的帳號 →「進階」→「前往（不安全）」→「允許」。這是你自己寫的程式要讀寫你自己的試算表，Google 才會這樣問。
-4. 複製「網頁應用程式」的網址（`https://script.google.com/macros/s/…/exec`），交給 Claude，填進 `js/config.js` 的 `INVITE_URL`，發佈新版後就開始用邀請碼。
+4. 確認：在瀏覽器打開網頁應用程式網址，看到的 `version` 要和 `Code.gs` 開頭附近的 `VERSION` 一樣（舊的沒有 `version`）。
+5. 複製「網頁應用程式」的網址（`https://script.google.com/macros/s/…/exec`），交給 Claude，填進 `js/config.js` 的 `INVITE_URL`，發佈新版後就開始用邀請碼。
 5. 回到試算表，重新整理一次，上方會多一個「公測邀請碼」選單。
 
 > 之後如果 Code.gs 有更新：「部署」→「管理部署作業」→ 鉛筆圖示 → 版本選「新版本」→「部署」。這樣網址不會變，不用改 App。

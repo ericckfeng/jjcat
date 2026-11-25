@@ -55,7 +55,8 @@ function doPost(e) {
   try { req = JSON.parse(e.postData.contents || '{}'); } catch (err) { return out_({ ok: false, reason: 'bad' }); }
   try { return out_(handle_(req)); } catch (err) { return out_({ ok: false, reason: 'error' }); }
 }
-function doGet() { return out_({ ok: true, app: 'jjcat-invite' }); }
+const VERSION = '2026-11-25';    // 改了這個檔案就改日期：打開網頁應用程式網址看得到，確認部署的是新版
+function doGet() { return out_({ ok: true, app: 'jjcat-invite', version: VERSION }); }
 function out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
 
 function normCode_(code) {

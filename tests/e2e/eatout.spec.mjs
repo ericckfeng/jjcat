@@ -53,6 +53,9 @@ test('選麥當勞 → 午餐建議 630 大卡內 → 第 1 組放進購物車 �
   await expect(first).toContainText('烤雞沙拉');
   await expect(first).toContainText('無糖綠茶');
   await expect(first).toContainText('蛋白質 34 克，比較有飽足感');
+  // 有蛋白質目標（80 克）：提示點了之後今天還差多少；碳水、脂肪沒目標不提
+  await expect(first).toContainText('點這組之後，今天：蛋白質還差 46 克');
+  await expect(page.locator('#eoList')).not.toContainText('碳水還');
   await expect(page.locator('#eoList')).not.toContainText('千島醬');
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   // 多 50 大卡：大麥克＋烤雞沙拉＝680 放得下
@@ -64,6 +67,7 @@ test('選麥當勞 → 午餐建議 630 大卡內 → 第 1 組放進購物車 �
   await expect(page.locator('#scr-eatout')).toBeHidden();
   await expect(page.locator('#foodCart')).toContainText('這一餐已選 3 樣');
   await expect(page.locator('#foodCart')).toContainText('合計 680 kcal');
+  await expect(page.locator('#foodCart')).toContainText('記下這些之後，今天：蛋白質還差 35 克');
   await page.click('#foodCartSaveBtn');
   const s = await appState(page);
   const lunch = s.logs[await todayOf(page)].filter(i => i.meal === 'lunch');

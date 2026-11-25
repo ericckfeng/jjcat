@@ -25,7 +25,7 @@ import { partyTemplate, startCounts, partyEntries, partyTotals } from './party.j
 import { ACTIVITY, GOALS, PROTEIN, ageFrom, calcBmr, calcTargets, waterGoal, recalcHint, latestInbodyBmr, katchBmr, latestBodyComp, targetWeightFromBodyFat, BODY_FAT_LIMIT } from './targets.js';
 import { calorieBank, bankMacros, weekOf } from './bank.js';
 import { mealPastePrompt, LABEL_PASTE_PROMPT, mealFromPaste, labelFromPaste, foodDiaryLines, weekReviewPrompt } from './ai.js';
-import { brandsOf, mealBudget, suggestMeals } from './eatout.js';
+import { brandsOf, mealBudget, suggestMeals, macroOutlook } from './eatout.js';
 import { wallDays, wallPhotoCount } from './photowall.js';
 import { splitAdvice, activeAdvice, todaysAdvice, toggleDone } from './advice.js';
 import { FEATURES, featureOn, featuresOff, BADGE_FEATURE } from './features.js';
@@ -822,6 +822,19 @@ function cartEntryFor(food, g, weighed) {
 function macroText(t) {
   return MACRO_KEYS.filter(k => t[k] != null).map(k => MACRO_META[k].label + ' ' + fmt(t[k], 1) + 'g').join('・');
 }
+// 今天的三大營養素目標（熱量銀行調過今天的熱量時跟著調，和首頁一樣）
+function macroTargetsFor(date) {
+  const bank = bankFor(date);
+  return bank ? { ...state.targets, ...bankMacros(state.targets, bank.todayTarget) } : state.targets;
+}
+// 吃了 add 之後今天還差多少（js/eatout.js 的 macroOutlook）；沒有目標就是空字串
+function macroOutlookHTML(eaten, add, lead) {
+  const list = macroOutlook({ targets: macroTargetsFor(ui.date), eaten, add });
+  if (!list.length) return '';
+  const cls = { short: 'text-amber-800', over: 'text-rose-700', room: 'text-stone-700', ok: 'text-emerald-800' };
+  return `<div class="text-base leading-relaxed"><span class="text-stone-600">${esc(lead)}</span>${list.map(x =>
+    `<span class="font-semibold ${cls[x.state]}">${x.state === 'ok' ? '✓ ' : ''}${esc(x.text)}</span>`).join('、')}</div>`;
+}
 function renderFoodCart() {
   const box = $('foodCart');
   const has = foodCart.length > 0;
@@ -838,6 +851,7 @@ function renderFoodCart() {
       <button type="button" data-cart-del="${c.key}" class="chip-btn chip-lg shrink-0" aria-label="拿掉">✕</button>
     </li>`).join('')}</ul>
     <div class="text-base text-stone-800"><span class="font-bold tabular-nums">合計 ${t.kcal} kcal</span>${macroText(t) ? '<br><span class="text-sm text-stone-600">' + esc(macroText(t)) + '</span>' : ''}</div>
+    ${macroOutlookHTML(dayTotals(ui.date), t, '記下這些之後，今天：')}
     ${foodCart.length > 1 ? '<button type="button" data-cart-combo class="btn-secondary w-full">🍱 這幾樣存成套餐</button>' : ''}`;
   $('foodCartSaveBtn').textContent = '記到' + MEAL_META[ui.meal].label + '（' + foodCart.length + ' 樣）';
 }
@@ -4168,15 +4182,22 @@ function renderEatoutPlan() {
     ? label + '建議 ' + b.budget + ' 大卡以內（今天目標 ' + b.target + '，已經吃了 ' + b.eaten + '）'
     : '今天的熱量差不多用完了（目標 ' + b.target + '，已經吃了 ' + b.eaten + '）。真的餓，選無糖飲料或清淡的，也可以按「多 50 大卡」看看。';
   eo.list = suggestMeals(eatoutFoods(), b.budget);   // 吃完了也算：飲料店還有無糖茶
+  // 已經記的＋購物車裡還沒記的，加上這一組，今天三大營養素還差多少（只提示，不限制選哪一組）
+  const day = dayTotals(ui.date);
+  const cart = sumNutr(foodCart.map(x => x.entry));
+  const eaten = { p: day.p + (cart.p || 0), c: day.c + (cart.c || 0), f: day.f + (cart.f || 0) };
+  const hasMacroT = MACRO_KEYS.some(k => macroTargetsFor(ui.date)[k] > 0);
   const line = (t) => [['蛋白質', t.p], ['碳水', t.c], ['脂肪', t.f]].filter(x => x[1] != null).map(x => x[0] + ' ' + x[1] + ' 克').join('・');
   $('eoList').innerHTML = eo.list.length ? eo.list.map((c, i) => `<div class="rounded-2xl border border-stone-200 bg-white p-3 space-y-2">
       <div class="text-lg font-bold text-stone-900">第 ${i + 1} 組・<span class="tabular-nums">${c.total.kcal}</span> 大卡</div>
       <ul class="space-y-1">${c.items.map(it => `<li class="text-lg text-stone-800 leading-snug break-words">・${esc(it.food.name)}${it.byServing ? '' : ' ' + it.amount + 'g'}</li>`).join('')}</ul>
       <div class="text-sm text-stone-600">${line(c.total)}</div>
+      ${macroOutlookHTML(eaten, c.total, '點這組之後，今天：')}
       ${c.notes.map(n => `<div class="text-base ${/偏/.test(n) ? 'text-amber-800' : 'text-emerald-800'}">${/偏/.test(n) ? '！' : '✓'} ${esc(n)}</div>`).join('')}
       <button type="button" data-eo-use="${i}" class="btn-primary w-full">就點這個，放進${label}</button>
     </div>`).join('')
     : (b.budget > 0 ? '<p class="text-base text-stone-600 leading-relaxed">這家店的東西都超過 ' + b.budget + ' 大卡。可以按「多 50 大卡」，或點一份、和別人分著吃。</p>' : '');
+  if (eo.list.length && !hasMacroT) $('eoList').insertAdjacentHTML('beforeend', '<p class="text-sm text-stone-500 leading-relaxed">在右上 ⚙️ 設定 → 每日目標填上蛋白質、碳水、脂肪，這裡會告訴你點了之後今天還差多少。</p>');
 }
 $('eoSearch').addEventListener('input', renderEatoutBrands);
 // 這家有新菜：存進有這家店的資料庫（品項最多的那個），店家先填好

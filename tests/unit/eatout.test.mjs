@@ -1,7 +1,7 @@
 // 外食點餐小幫手（js/eatout.js）
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { roleOf, portionOf, brandsOf, mealBudget, suggestMeals } from '../../js/eatout.js';
+import { roleOf, portionOf, brandsOf, mealBudget, suggestMeals, macroOutlook } from '../../js/eatout.js';
 
 const F = (name, kcal, p, extra = {}) => ({ id: name, name, brand: '麥當勞', perServing: { kcal, p, ...(extra.n || {}) }, ...extra });
 
@@ -68,4 +68,21 @@ test('看不出主餐的店（飲料店）：一樣或兩樣；預算太少就�
   assert.equal(roleOf({ name: '四季春+珍波椰(大杯/無糖)', category: '找口感/特調' }), 'drink');
   assert.ok(out.every(c => c.total.kcal <= 400));
   assert.deepEqual(suggestMeals(tea, 0).map(c => c.total.kcal), [0]);   // 今天吃完了：飲料店還是可以喝無糖茶
+});
+
+test('三大營養素提示：吃了這組之後今天還差多少；沒目標、沒資料的不提', () => {
+  const targets = { p: 80, c: 200, f: 50 };
+  const out = macroOutlook({ targets, eaten: { p: 30, c: 100, f: 30 }, add: { p: 25, c: 60, f: 28 } });
+  assert.deepEqual(out.map(x => [x.k, x.state, x.text]), [
+    ['p', 'short', '蛋白質還差 25 克'],
+    ['c', 'room', '碳水還可以 40 克'],
+    ['f', 'over', '脂肪超過 8 克']
+  ]);
+  // 差一點點（10% 以內）算剛好；蛋白質超過也是「夠了」
+  const ok = macroOutlook({ targets, eaten: { p: 70, c: 150, f: 40 }, add: { p: 20, c: 45, f: 8 } });
+  assert.deepEqual(ok.map(x => x.text), ['蛋白質夠了', '碳水剛好', '脂肪剛好']);
+  // 沒有目標、或這組沒有脂肪資料：不提
+  assert.deepEqual(macroOutlook({ targets: { p: 80 }, eaten: {}, add: { p: 10, c: 5 } }).map(x => x.k), ['p']);
+  assert.deepEqual(macroOutlook({ targets, eaten: {}, add: { p: 10, c: 5, f: null } }).map(x => x.k), ['p', 'c']);
+  assert.deepEqual(macroOutlook({ targets: {}, eaten: {}, add: { p: 10 } }), []);
 });

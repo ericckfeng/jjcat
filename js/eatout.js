@@ -128,3 +128,29 @@ function notesOf(t, items) {
   if (t.na >= 1500) notes.push('鈉 ' + t.na + ' 毫克，偏鹹，其他餐清淡一點');
   return notes;
 }
+
+// 選了這一組之後，今天的三大營養素還差多少（只是提示，不影響排序、不限制選哪一組）
+// targets／eaten／add：{ p, c, f }（克）。沒有目標、或這組沒有這個營養素的資料就不提（算不準）
+// 回傳 [{ k, label, target, after, gap, state, text }]；
+// 蛋白質：差 → short、夠了 → ok；碳水、脂肪：還有空間 → room、差不多 → ok、超過 → over
+const MACRO_LABEL = { p: '蛋白質', c: '碳水', f: '脂肪' };
+export function macroOutlook({ targets, eaten, add }) {
+  const out = [];
+  ['p', 'c', 'f'].forEach(k => {
+    const target = Number(targets && targets[k]) || 0;
+    if (target <= 0 || !add || add[k] == null) return;
+    const after = (Number(eaten && eaten[k]) || 0) + (Number(add[k]) || 0);
+    const gap = Math.round(target - after);
+    const tol = Math.max(3, target * 0.1);
+    const label = MACRO_LABEL[k];
+    let state, text;
+    if (k === 'p') {
+      state = gap > tol ? 'short' : 'ok';
+      text = state === 'short' ? label + '還差 ' + gap + ' 克' : label + '夠了';
+    } else if (gap > tol) { state = 'room'; text = label + '還可以 ' + gap + ' 克'; }
+    else if (gap < -tol) { state = 'over'; text = label + '超過 ' + (-gap) + ' 克'; }
+    else { state = 'ok'; text = label + '剛好'; }
+    out.push({ k, label, target, after: r1(after), gap, state, text });
+  });
+  return out;
+}

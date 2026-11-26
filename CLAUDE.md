@@ -45,7 +45,7 @@ npm run test:e2e       # 瀏覽器測試：舊版備份檔匯入相容性＋主�
 | `js/cloud.js` | Google OAuth（整頁跳轉、`drive.file` 權限）與 Drive API |
 | `js/db.js` | 照片存 IndexedDB |
 | `js/foods.js` | **純函式**：食物資料庫的克數換算、生熟重、六大類份數、搜尋、熱量密度（有單元測試） |
-| `js/meals.js` | **純函式**：購物車合計 `sumNutr`、複製某一餐 `copyEntries`（有單元測試） |
+| `js/meals.js` | **純函式**：購物車合計 `sumNutr`、複製某一餐 `copyEntries`、修改記錄改份量（`entryPortion`、`scaleEntry`、`renamePortion`）（有單元測試） |
 | `js/insights.js` | **純函式**：跨模組提醒（吃多後體重上升是水分、睡太少、連兩天沒排便），由小芽說出來；小芽關掉時改用首頁「小提醒」卡片（有單元測試） |
 | `js/targets.js` | **純函式**：依體重試算目標（Mifflin-St Jeor、熱量底線、三大營養素、喝水目標、重算提醒）（有單元測試） |
 | `js/highlights.js` | **純函式**：營養師報告頂端的「本週重點」（有單元測試） |

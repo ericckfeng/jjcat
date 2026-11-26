@@ -1460,6 +1460,17 @@
           </label>
           <label class="block"><span class="lbl">時間</span><input id="editLogTimeInput" type="time" class="field px-2" /></label>
         </div>
+        <!-- 份量：改幾克／幾份，熱量和營養素照比例自動換算 -->
+        <div id="editPortion" class="hidden rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-2">
+          <div class="flex items-center gap-2 flex-wrap">
+            <label for="editPortionInput" id="editPortionLabel" class="text-base font-semibold text-stone-800">吃了</label>
+            <input id="editPortionInput" type="number" inputmode="decimal" min="0" max="5000" step="any" class="field w-28 text-center font-semibold tabular-nums bg-white" />
+            <span id="editPortionUnit" class="text-base text-stone-800">g</span>
+          </div>
+          <p id="editPortionRef" class="text-base text-stone-700 leading-relaxed whitespace-pre-line"></p>
+          <div id="editPortionChips" class="flex flex-wrap gap-2"></div>
+          <p class="text-sm text-stone-600">改份量，熱量和營養素會照比例自動換算。</p>
+        </div>
         <div id="editLabelCalc" data-label-calc="edit"></div>
         <div class="rounded-xl border border-stone-200 bg-stone-50/60 p-3">
           <div class="text-sm text-stone-600 mb-2">以下為這筆的「總量」</div>

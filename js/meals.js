@@ -145,3 +145,38 @@ export function nightSummary(logs, dates) {
   });
   return { days: Object.keys(byDate).length, entries, kcal: Math.round(kcal), byDate };
 }
+
+// 修改記錄時改份量：這筆是「幾克」「幾份」（食物以份計）還是「×幾份」（自己輸入的）
+//   回傳 { field, unit: 'g'|'serving', amount }
+export function entryPortion(item) {
+  const pos = (v) => Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0;
+  if (pos(item && item.servings)) return { field: 'servings', unit: 'serving', amount: pos(item.servings) };
+  if (pos(item && item.grams)) return { field: 'grams', unit: 'g', amount: pos(item.grams) };
+  return { field: 'multiplier', unit: 'serving', amount: pos(item && item.multiplier) || 1 };
+}
+
+// 份量從 from 改成 to：熱量、三大營養素、六大類、纖維照比例換算（沒有值的維持沒有）
+export function scaleEntry(nutr, from, to) {
+  const k = Number(to) / Number(from);
+  const out = { kcal: 0, p: null, c: null, f: null, ex: null };
+  if (!(k > 0) || !Number.isFinite(k)) return { ...out, ...nutr };
+  out.kcal = Math.round((Number(nutr.kcal) || 0) * k);
+  ['p', 'c', 'f', 'fiber'].forEach(x => { if (nutr[x] != null && nutr[x] !== '') out[x] = r1(Number(nutr[x]) * k); });
+  if (nutr.ex) {
+    EX_KEYS.forEach(x => {
+      const v = r1((Number(nutr.ex[x]) || 0) * k);
+      if (v > 0) { out.ex = out.ex || {}; out.ex[x] = v; }
+    });
+  }
+  return out;
+}
+
+// 名稱後面的份量跟著改：「雞胸肉 150g」→「雞胸肉 200g」、「茶葉蛋 1 份」→「茶葉蛋 2 份」
+// （multiplier 的名稱本來就不帶數量，不動）
+export function renamePortion(name, field, amount) {
+  const n = String(name || '');
+  const a = r1(Number(amount));
+  if (field === 'grams') return n.replace(/(\s)\d+(?:\.\d+)?g(（熟重）)?$/, (m, sp, ck) => sp + a + 'g' + (ck || ''));
+  if (field === 'servings') return n.replace(/(\s)\d+(?:\.\d+)? 份$/, (m, sp) => sp + a + ' 份');
+  return n;
+}

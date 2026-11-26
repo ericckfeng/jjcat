@@ -11,7 +11,7 @@ import { MEASURES, MEASURE_META, rollingAverage, weightAvgChange, muscleChange, 
 import { mascotSVG, buildMascotMessages, castMessages } from './mascot.js';
 import { catSVG, docSVG } from './characters.js';
 import { searchFoods, nutrientsFor, cookConversion, baseGrams, GRAM_PRESETS, energyDensity, isGlutinous, kjToKcal, scaleLabel } from './foods.js';
-import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, shouldAskWhen, eatenAt, MEAL_TIME_CHIPS } from './meals.js';
+import { sumNutr, copyEntries, mealEntries, mealGap, splitDaily, gapMessage, shouldAskWhen, eatenAt, MEAL_TIME_CHIPS, entryPortion, scaleEntry, renamePortion } from './meals.js';
 import { buildInsights } from './insights.js';
 import { APP_REV, APP_LABEL, parseLatest, requiredRev, minRevToWrite, deviceName, deviceRecord, upsertDevice, deviceRows } from './version.js';
 import { customFoodFromForm, formFromCustomFood, servingNutrients, servingKcal, servingText, searchMine, sortByUse, isPerServing, formFromManual } from './myfoods.js';
@@ -3011,6 +3011,7 @@ function applyLabelCalc(prefix) {
   $(KCAL_FIELD[prefix]).value = r.kcal;
   MACRO_KEYS.forEach(k => { if (r[k] != null) $(prefix + '-' + k).value = r[k]; });
   if (prefix === 'add') { setPortion(1); $('addMore').open = true; $('addNutrDetails').open = true; }   // 算出來的就是吃的量
+  if (prefix === 'edit' && editPortion && editPortion.field === 'grams') { $('editPortionInput').value = l.eat; rebaseEditPortion(); }
   const parts = [r.kcal + ' 大卡'].concat(['p', 'f', 'c'].filter(k => r[k] != null).map(k => MACRO_META[k].label + ' ' + r[k] + ' 克'));
   out.textContent = '＝ ' + parts.join('、') + (prefix === 'add' ? '（已填進下面）' : '（已填好）');
 }
@@ -3145,6 +3146,7 @@ async function openEditModal(id) {
   $('editLogTimeInput').value = item.time || '';
   $('editLogPendingCheck').checked = Boolean(item.pending);
   writeNutrFields('edit', item);
+  setupEditPortion(item);
   formPhotos.edit = [];
   if (item.hasPhoto) { const src = await getPhoto(item.id); if (src) formPhotos.edit.push({ src, key: '@main' }); }
   for (const k of morePhotoKeys(item)) { const src = await getPhoto(k); if (src) formPhotos.edit.push({ src, key: k }); }
@@ -3156,6 +3158,90 @@ async function openEditModal(id) {
   $('editLookupInfo').textContent = '記的時候用手比：' + lkText;
   openModal('editLogModal');
 }
+// 修改記錄的份量：改幾克／幾份，熱量和營養素照比例換算（基準＝畫面上現在的數字和份量）
+let editPortion = null;   // { field, unit, orig, base, baseAmount, fiber }
+// 這筆是從哪一樣我的食物／資料庫的食物來的（拿來顯示一份多少；找不到就算了）
+function entrySourceFood(item) {
+  if (item.customFoodId) return customFoods().find(f => f.id === item.customFoodId) || null;
+  if (item.src && item.packFoodId) {
+    const pk = allPacks().find(p => p.id === item.src);
+    return (pk && (pk.foods || []).find(f => f.id === item.packFoodId)) || null;
+  }
+  return null;
+}
+function editPortionAmount() {
+  const v = Number($('editPortionInput').value);
+  return Number.isFinite(v) && v > 0 && v <= 5000 ? Math.round(v * 10) / 10 : 0;
+}
+function setupEditPortion(item) {
+  const pt = entryPortion(item);
+  // 自己輸入、還沒有熱量的（拍照待查）：沒有東西可以換算
+  if (pt.field === 'multiplier' && !(Number(item.kcal) > 0)) { editPortion = null; $('editPortion').classList.add('hidden'); return; }
+  editPortion = { ...pt, orig: pt.amount, base: { kcal: item.kcal, p: item.p, c: item.c, f: item.f, ex: item.ex }, baseAmount: pt.amount, fiber: item.fiber };
+  const g = pt.unit === 'g';
+  $('editPortionLabel').textContent = g ? '吃了幾克' : '吃了幾份';
+  $('editPortionUnit').textContent = g ? 'g' : '份';
+  $('editPortionInput').value = String(pt.amount);
+  const food = entrySourceFood(item);
+  const per = Math.round(item.kcal / pt.amount * (g ? 100 : 1));
+  const ref = ['原本記 ' + fmt(pt.amount, 1) + (g ? ' g' : ' 份') + '・' + item.kcal + ' kcal'];
+  let chips;
+  if (g) {
+    const sg = food && !isPerServing(food) && food.serving && food.serving.g;
+    if (sg) ref.push('一份 ' + servingText(food) + '，約 ' + Math.round(per * sg / 100) + ' kcal');
+    ref.push('每 100 g 約 ' + per + ' kcal');
+    chips = [
+      ...(sg ? [0.5, 1, 1.5, 2].map(m => [Math.round(sg * m * 10) / 10, (m === 0.5 ? '半' : m) + ' 份 ' + Math.round(sg * m * 10) / 10 + 'g']) : []),
+    ];
+    if (!chips.some(([v]) => v === pt.amount)) chips.push([pt.amount, '原本 ' + fmt(pt.amount, 1) + 'g']);
+  } else {
+    ref.push('一份' + (food && isPerServing(food) ? ' ' + servingText(food) : '') + '約 ' + per + ' kcal');
+    chips = [0.5, 1, 1.5, 2, 3].map(v => [v, v + ' 份']);
+  }
+  $('editPortionRef').textContent = ref.join('\n');
+  $('editPortionChips').innerHTML = chips.map(([v, t]) => `<button type="button" data-portion-set="${v}" class="chip-btn chip-lg">${esc(t)}</button>`).join('')
+    + (g ? '<button type="button" data-portion-add="10" class="chip-btn chip-lg">+10g</button><button type="button" data-portion-add="-10" class="chip-btn chip-lg">−10g</button>' : '');
+  $('editPortion').classList.remove('hidden');
+}
+function applyEditPortion() {
+  const a = editPortionAmount();
+  if (!editPortion || !a) return;
+  const s = scaleEntry(editPortion.base, editPortion.baseAmount, a);
+  $('editLogKcalInput').value = s.kcal;
+  writeNutrFields('edit', s);
+  $('editLogNameInput').value = renamePortion($('editLogNameInput').value, editPortion.field, a);
+  // 照營養標示算過的：「我吃了幾克」跟著改，存檔時才不會被蓋回去
+  if (editPortion.field === 'grams' && $('edit-lb-eat').value !== '') $('edit-lb-eat').value = a;
+}
+// 自己改了熱量或營養素：之後改份量就照新的數字換算
+function rebaseEditPortion() {
+  if (!editPortion) return;
+  const a = editPortionAmount();
+  if (!a) return;
+  editPortion.base = { kcal: Number($('editLogKcalInput').value) || 0, ...readNutrFields('edit') };
+  editPortion.baseAmount = a;
+}
+// 存檔時：記下新的份量，纖維也照比例
+function editPortionFields(item) {
+  const a = editPortionAmount();
+  if (!editPortion || !a || a === editPortion.orig) return {};
+  const out = { [editPortion.field]: a };
+  if (editPortion.fiber != null) out.fiber = scaleEntry({ kcal: 0, fiber: editPortion.fiber }, editPortion.orig, a).fiber;
+  return out;
+}
+$('editPortionInput').addEventListener('input', applyEditPortion);
+$('editPortionChips').addEventListener('click', (e) => {
+  const set = e.target.closest('[data-portion-set]');
+  const add = e.target.closest('[data-portion-add]');
+  if (set) $('editPortionInput').value = set.getAttribute('data-portion-set');
+  else if (add) $('editPortionInput').value = String(Math.max(1, (editPortionAmount() || 0) + Number(add.getAttribute('data-portion-add'))));
+  else return;
+  applyEditPortion();
+});
+$('editLogForm').addEventListener('input', (e) => {
+  const id = e.target.id || '';
+  if (id === 'editLogKcalInput' || /^edit-(p|c|f|ex-\w+)$/.test(id)) rebaseEditPortion();
+});
 $('editLogForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const list = state.logs[ui.date] || [];
@@ -3170,6 +3256,7 @@ $('editLogForm').addEventListener('submit', async (e) => {
     ...item, name, kcal, meal: $('editLogMealSelect').value, time: $('editLogTimeInput').value || item.time,
     pending: $('editLogPendingCheck').checked, p: n.p, c: n.c, f: n.f, ex: n.ex,
     ...photoFields,
+    ...editPortionFields(item),
     ...(labelExtra('edit', 1) || {}),
     updatedAt: now()
   };

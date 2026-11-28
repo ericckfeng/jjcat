@@ -4191,12 +4191,14 @@ function combos() {
 }
 function comboRowHTML(c, action) {
   const attr = action === 'edit' ? `data-combo-edit="${esc(c.id)}"` : `data-combo-pick="${esc(c.id)}"`;
-  return `<button type="button" ${attr} class="pick-row">
+  const row = `<button type="button" ${attr} class="pick-row${action === 'edit' ? '' : ' min-w-0 flex-1'}">
     <span class="min-w-0 flex-1 text-left"><span class="block text-lg font-semibold text-stone-900 leading-snug break-words">${action === 'edit' ? '' : '<span class="mr-1 px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 text-sm font-bold align-middle">套餐</span>'}${esc(c.name)}</span>
     <span class="block text-sm text-stone-500 break-words">${esc(comboSummary(c))}</span>
     <span class="block text-base text-emerald-700 font-bold tabular-nums">${(c.items || []).length} 樣　${comboTotals(c).kcal} kcal</span></span>
     <span class="pick-add">${action === 'edit' ? '修改' : '選擇 ›'}</span>
   </button>`;
+  // 和我的食物一樣，選套餐的地方也能直接改名、拿掉裡面的東西、刪除
+  return action === 'edit' ? row : `<div class="flex gap-2 items-stretch">${row}<button type="button" data-combo-edit="${esc(c.id)}" class="mine-edit" aria-label="修改${esc(c.name)}">✏️<span>修改</span></button></div>`;
 }
 function renderComboList() {
   const list = sortCombos(combos(), state.logs);

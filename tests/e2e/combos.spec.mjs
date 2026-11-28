@@ -113,3 +113,30 @@ test('我的食物分頁：改名、拿掉一樣、刪除後可以復原', async
   expect(st.combos).toHaveLength(1);
   expect(Object.keys(st.tomb).some(k => k.startsWith('combos:'))).toBe(false);
 });
+
+test('查食物的我的套餐：旁邊的 ✏️ 修改可以改名、刪除，清單跟著更新', async ({ page }) => {
+  await openApp(page);
+  await page.click('[data-food-open=all]');
+  await addFood(page, '雞胸', 100);
+  await addFood(page, '甘藷', 150);
+  await page.click('[data-cart-combo]');
+  await page.fill('#comboName', '晚餐');
+  await page.click('#comboSaveBtn');
+  await page.click('#foodCartSaveBtn');
+  await closeScreens(page);
+
+  await page.click('[data-food-open=mine] >> nth=0');
+  await page.click('#foodMine [data-combo-edit]');
+  await expect(page.locator('#comboTitle')).toHaveText('🍱 修改套餐');
+  await page.fill('#comboName', '健身晚餐');
+  await page.click('#comboSaveBtn');
+  await expect(page.locator('#scr-food')).toBeVisible();
+  await expect(page.locator('#foodMine [data-combo-pick]')).toContainText('健身晚餐');
+
+  await page.click('#foodMine [data-combo-edit]');
+  await page.click('#comboDelete');
+  await page.click('#confirmOkBtn');
+  await expect(page.locator('#scr-food')).toBeVisible();
+  await expect(page.locator('#foodMine [data-combo-pick]')).toHaveCount(0);
+  expect((await appState(page)).combos).toHaveLength(0);
+});
